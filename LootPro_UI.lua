@@ -227,6 +227,7 @@ function ns.UI:Initialize()
     local cLveEB = U.CreateEditBox("LPRO_CL", "Combat End Text (Enter to Save)", pages.customization, "combatLeaveText")
     cLveEB.label:SetPoint("TOPLEFT", cEntEB, "BOTTOMLEFT", -5, -15); cLveEB:SetPoint("TOPLEFT", cLveEB.label, "BOTTOMLEFT", 5, -5)
 
+    -- Native Minimap Button Toggle added to Customization Tab
     local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     mmCheck:SetPoint("TOPLEFT", cLveEB, "BOTTOMLEFT", -5, -20)
     _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
@@ -267,6 +268,5 @@ function ns.UI:Initialize()
     ns.UI:RefreshAllWidgets()
     ShowPage("layout")
     SLASH_LOOTPRO1 = "/lp"
-    SLASH_LOOTPRO2 = "/lpro"
     SlashCmdList["LOOTPRO"] = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
 end
