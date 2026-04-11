@@ -2,7 +2,7 @@ local addonName, ns = ...
 local addon = ns.addon
 
 addon.DEFAULTS = {
-    locked = false, 
+    locked = true, -- Changed to true so windows are invisible by default
     cleanMode = true, 
     minQuality = 0, 
     showFollowerXP = false,
@@ -11,9 +11,10 @@ addon.DEFAULTS = {
     showLootCounts = true,
     combatEnterText = "Combat Start",
     combatLeaveText = "Combat End",
-    minimap = { hide = false, minimapPos = 220 }, -- Minimap Data
-    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 700, height = 300, point = "CENTER", x = 0, y = 50, maxLines = 4 },
-    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 700, height = 300, point = "CENTER", x = 0, y = 150, maxLines = 4 },
+    hideWelcome = false, -- New variable to track the popup state
+    minimap = { hide = false, minimapPos = 220 },
+    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", x = 0, y = 50, maxLines = 4 }, -- Resized to 200x200
+    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", x = 0, y = 150, maxLines = 4 }, -- Resized to 200x200
     colors = {
         money = {r = 1.0, g = 0.82, b = 0.0},
         currency = {r = 0.65, g = 0.85, b = 1.0},
