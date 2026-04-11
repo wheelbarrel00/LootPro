@@ -136,4 +136,137 @@ function ns.UI:Initialize()
         row:Refresh()
     end
     
-    AddColor("money", "Money", function() return
+    AddColor("money", "Money", function() return "10 Gold 75 Silver 20 Copper" end)
+    AddColor("currency", "Currency", function() return "+ 25 Kej" end)
+    AddColor("loot", "Loot", function() return "+1 |T132338:0|t Earthen Shard (24)" end)
+    AddColor("combatEnter", "Combat Start", function() return LootProConfig.combatEnterText end)
+    AddColor("combatLeave", "Combat End", function() return LootProConfig.combatLeaveText end)
+    AddColor("xp", "Experience", function() return "+ 1,500 XP" end)
+    AddColor("delver", "Delver XP", function() return "+ 125 Delver XP" end)
+    AddColor("skill", "Skill", function() return "Blacksmithing (Midnight) (50)" end)
+    AddColor("honor", "Honor", function() return "+ 15 Honor" end)
+    AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: The Midnight Council" end)
+    AddColor("repLoss", "Rep Loss", function() return "- 25 Rep: Bloodsail Buccaneers" end)
+
+    local resetBtn = CreateFrame("Button", nil, pages.colors, "GameMenuButtonTemplate")
+    resetBtn:SetSize(160, 28); resetBtn:SetPoint("TOP", colorRows[#colorRows], "BOTTOM", 0, -25); resetBtn:SetText("Reset to Defaults")
+    resetBtn:SetScript("OnClick", function() addon:ResetDefaults() end)
+    local stubC = pages.colors:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -5); stubC:SetText("Clears all colors, layout, and toggles.")
+
+    -------------------------------------------------
+    -- TAB 3: NOTIFICATIONS
+    -------------------------------------------------
+    local toggles = {}
+    local function AddToggle(key, title, colorKey, parentAnchor)
+        local cb = CreateFrame("CheckButton", "LPRO_TGL_"..key, pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", parentAnchor, "BOTTOMLEFT", 0, -5)
+        local fs = _G[cb:GetName().."Text"]; fs:SetText(title)
+        if colorKey and LootProConfig.colors[colorKey] then local c = LootProConfig.colors[colorKey]; fs:SetTextColor(c.r, c.g, c.b) end
+        cb:SetChecked(LootProConfig.notifications[key])
+        cb:SetScript("OnClick", function(self) LootProConfig.notifications[key] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+        toggles[key] = cb return cb
+    end
+
+    local moneyT = CreateFrame("CheckButton", "LPRO_TGL_money", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    moneyT:SetPoint("TOPLEFT", 15, 0); _G[moneyT:GetName().."Text"]:SetText("Display Money")
+    local cM = LootProConfig.colors["money"] or {r=1, g=1, b=1}; _G[moneyT:GetName().."Text"]:SetTextColor(cM.r, cM.g, cM.b)
+    moneyT:SetChecked(LootProConfig.notifications["money"])
+    moneyT:SetScript("OnClick", function(self) LootProConfig.notifications["money"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    toggles["money"] = moneyT
+
+    local currT = AddToggle("currency", "Display Currency", "currency", moneyT)
+    local lootT = AddToggle("loot", "Display Item Loot", "loot", currT)
+
+    local countCheck = CreateFrame("CheckButton", "LPRO_CountToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    countCheck:SetPoint("TOPLEFT", lootT, "BOTTOMLEFT", 0, -5); _G[countCheck:GetName().."Text"]:SetText("Inject Item Totals (e.g. 14)"); countCheck:SetChecked(LootProConfig.showLootCounts)
+    countCheck:SetScript("OnClick", function(self) LootProConfig.showLootCounts = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+
+    local gIconCheck = CreateFrame("CheckButton", "LPRO_GoldToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    gIconCheck:SetPoint("TOPLEFT", countCheck, "BOTTOMLEFT", 0, -5); _G[gIconCheck:GetName().."Text"]:SetText("Use Coin Icons (Clean Mode only)"); gIconCheck:SetChecked(LootProConfig.showMoneyIcons)
+    gIconCheck:SetScript("OnClick", function(self) LootProConfig.showMoneyIcons = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+
+    local cleanCheck = CreateFrame("CheckButton", "LPRO_CleanToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    cleanCheck:SetPoint("TOPLEFT", gIconCheck, "BOTTOMLEFT", 0, -5); _G[cleanCheck:GetName().."Text"]:SetText("Enable Clean Mode"); cleanCheck:SetChecked(LootProConfig.cleanMode)
+    cleanCheck:SetScript("OnClick", function(self) LootProConfig.cleanMode = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    
+    local cleanDesc = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    cleanDesc:SetPoint("TOPLEFT", cleanCheck, "BOTTOMLEFT", 25, 0); cleanDesc:SetTextColor(0.6, 0.6, 0.6); cleanDesc:SetText("(Strips text like 'You receive loot:')")
+
+    local cStrT = CreateFrame("CheckButton", "LPRO_TGL_combatEnter", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    cStrT:SetPoint("TOPLEFT", 260, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
+    local cCE = LootProConfig.colors["combatEnter"] or {r=1, g=1, b=1}; _G[cStrT:GetName().."Text"]:SetTextColor(cCE.r, cCE.g, cCE.b)
+    cStrT:SetChecked(LootProConfig.notifications["combatEnter"])
+    cStrT:SetScript("OnClick", function(self) LootProConfig.notifications["combatEnter"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    toggles["combatEnter"] = cStrT
+
+    local cEndT = AddToggle("combatLeave", "Display Combat END", "combatLeave", cStrT)
+    local xpT = AddToggle("xp", "Display Experience", "xp", cEndT)
+    
+    local fxpCheck = CreateFrame("CheckButton", "LPRO_FollowerToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    fxpCheck:SetPoint("TOPLEFT", xpT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
+    fxpCheck:SetScript("OnClick", function(self) LootProConfig.showFollowerXP = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+
+    local delvT = AddToggle("delver", "Display Delve Companion XP", "delver", fxpCheck) 
+    local skillT = AddToggle("skill", "Display Skill Gains", "skill", delvT)
+    local honorT = AddToggle("honor", "Display Honor Gains", "honor", skillT)
+    local repGT = AddToggle("repGain", "Display Reputation GAIN", "repGain", honorT)
+    local repLT = AddToggle("repLoss", "Display Reputation LOSS", "repLoss", repGT)
+
+    -------------------------------------------------
+    -- TAB 4: CUSTOMIZATION
+    -------------------------------------------------
+    local cFont = U.CreateFontCycler("LPRO_CF", "Combat Font", pages.customization, "combat")
+    cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
+
+    local cOut = U.CreateGenericCycler("LPRO_CO", "Combat Outline", pages.customization, outList, "outline", "combat")
+    cOut.label:SetPoint("TOPLEFT", cFont, "BOTTOMLEFT", 0, -15); cOut:SetPoint("TOPLEFT", cOut.label, "BOTTOMLEFT", 0, -5)
+
+    local cEntEB = U.CreateEditBox("LPRO_CE", "Combat Start Text (Enter to Save)", pages.customization, "combatEnterText")
+    cEntEB.label:SetPoint("TOPLEFT", cOut, "BOTTOMLEFT", 0, -20); cEntEB:SetPoint("TOPLEFT", cEntEB.label, "BOTTOMLEFT", 5, -5)
+
+    local cLveEB = U.CreateEditBox("LPRO_CL", "Combat End Text (Enter to Save)", pages.customization, "combatLeaveText")
+    cLveEB.label:SetPoint("TOPLEFT", cEntEB, "BOTTOMLEFT", -5, -15); cLveEB:SetPoint("TOPLEFT", cLveEB.label, "BOTTOMLEFT", 5, -5)
+
+    local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
+    mmCheck:SetPoint("TOPLEFT", cLveEB, "BOTTOMLEFT", -5, -20)
+    _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
+    mmCheck:SetChecked(not LootProConfig.minimap.hide)
+    mmCheck:SetScript("OnClick", function(self) 
+        LootProConfig.minimap.hide = not self:GetChecked()
+        addon:UpdateAllVisuals() 
+    end)
+
+    local lFont = U.CreateFontCycler("LPRO_LF", "Loot Font", pages.customization, "loot") 
+    lFont.label:SetPoint("TOPRIGHT", -50, 0); lFont:SetPoint("TOPRIGHT", lFont.label, "BOTTOMRIGHT", 0, -5); pages.customization.lF = lFont
+
+    local lOut = U.CreateGenericCycler("LPRO_LO", "Loot Outline", pages.customization, outList, "outline", "loot") 
+    lOut.label:SetPoint("TOPRIGHT", lFont, "BOTTOMRIGHT", -40, -15); lOut:SetPoint("TOPRIGHT", lOut.label, "BOTTOMRIGHT", 0, -5); pages.customization.lO = lOut
+
+    local syncCustom = CreateFrame("Button", nil, pages.customization, "GameMenuButtonTemplate") 
+    syncCustom:SetPoint("BOTTOM", 0, 80); syncCustom:SetSize(220, 25); syncCustom:SetText("Sync Combat Fonts to Loot")
+    syncCustom:SetScript("OnClick", function() 
+        LootProConfig.loot.font = LootProConfig.combat.font; LootProConfig.loot.outline = LootProConfig.combat.outline
+        pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals() 
+    end)
+
+    -------------------------------------------------
+    -- REFRESH ENGINE FOR RESET BUTTON
+    -------------------------------------------------
+    function ns.UI:RefreshAllWidgets()
+        cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines)
+        lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
+        cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
+        cEntEB:SetText(LootProConfig.combatEnterText); cLveEB:SetText(LootProConfig.combatLeaveText)
+        cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
+        mmCheck:SetChecked(not LootProConfig.minimap.hide)
+        for _, row in ipairs(colorRows) do row:Refresh() end
+        for key, cb in pairs(toggles) do cb:SetChecked(LootProConfig.notifications[key]) end
+        for key, cb in pairs(toggles) do if LootProConfig.colors[key] then local c = LootProConfig.colors[key]; _G[cb:GetName().."Text"]:SetTextColor(c.r, c.g, c.b) end end
+    end
+
+    ns.UI:RefreshAllWidgets()
+    ShowPage("layout")
+    SLASH_LOOTPRO1 = "/lp"
+    SLASH_LOOTPRO2 = "/lpro"
+    SlashCmdList["LOOTPRO"] = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
+end

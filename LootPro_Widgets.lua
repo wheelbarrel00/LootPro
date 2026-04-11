@@ -154,4 +154,158 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
             idx = #list 
         end 
         
-        cfg[settingKey] =
+        cfg[settingKey] = list[idx].val 
+        UpdateText() 
+    end
+    
+    local pb = CreateFrame("Button", nil, c)
+    pb:SetSize(18,18)
+    pb:SetPoint("LEFT", 2, 0)
+    pb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
+    pb:SetScript("OnClick", function() Cycle(-1) end)
+    
+    local nb = CreateFrame("Button", nil, c)
+    nb:SetSize(18,18)
+    nb:SetPoint("RIGHT", -2, 0)
+    nb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+    nb:SetScript("OnClick", function() Cycle(1) end)
+    
+    c.Refresh = UpdateText
+    c.label = l 
+    return c
+end
+
+function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, configKey)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+    l:SetText(title)
+    
+    local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate") 
+    s:SetPoint("TOP", l, "BOTTOM", 0, -10) 
+    s:SetMinMaxValues(minVal, maxVal) 
+    s:SetValueStep(step) 
+    s:SetObeyStepOnDrag(true)
+    
+    s:SetScript("OnValueChanged", function(self, value) 
+        if not addon:IsReady() then return end 
+        local val = math.floor(value + 0.5) 
+        
+        if configKey == "root" then 
+            LootProConfig[settingKey] = val 
+        else 
+            LootProConfig[configKey][settingKey] = val 
+        end 
+        
+        _G[self:GetName().."Text"]:SetText(title .. ": " .. val .. ((settingKey == "fade") and "s" or "")) 
+        
+        if addon.UpdateAllVisuals then 
+            addon:UpdateAllVisuals() 
+        end 
+    end)
+    
+    s.label = l 
+    return s
+end
+
+function U.CreateEditBox(name, title, parent, settingKey)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+    l:SetText(title)
+    
+    local eb = CreateFrame("EditBox", name, parent, "InputBoxTemplate") 
+    eb:SetSize(180, 20) 
+    eb:SetAutoFocus(false)
+    
+    eb:SetScript("OnShow", function(self) 
+        self:SetText(LootProConfig[settingKey] or "") 
+    end)
+    
+    eb:SetScript("OnEnterPressed", function(self) 
+        LootProConfig[settingKey] = self:GetText()
+        self:ClearFocus()
+        if addon.isTesting and addon.PostTestMessages then 
+            addon:PostTestMessages() 
+        end 
+    end)
+    
+    eb:SetScript("OnEscapePressed", function(self) 
+        self:SetText(LootProConfig[settingKey] or "")
+        self:ClearFocus() 
+    end)
+    
+    eb.label = l 
+    return eb
+end
+
+function U.CreateColorRow(name, parent, colorKey, previewFunc)
+    local f = CreateFrame("Button", name, parent, "BackdropTemplate")
+    f:SetSize(400, 28)
+    f:SetBackdrop({ 
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
+        tile = true, 
+        tileSize = 16, 
+        edgeSize = 14, 
+        insets = {left=3, right=3, top=3, bottom=3} 
+    })
+    f:SetBackdropColor(0,0,0,0.5)
+    
+    local tex = f:CreateTexture(nil, "ARTWORK")
+    tex:SetSize(16, 16) 
+    tex:SetPoint("LEFT", 10, 0)
+    
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall") 
+    title:SetPoint("LEFT", tex, "RIGHT", 10, 0) 
+    title:SetText(name:gsub("LPRO_CLR_", ""))
+    
+    local preview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    preview:SetPoint("RIGHT", -12, 0)
+    
+    local function Update()
+        local c = LootProConfig.colors[colorKey]
+        tex:SetColorTexture(c.r, c.g, c.b)
+        preview:SetText(previewFunc())
+        preview:SetTextColor(c.r, c.g, c.b)
+    end
+    
+    local function OnColorChanged()
+        local r, g, b
+        if ColorPickerFrame.GetColorRGB then 
+            r, g, b = ColorPickerFrame:GetColorRGB() 
+        elseif ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker then 
+            r, g, b = ColorPickerFrame.Content.ColorPicker:GetColorRGB() 
+        end
+        
+        if r and g and b then 
+            LootProConfig.colors[colorKey] = {r=r, g=g, b=b}
+            Update()
+            if addon.isTesting and addon.PostTestMessages then 
+                addon:PostTestMessages() 
+            end 
+        end
+    end
+    
+    f:SetScript("OnClick", function()
+        local c = LootProConfig.colors[colorKey]
+        if ColorPickerFrame.SetupColorPickerAndShow then 
+            ColorPickerFrame:SetupColorPickerAndShow({ 
+                r = c.r, g = c.g, b = c.b, 
+                swatchFunc = OnColorChanged, 
+                cancelFunc = function(prev) 
+                    LootProConfig.colors[colorKey] = {r=prev.r, g=prev.g, b=prev.b}
+                    Update() 
+                end, 
+            })
+        else 
+            ColorPickerFrame.func = OnColorChanged
+            ColorPickerFrame.cancelFunc = function(prev) 
+                LootProConfig.colors[colorKey] = {r=prev.r, g=prev.g, b=prev.b}
+                Update() 
+            end
+            ColorPickerFrame.previousValues = {r = c.r, g = c.g, b = c.b}
+            ColorPickerFrame:SetColorRGB(c.r, c.g, c.b)
+            ColorPickerFrame:Show() 
+        end
+    end)
+    
+    f.Refresh = Update 
+    return f
+end
