@@ -2,7 +2,7 @@ local addonName, ns = ...
 
 -- Create the master addon frame and shared namespace
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "1.1"
+ns.addon.VERSION = "1.1.0"
 ns.addon.isTesting = false
 
 -- Create a table specifically for UI Widgets/Helpers
