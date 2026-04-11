@@ -8,5 +8,5 @@
 LootPro.lua
 LootPro_Profile.lua
 LootPro_Widgets.lua
-LootPro_Core.lua
 LootPro_UI.lua
+LootPro_Core.lua
