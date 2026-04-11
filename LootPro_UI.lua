@@ -54,9 +54,6 @@ function ns.UI:Initialize()
     CreateTab("notifications", "Notifs", 265)
     CreateTab("customization", "Custom", 385)
 
-    -------------------------------------------------
-    -- GLOBAL HEADER AREA
-    -------------------------------------------------
     local lockBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
     lockBtn:SetPoint("TOPLEFT", 25, -65) 
     lockBtn:SetSize(140, 30)
@@ -88,9 +85,6 @@ function ns.UI:Initialize()
 
     local outList = {{val="NONE",lbl="None"},{val="OUTLINE",lbl="Thin"},{val="THICKOUTLINE",lbl="Thick"},{val="MONOCHROME",lbl="Pixel"}}
 
-    -------------------------------------------------
-    -- TAB 1: LAYOUT
-    -------------------------------------------------
     local cSize = U.CreateSlider("LPRO_CS", "Combat Text Size", pages.layout, 10, 50, 1, "size", "combat")
     cSize.label:SetPoint("TOPLEFT", 30, 0); cSize:SetPoint("TOPLEFT", cSize.label, "BOTTOMLEFT", 0, -10); cSize:SetValue(LootProConfig.combat.size)
     local cFade = U.CreateSlider("LPRO_CFA", "Combat Fade (sec)", pages.layout, 1, 30, 1, "fade", "combat")
@@ -125,9 +119,6 @@ function ns.UI:Initialize()
         addon:UpdateAllVisuals() 
     end)
 
-    -------------------------------------------------
-    -- TAB 2: COLORS
-    -------------------------------------------------
     local colorRows = {}
     local function AddColor(key, title, func)
         local row = U.CreateColorRow("LPRO_CLR_"..title, pages.colors, key, func)
@@ -153,9 +144,6 @@ function ns.UI:Initialize()
     resetBtn:SetScript("OnClick", function() addon:ResetDefaults() end)
     local stubC = pages.colors:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -5); stubC:SetText("Clears all colors, layout, and toggles.")
 
-    -------------------------------------------------
-    -- TAB 3: NOTIFICATIONS
-    -------------------------------------------------
     local toggles = {}
     local function AddToggle(key, title, colorKey, parentAnchor)
         local cb = CreateFrame("CheckButton", "LPRO_TGL_"..key, pages.notifications, "InterfaceOptionsCheckButtonTemplate")
@@ -212,9 +200,6 @@ function ns.UI:Initialize()
     local repGT = AddToggle("repGain", "Display Reputation GAIN", "repGain", honorT)
     local repLT = AddToggle("repLoss", "Display Reputation LOSS", "repLoss", repGT)
 
-    -------------------------------------------------
-    -- TAB 4: CUSTOMIZATION
-    -------------------------------------------------
     local cFont = U.CreateFontCycler("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
 
@@ -227,7 +212,6 @@ function ns.UI:Initialize()
     local cLveEB = U.CreateEditBox("LPRO_CL", "Combat End Text (Enter to Save)", pages.customization, "combatLeaveText")
     cLveEB.label:SetPoint("TOPLEFT", cEntEB, "BOTTOMLEFT", -5, -15); cLveEB:SetPoint("TOPLEFT", cLveEB.label, "BOTTOMLEFT", 5, -5)
 
-    -- Native Minimap Button Toggle added to Customization Tab
     local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     mmCheck:SetPoint("TOPLEFT", cLveEB, "BOTTOMLEFT", -5, -20)
     _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
@@ -251,8 +235,40 @@ function ns.UI:Initialize()
     end)
 
     -------------------------------------------------
-    -- REFRESH ENGINE FOR RESET BUTTON
+    -- FIRST-TIME WELCOME POPUP
     -------------------------------------------------
+    local welcome = CreateFrame("Frame", "LootProWelcome", UIParent, "BasicFrameTemplateWithInset, BackdropTemplate")
+    welcome:SetSize(320, 160)
+    welcome:SetPoint("CENTER")
+    welcome:SetFrameStrata("HIGH")
+    welcome:Hide()
+    
+    welcome.title = welcome:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    welcome.title:SetPoint("CENTER", welcome.TitleBg, "CENTER", 0, 0)
+    welcome.title:SetText("Loot Pro")
+    
+    local msg = welcome:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    msg:SetPoint("TOP", 0, -40)
+    msg:SetWidth(280)
+    msg:SetText("Configure settings for first time use of Loot Pro")
+    
+    local openBtn = CreateFrame("Button", nil, welcome, "GameMenuButtonTemplate")
+    openBtn:SetSize(140, 30)
+    openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -5)
+    openBtn:SetText("Open Settings")
+    openBtn:SetScript("OnClick", function()
+        welcome:Hide()
+        gui:Show()
+    end)
+    
+    local hideCheck = CreateFrame("CheckButton", "LPRO_HideWelcome", welcome, "InterfaceOptionsCheckButtonTemplate")
+    hideCheck:SetPoint("BOTTOMLEFT", 20, 15)
+    _G[hideCheck:GetName().."Text"]:SetText("Don't show this again")
+    hideCheck:SetScript("OnShow", function(self) self:SetChecked(LootProConfig.hideWelcome) end)
+    hideCheck:SetScript("OnClick", function(self) LootProConfig.hideWelcome = self:GetChecked() end)
+    
+    ns.UI.welcomeFrame = welcome
+
     function ns.UI:RefreshAllWidgets()
         cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines)
         lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)

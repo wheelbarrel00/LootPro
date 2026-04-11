@@ -100,7 +100,6 @@ local function CreateMinimapButton()
     icon:SetVertexColor(0.6, 0.2, 1.0)
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     
-    -- Alpha Mask Implementation [Ref: WoW API AddMaskTexture]
     local mask = mmBtn:CreateMaskTexture()
     mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
     mask:SetSize(20, 20)
@@ -285,6 +284,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_LOGIN" then 
         if ns.UI then ns.UI:Initialize() end
         self:UpdateAllVisuals()
+        
+        -- Trigger welcome screen on login if not disabled
+        if ns.UI and ns.UI.welcomeFrame and not LootProConfig.hideWelcome then
+            ns.UI.welcomeFrame:Show()
+        end
         
     elseif self:IsReady() then
         local c = LootProConfig.colors
