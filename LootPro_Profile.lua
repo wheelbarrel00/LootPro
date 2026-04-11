@@ -5,15 +5,15 @@ addon.DEFAULTS = {
     locked = false, 
     cleanMode = true, 
     minQuality = 0, 
-    showFollowerXP = true,
+    showFollowerXP = false,
     showLootIcons = true,
     showMoneyIcons = true,
     showLootCounts = true,
-    combatEnterText = "Entering Combat",
-    combatLeaveText = "Leaving Combat",
+    combatEnterText = "Combat Start",
+    combatLeaveText = "Combat End",
     minimap = { hide = false, minimapPos = 220 }, -- Minimap Data
-    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 800, height = 250, point = "CENTER", x = 0, y = 50, maxLines = 4 },
-    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 800, height = 250, point = "CENTER", x = 0, y = 150, maxLines = 4 },
+    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 700, height = 300, point = "CENTER", x = 0, y = 50, maxLines = 4 },
+    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 700, height = 300, point = "CENTER", x = 0, y = 150, maxLines = 4 },
     colors = {
         money = {r = 1.0, g = 0.82, b = 0.0},
         currency = {r = 0.65, g = 0.85, b = 1.0},
@@ -29,7 +29,7 @@ addon.DEFAULTS = {
     },
     notifications = {
         money = true, currency = true, loot = true, skill = true,
-        honor = true, repGain = true, repLoss = true, delver = true,
+        honor = true, repGain = true, repLoss = true, delver = false,
         xp = true, combatEnter = true, combatLeave = true
     }
 }
@@ -71,5 +71,5 @@ function addon:ResetDefaults()
     LootProConfig = table.deepcopy(addon.DEFAULTS)
     self:UpdateAllVisuals()
     if ns.UI and ns.UI.RefreshAllWidgets then ns.UI:RefreshAllWidgets() end
-    print("|cFF00FF00[Loot Pro]|r Settings reset to defaults.")
+    print("|cFF00FF00[LootPro]|r Settings reset to defaults.")
 end
