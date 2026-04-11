@@ -1,0 +1,12 @@
+## Interface: 110005, 120000, 20504
+## Title: Loot Pro
+## Notes: Custom Loot and Combat Text.
+## Version: 1.0.0
+## SavedVariables: LootProConfig
+## OptionalDeps: LibStub, LibSharedMedia-3.0
+
+LootPro.lua
+LootPro_Profile.lua
+LootPro_Widgets.lua
+LootPro_Core.lua
+LootPro_UI.lua
