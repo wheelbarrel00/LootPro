@@ -35,9 +35,21 @@ addon.DEFAULTS = {
     }
 }
 
+function addon:DeepCopy(t)
+    if type(t) ~= 'table' then return t end
+    local mt = getmetatable(t)
+    local res = {}
+    for k, v in pairs(t) do
+        if type(v) == 'table' then res[k] = self:DeepCopy(v) else res[k] = v end
+    end
+    setmetatable(res, mt)
+    return res
+end
+
 function addon:InitSettings()
     if not LootProConfig then
-        LootProConfig = table.deepcopy(addon.DEFAULTS) 
+        LootProConfig = addon:DeepCopy(addon.DEFAULTS)
+
     else
         local function validate(src, dst)
             for k, v in pairs(src) do
@@ -53,23 +65,13 @@ function addon:InitSettings()
     end
 end
 
-function table.deepcopy(t)
-    if type(t) ~= 'table' then return t end
-    local mt = getmetatable(t)
-    local res = {}
-    for k,v in pairs(t) do
-        if type(v) == 'table' then res[k] = table.deepcopy(v) else res[k] = v end
-    end
-    setmetatable(res,mt)
-    return res
-end
 
 function addon:IsReady()
     return LootProConfig and LootProConfig.loot and LootProConfig.combat and LootProConfig.colors and LootProConfig.notifications and LootProConfig.minimap
 end
 
 function addon:ResetDefaults()
-    LootProConfig = table.deepcopy(addon.DEFAULTS)
+    LootProConfig = self:DeepCopy(addon.DEFAULTS)
     self:UpdateAllVisuals()
     if ns.UI and ns.UI.RefreshAllWidgets then ns.UI:RefreshAllWidgets() end
     print("|cFF00FF00[LootPro]|r Settings reset to defaults.")
