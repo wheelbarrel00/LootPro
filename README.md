@@ -11,7 +11,7 @@
 * `/lp` or `/lpro` - Open the configuration menu.
 
 ### Recommended Addons
-* **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0):** While not required, having this installed unlocks dozens of additional font and status bar textures within the Loot Pro settings.
+* **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0):** While not required, having this installed unlocks dozens of additional fonts from within the Loot Pro settings.
 
 ### Gallery
 <img width="727" height="955" alt="Loot Pro Screenshot 1" src="https://github.com/user-attachments/assets/a84826e8-f63b-4186-9b61-a007f9d57654" />
