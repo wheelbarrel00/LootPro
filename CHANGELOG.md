@@ -31,3 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Slider labels in Layout tab** cleaned up. Removed the redundant yellow header above each slider; the value-bearing label is now yellow, normal-sized, and remains centered above the bar.
+
+## [1.1.3] - 2026-04-10
+
+### Changed
+- Removed dead `pcall` safety check in event handler (no functional impact — the guard always succeeded).
+- Removed Classic Era (`20504`) from supported interface versions until properly tested. Retail and TWW support unchanged.
+
+No user-facing changes.
