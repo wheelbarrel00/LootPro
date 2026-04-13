@@ -178,12 +178,15 @@ end
 function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, configKey)
     local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
     l:SetText(title)
+    l:Hide()
     
     local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate") 
     s:SetPoint("TOP", l, "BOTTOM", 0, -10) 
     s:SetMinMaxValues(minVal, maxVal) 
     s:SetValueStep(step) 
     s:SetObeyStepOnDrag(true)
+    
+    _G[name.."Text"]:SetFontObject("GameFontNormal")
     
     s:SetScript("OnValueChanged", function(self, value) 
         if not addon:IsReady() then return end 
