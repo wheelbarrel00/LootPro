@@ -20,8 +20,10 @@ local function CleanMessage(msg, event)
     if not msg or type(msg) ~= "string" then return msg end
     
     if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-        local amt, fac = msg:match("gain.- ([%d,]+) reputation with (.+)%.")
+        local fac, amt = msg:match("Reputation with (.+) increased by ([%d,]+)%.")
         if amt and fac then return fac end
+        local lossFac, lossAmt = msg:match("Reputation with (.+) decreased by ([%d,]+)%.")
+        if lossAmt and lossFac then return lossFac end
         
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         local amount = msg:match("You gain ([%d,]+) experience")
@@ -328,11 +330,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
             self.combatFrame.display:AddMessage(CleanMessage(arg1, event), c.xp.r, c.xp.g, c.xp.b)
             
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            local amt = arg1:match("gain.- ([%d,]+) reputation")
+            local amt = arg1:match("Reputation with .+ increased by ([%d,]+)%.")
+            local lossAmt = arg1:match("Reputation with .+ decreased by ([%d,]+)%.")
             if amt and n.repGain then 
                 self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. CleanMessage(arg1, event), c.repGain.r, c.repGain.g, c.repGain.b)
-            elseif not amt and n.repLoss then 
-                self.combatFrame.display:AddMessage(CleanMessage(arg1, event), c.repLoss.r, c.repLoss.g, c.repLoss.b) 
+            elseif lossAmt and n.repLoss then 
+                self.combatFrame.display:AddMessage("- " .. lossAmt .. " Rep: " .. CleanMessage(arg1, event), c.repLoss.r, c.repLoss.g, c.repLoss.b) 
             end
             
         elseif event == "CHAT_MSG_SKILL" and n.skill then
@@ -375,15 +378,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
             
             if q >= LootProConfig.minQuality then 
                 local amt = tonumber(arg1:match("x(%d+)%.?$")) or 1
-                local count = ""
                 
-                if itemID and LootProConfig.showLootCounts then
-                    local total = C_Item.GetItemCount(tonumber(itemID), true)
-                    count = " (" .. math.max(0, total - amt) .. ")"
-                end
-                
-                if LootProConfig.cleanMode then 
-                    self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(arg1) .. CleanMessage(arg1, event) .. count, c.loot.r, c.loot.g, c.loot.b)
+                if LootProConfig.cleanMode then
+                    local function ShowLoot(countStr)
+                        self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(arg1) .. CleanMessage(arg1, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
+                    end
+                    
+                    if itemID and LootProConfig.showLootCounts then
+                        C_Timer.After(0.1, function()
+                            local total = C_Item.GetItemCount(tonumber(itemID), true)
+                            ShowLoot(" (" .. total .. ")")
+                        end)
+                    else
+                        ShowLoot("")
+                    end
                 else 
                     self.lootFrame.display:AddMessage(GetIconString(arg1) .. arg1, c.loot.r, c.loot.g, c.loot.b) 
                 end
