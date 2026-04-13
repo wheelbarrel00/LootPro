@@ -309,9 +309,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        local isSafe = pcall(function() return arg1:find("") end)
-        if not isSafe then return end
-
         local isFollowerXP = arg1:find("experience") and not arg1:find("You gain")
         if isFollowerXP then
             if not LootProConfig.showFollowerXP then return end
