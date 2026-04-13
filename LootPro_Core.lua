@@ -81,110 +81,38 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     return f
 end
 
-local function CreateMinimapButton()
-    local mmBtn = CreateFrame("Button", "LootProMinimapButton", Minimap)
-    mmBtn:SetSize(32, 32)
-    mmBtn:SetFrameStrata("MEDIUM")
-    mmBtn:SetFrameLevel(8)
-    mmBtn:RegisterForClicks("AnyUp")
-    mmBtn:RegisterForDrag("LeftButton")
-    mmBtn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-    
-    local bg = mmBtn:CreateTexture(nil, "BACKGROUND")
-    bg:SetSize(20, 20)
-    bg:SetPoint("TOPLEFT", mmBtn, "TOPLEFT", 6, -6)
-    bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-    
-    local icon = mmBtn:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(20, 20)
-    icon:SetPoint("TOPLEFT", mmBtn, "TOPLEFT", 6, -6)
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_08") 
-    icon:SetVertexColor(0.6, 0.2, 1.0)
-    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    
-    local mask = mmBtn:CreateMaskTexture()
-    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
-    mask:SetSize(20, 20)
-    mask:SetPoint("TOPLEFT", mmBtn, "TOPLEFT", 6, -6)
-    icon:AddMaskTexture(mask)
-    bg:AddMaskTexture(mask)
-    
-    local border = mmBtn:CreateTexture(nil, "OVERLAY")
-    border:SetSize(54, 54)
-    border:SetPoint("TOPLEFT", mmBtn, "TOPLEFT", 0, 0)
-    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    
-    mmBtn:SetScript("OnClick", function()
+-- Minimap icon via LibDataBroker + LibDBIcon
+local LDB = LibStub("LibDataBroker-1.1")
+local LDBIcon = LibStub("LibDBIcon-1.0")
+
+addon.lootProLDB = LDB:NewDataObject("LootPro", {
+    type = "launcher",
+    text = "Loot Pro",
+    icon = "Interface\\Icons\\INV_Misc_Bag_08",
+    iconR = 0.6, iconG = 0.2, iconB = 1.0,
+    OnClick = function(_, button)
         if ns.UI and LootProGUI then
             if LootProGUI:IsShown() then LootProGUI:Hide() else LootProGUI:Show() end
         end
-    end)
-    
-    mmBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Loot Pro ("..addon.VERSION..")", 1, 1, 1)
-        GameTooltip:AddLine("Left-Click to open settings.")
-        GameTooltip:Show()
-    end)
-    mmBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    
-    mmBtn:SetScript("OnDragStart", function(self)
-        self:LockHighlight()
-        self:SetScript("OnUpdate", function()
-            local cx, cy = Minimap:GetCenter()
-            local x, y = GetCursorPosition()
-            local scale = Minimap:GetEffectiveScale()
-            x, y = x / scale, y / scale
-            local angle = math.deg(math.atan2(y - cy, x - cx))
-            LootProConfig.minimap.minimapPos = angle
-            addon:UpdateMinimapPosition()
-        end)
-    end)
-    
-    mmBtn:SetScript("OnDragStop", function(self)
-        self:UnlockHighlight()
-        self:SetScript("OnUpdate", nil)
-    end)
-    
-    return mmBtn
-end
+    end,
+    OnTooltipShow = function(tooltip)
+        tooltip:AddLine("Loot Pro ("..addon.VERSION..")", 1, 1, 1)
+        tooltip:AddLine("Left-Click to open settings.")
+    end,
+})
+addon.LDBIcon = LDBIcon
 
 addon.combatFrame = CreateReadoutFrame("LootProCombat", "COMBAT & SYSTEM", 150, "combat")
 addon.lootFrame = CreateReadoutFrame("LootProLoot", "LOOT & MONEY", 50, "loot")
-addon.minimapButton = CreateMinimapButton()
-
-function addon:UpdateMinimapPosition()
-    if not self:IsReady() then return end
-    local pos = LootProConfig.minimap.minimapPos or 220
-    local angle = math.rad(pos)
-    
-    local radius = (Minimap:GetWidth() / 2) + 5
-    local x = math.cos(angle) * radius
-    local y = math.sin(angle) * radius
-    
-    local isSquare = false
-    if GetMinimapShape and GetMinimapShape():find("SQUARE") then isSquare = true end
-    if ElvUI or Tukui or SpartanUI then isSquare = true end
-    
-    if isSquare then
-        local absX, absY = math.abs(math.cos(angle)), math.abs(math.sin(angle))
-        local maxCoord = math.max(absX, absY)
-        x = (math.cos(angle) / maxCoord) * radius
-        y = (math.sin(angle) / maxCoord) * radius
-    end
-    
-    self.minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
-end
 
 function addon:UpdateAllVisuals()
     if not self:IsReady() then return end
     
-    if LootProConfig.minimap.hide then 
-        self.minimapButton:Hide() 
-    else 
-        self.minimapButton:Show() 
-        self:UpdateMinimapPosition()
-    end
+    if LootProConfig.minimap.hide then
+        self.LDBIcon:Hide("LootPro")
+    else
+        self.LDBIcon:Show("LootPro")
+    end    
     
     local configs = { 
         {f = self.combatFrame, s = LootProConfig.combat}, 
@@ -282,6 +210,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
     
     if event == "ADDON_LOADED" and arg1 == addonName then 
         self:InitSettings()
+        self.LDBIcon:Register("LootPro", self.lootProLDB, LootProConfig.minimap)
         
     elseif event == "PLAYER_LOGIN" then 
         if ns.UI then ns.UI:Initialize() end
