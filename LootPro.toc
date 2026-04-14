@@ -1,7 +1,7 @@
 ## Interface: 120001
 ## Title: Loot Pro
 ## Notes: Custom Loot and Combat Text.
-## Version: 1.1.5
+## Version: 1.1.6
 ## Author: Wheelbarrel00
 ## SavedVariables: LootProConfig
 ## OptionalDeps: LibStub, LibSharedMedia-3.0
