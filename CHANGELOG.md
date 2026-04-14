@@ -5,6 +5,11 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-04-14
+
+### Fixed
+- In-game version string now correctly displays the current version (was stuck at 1.1.3 in the GUI title and minimap tooltip).
+
 ## [1.1.5] - 2026-04-13
 
 ### Changed
