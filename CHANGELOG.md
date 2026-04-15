@@ -5,6 +5,18 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-15
+
+### Added
+- **Burning Crusade Classic Anniversary (2.5.5) support** via separate `LootPro_BCC.toc`
+- `IS_RETAIL` and `IS_BCC` flags on the addon namespace for client-aware code paths
+- BCC-compatible UI frame builder (`CreateVersionedMainFrame`) for clients without modern frame templates
+
+### Fixed
+- Loot quality filter no longer silently drops freshly-looted items whose quality isn't cached yet (fail-open behavior)
+- BCC: `SetBackdrop` no longer errors on the main settings frame (added `BackdropTemplate` mixin)
+- BCC: Welcome text now centers correctly within its bounding box
+
 ## [1.1.6] - 2026-04-14
 
 ### Fixed
