@@ -4,16 +4,46 @@ local U = ns.U
 
 ns.UI = {}
 
+-- Creates the two main addon frames (settings window + welcome popup) in a way
+-- that works on both retail (BasicFrameTemplateWithInset exists) and BCC (it
+-- doesn't — title bar and close button are set up manually instead).
+-- Note: BackdropTemplate IS needed in BCC (the 2021 client shares the
+-- Shadowlands engine change that removed SetBackdrop from bare Frame objects).
+local function CreateVersionedMainFrame(name, parent)
+    local f
+    if addon.IS_RETAIL then
+        f = CreateFrame("Frame", name, parent, "BasicFrameTemplateWithInset, BackdropTemplate")
+    else
+        f = CreateFrame("Frame", name, parent, "BackdropTemplate")
+        f:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = {left=11, right=12, top=12, bottom=11},
+        })
+        -- Synthetic TitleBg so the existing title font-string anchors still work
+        f.TitleBg = f:CreateTexture(nil, "BACKGROUND")
+        f.TitleBg:SetPoint("TOPLEFT", 4, -4)
+        f.TitleBg:SetPoint("TOPRIGHT", -4, -24)
+        f.TitleBg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+        -- Standard close button
+        f.CloseButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        f.CloseButton:SetPoint("TOPRIGHT", -3, -3)
+        f.CloseButton:SetScript("OnClick", function() f:Hide() end)
+    end
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    return f
+end
+
 function ns.UI:Initialize()
-    local gui = CreateFrame("Frame", "LootProGUI", UIParent, "BasicFrameTemplateWithInset, BackdropTemplate")
-    gui:SetSize(520, 680) 
-    gui:SetPoint("CENTER") 
-    gui:Hide() 
-    gui:SetMovable(true) 
-    gui:EnableMouse(true) 
-    gui:RegisterForDrag("LeftButton")
-    gui:SetScript("OnDragStart", gui.StartMoving) 
-    gui:SetScript("OnDragStop", gui.StopMovingOrSizing)
+    local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
+    gui:SetSize(520, 680)
+    gui:SetPoint("CENTER")
+    gui:Hide()
 
     gui.title = gui:CreateFontString(nil, "OVERLAY", "GameFontHighlight") 
     gui.title:SetPoint("CENTER", gui.TitleBg, "CENTER", 0, 0) 
@@ -237,7 +267,7 @@ function ns.UI:Initialize()
     -------------------------------------------------
     -- FIRST-TIME WELCOME POPUP
     -------------------------------------------------
-    local welcome = CreateFrame("Frame", "LootProWelcome", UIParent, "BasicFrameTemplateWithInset, BackdropTemplate")
+    local welcome = CreateVersionedMainFrame("LootProWelcome", UIParent)
     welcome:SetSize(320, 160)
     welcome:SetPoint("CENTER")
     welcome:SetFrameStrata("HIGH")
@@ -250,6 +280,7 @@ function ns.UI:Initialize()
     local msg = welcome:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     msg:SetPoint("TOP", 0, -40)
     msg:SetWidth(280)
+    msg:SetJustifyH("CENTER")
     msg:SetText("Configure settings for first time use of Loot Pro")
     
     local openBtn = CreateFrame("Button", nil, welcome, "GameMenuButtonTemplate")
