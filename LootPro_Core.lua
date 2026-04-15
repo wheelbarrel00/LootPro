@@ -8,9 +8,15 @@ local function GetIconString(msg)
     
     local itemID = msg:match("item:(%d+)")
     if itemID and LootProConfig.showLootIcons then
-        local _, _, _, _, icon = GetItemInfoInstant(itemID)
-        if icon then 
-            return "|T" .. icon .. ":0|t " 
+        local icon
+        if addon.IS_RETAIL then
+            local _, _, _, _, _icon = GetItemInfoInstant(itemID)
+            icon = _icon
+        else
+            icon = select(10, GetItemInfo(itemID))  -- returns nil if not yet cached
+        end
+        if icon then
+            return "|T" .. icon .. ":0|t "
         end
     end
     return ""
@@ -303,26 +309,34 @@ addon:SetScript("OnEvent", function(self, event, ...)
             
         elseif event == "CHAT_MSG_LOOT" and n.loot then
             local itemID = arg1:match("item:(%d+)")
-            local q = itemID and C_Item.GetItemQualityByID(itemID) or 1
-            
-            if q >= LootProConfig.minQuality then 
+            -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
+            -- minQuality as the fallback so uncached items always pass the filter.
+            local rawQ = itemID and (addon.IS_RETAIL and C_Item.GetItemQualityByID(itemID)
+                                                      or select(3, GetItemInfo(itemID)))
+            local q = rawQ or LootProConfig.minQuality
+
+            if q >= LootProConfig.minQuality then
                 local amt = tonumber(arg1:match("x(%d+)%.?$")) or 1
-                
+
                 if LootProConfig.cleanMode then
                     local function ShowLoot(countStr)
                         self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(arg1) .. CleanMessage(arg1, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
                     end
-                    
-                    if itemID and LootProConfig.showLootCounts then
+
+                    if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
                         C_Timer.After(0.1, function()
                             local total = C_Item.GetItemCount(tonumber(itemID), true)
                             ShowLoot(" (" .. total .. ")")
                         end)
+                    elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
+                        -- C_Timer doesn't exist in BCC; GetItemCount does, show immediately
+                        local total = GetItemCount(itemID, true) or 0
+                        ShowLoot(" (" .. total .. ")")
                     else
                         ShowLoot("")
                     end
-                else 
-                    self.lootFrame.display:AddMessage(GetIconString(arg1) .. arg1, c.loot.r, c.loot.g, c.loot.b) 
+                else
+                    self.lootFrame.display:AddMessage(GetIconString(arg1) .. arg1, c.loot.r, c.loot.g, c.loot.b)
                 end
             end
         end
