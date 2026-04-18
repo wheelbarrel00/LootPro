@@ -68,14 +68,29 @@ function ns.UI:Initialize()
         end 
     end
 
+    local tabs = {}
+
+    local function SetActiveTab(activeName)
+        for tName, btn in pairs(tabs) do
+            local fs = btn:GetFontString()
+            if tName == activeName then
+                fs:SetTextColor(1, 0.82, 0)
+            else
+                fs:SetTextColor(0.5, 0.5, 0.5)
+            end
+        end
+        ShowPage(activeName)
+    end
+
     local function CreateTab(name, label, x)
         local b = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
-        b:SetSize(100, 25) 
-        b:SetPoint("TOPLEFT", x, -30) 
+        b:SetSize(100, 25)
+        b:SetPoint("TOPLEFT", x, -30)
         b:SetText(label)
         local fontString = b:GetFontString()
         if fontString then fontString:SetFont("Fonts\\FRIZQT__.TTF", 10, "") end
-        b:SetScript("OnClick", function() ShowPage(name) end)
+        b:SetScript("OnClick", function() SetActiveTab(name) end)
+        tabs[name] = b
         return b
     end
 
@@ -110,7 +125,22 @@ function ns.UI:Initialize()
             addon:UpdateAllVisuals() 
             addon.combatFrame.display:Clear() 
             addon.lootFrame.display:Clear() 
-        end 
+        end
+    end)
+
+    gui:SetScript("OnHide", function()
+        if not LootProConfig.locked then
+            LootProConfig.locked = true
+            addon:UpdateAllVisuals()
+            lockBtn:SetText("Unlock Windows")
+        end
+        if addon.isTesting then
+            addon.isTesting = false
+            testBtn:SetText("Start Test Mode")
+            addon:UpdateAllVisuals()
+            addon.combatFrame.display:Clear()
+            addon.lootFrame.display:Clear()
+        end
     end)
 
     local outList = {{val="NONE",lbl="None"},{val="OUTLINE",lbl="Thin"},{val="THICKOUTLINE",lbl="Thick"},{val="MONOCHROME",lbl="Pixel"}}
@@ -138,7 +168,7 @@ function ns.UI:Initialize()
     lMaxLines.label:SetPoint("TOPRIGHT", lHeight, "BOTTOMRIGHT", 0, -20); lMaxLines:SetPoint("TOPRIGHT", lMaxLines.label, "BOTTOMRIGHT", 0, -10); lMaxLines:SetValue(LootProConfig.loot.maxLines)
 
     local syncLayout = CreateFrame("Button", nil, pages.layout, "GameMenuButtonTemplate") 
-    syncLayout:SetPoint("BOTTOM", 0, 40); syncLayout:SetSize(220, 25); syncLayout:SetText("Sync Combat Layout to Loot")
+    syncLayout:SetPoint("BOTTOM", 0, 80); syncLayout:SetSize(220, 25); syncLayout:SetText("Sync Combat Layout to Loot")
     syncLayout:SetScript("OnClick", function() 
         LootProConfig.loot.size = LootProConfig.combat.size
         LootProConfig.loot.fade = LootProConfig.combat.fade
@@ -169,10 +199,10 @@ function ns.UI:Initialize()
     AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: The Midnight Council" end)
     AddColor("repLoss", "Rep Loss", function() return "- 25 Rep: Bloodsail Buccaneers" end)
 
-    local resetBtn = CreateFrame("Button", nil, pages.colors, "GameMenuButtonTemplate")
-    resetBtn:SetSize(160, 28); resetBtn:SetPoint("TOP", colorRows[#colorRows], "BOTTOM", 0, -25); resetBtn:SetText("Reset to Defaults")
+    local resetBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
+    resetBtn:SetSize(160, 28); resetBtn:SetPoint("BOTTOM", gui, "BOTTOM", 0, 35); resetBtn:SetText("Reset to Defaults")
     resetBtn:SetScript("OnClick", function() addon:ResetDefaults() end)
-    local stubC = pages.colors:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -5); stubC:SetText("Clears all colors, layout, and toggles.")
+    local stubC = gui:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -3); stubC:SetText("Clears all colors, layout, and toggles.")
 
     local toggles = {}
     local function AddToggle(key, title, colorKey, parentAnchor)
@@ -313,7 +343,7 @@ function ns.UI:Initialize()
     end
 
     ns.UI:RefreshAllWidgets()
-    ShowPage("layout")
+    SetActiveTab("layout")
     SLASH_LOOTPRO1 = "/lp"
     SlashCmdList["LOOTPRO"] = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
 end
