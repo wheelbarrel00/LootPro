@@ -5,6 +5,23 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+# Changelog
+
+## [2.1.0] - 2026-04-17
+
+### Added
+- Active tab highlighting in config UI — the current tab is now visually distinct
+
+### Changed
+- Closing the config UI now automatically deactivates Unlock Windows and 
+  Test Mode if either is active
+
+### Fixed
+- Reset to Defaults button now visible on all tab panels
+
+### Removed
+- Brann Bronzebeard Companion XP line removed from Test Mode preview messages
+
 ## [2.0.0] - 2026-04-15
 
 ### Added

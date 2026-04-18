@@ -184,7 +184,6 @@ function addon:PostTestMessages()
     
     self.combatFrame.display:AddMessage(LootProConfig.combatEnterText, cc.combatEnter.r, cc.combatEnter.g, cc.combatEnter.b)
     self.combatFrame.display:AddMessage("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
-    self.combatFrame.display:AddMessage("+ Brann Bronzebeard gains 125 Companion XP.", cD.r, cD.g, cD.b)
     self.combatFrame.display:AddMessage(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
     
     local icon = LootProConfig.showLootIcons and "|T133644:0|t " or ""
