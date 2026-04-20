@@ -1,9 +1,18 @@
 package-as: LootPro
 
+curse-id: 1510306
+
+enable-nolib-creation: no
+
+changelog-title: LootPro
+changelog-file: CHANGELOG.md
+
 ignore:
+  - .pkgmeta
+  - .github
+  - .gitignore
   - .vscode
   - .git
-  - .gitignore
   - README.md
   - CHANGELOG.md
   - LICENSE
