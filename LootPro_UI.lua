@@ -189,14 +189,17 @@ function ns.UI:Initialize()
     
     AddColor("money", "Money", function() return "10 Gold 75 Silver 20 Copper" end)
     AddColor("currency", "Currency", function() return "+ 25 Kej" end)
-    AddColor("loot", "Loot", function() return "+1 |T132338:0|t Earthen Shard (24)" end)
+    -- Use Hearthstone (itemID 6948, icon 134414) -- an evergreen item present
+    -- in every client from classic onwards, so the preview is real on retail
+    -- and BCC alike.
+    AddColor("loot", "Loot", function() return "+1 |T134414:0|t Hearthstone (1)" end)
     AddColor("combatEnter", "Combat Start", function() return LootProConfig.combatEnterText end)
     AddColor("combatLeave", "Combat End", function() return LootProConfig.combatLeaveText end)
     AddColor("xp", "Experience", function() return "+ 1,500 XP" end)
     AddColor("delver", "Delver XP", function() return "+ 125 Delver XP" end)
     AddColor("skill", "Skill", function() return "Blacksmithing (Midnight) (50)" end)
     AddColor("honor", "Honor", function() return "+ 15 Honor" end)
-    AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: The Midnight Council" end)
+    AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: Silvermoon Court" end)
     AddColor("repLoss", "Rep Loss", function() return "- 25 Rep: Bloodsail Buccaneers" end)
 
     local resetBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
@@ -260,6 +263,21 @@ function ns.UI:Initialize()
     local repGT = AddToggle("repGain", "Display Reputation GAIN", "repGain", honorT)
     local repLT = AddToggle("repLoss", "Display Reputation LOSS", "repLoss", repGT)
 
+    -- H4: Expose minQuality so users can actually filter loot without hand
+    -- editing SavedVariables. Uses quality-color-aware labels.
+    local qualityList = {
+        {val=0, lbl="Poor+ (All)"},
+        {val=1, lbl="Common+"},
+        {val=2, lbl="Uncommon+"},
+        {val=3, lbl="Rare+"},
+        {val=4, lbl="Epic+"},
+        {val=5, lbl="Legendary+"},
+    }
+    local mQual = U.CreateGenericCycler("LPRO_MQ", "Minimum Loot Quality", pages.notifications, qualityList, "minQuality", "root")
+    mQual.label:SetPoint("TOPLEFT", repLT, "BOTTOMLEFT", 15, -12)
+    mQual:SetPoint("TOPLEFT", mQual.label, "BOTTOMLEFT", 0, -5)
+    mQual:Refresh()
+
     local cFont = U.CreateFontCycler("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
 
@@ -318,6 +336,9 @@ function ns.UI:Initialize()
     openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -5)
     openBtn:SetText("Open Settings")
     openBtn:SetScript("OnClick", function()
+        -- M6: A user clicking "Open Settings" is clearly onboarding; never nag
+        -- them with this popup again.
+        LootProConfig.hideWelcome = true
         welcome:Hide()
         gui:Show()
     end)
@@ -325,8 +346,19 @@ function ns.UI:Initialize()
     local hideCheck = CreateFrame("CheckButton", "LPRO_HideWelcome", welcome, "InterfaceOptionsCheckButtonTemplate")
     hideCheck:SetPoint("BOTTOMLEFT", 20, 15)
     _G[hideCheck:GetName().."Text"]:SetText("Don't show this again")
-    hideCheck:SetScript("OnShow", function(self) self:SetChecked(LootProConfig.hideWelcome) end)
-    hideCheck:SetScript("OnClick", function(self) LootProConfig.hideWelcome = self:GetChecked() end)
+    -- M6: Set initial state at creation so the displayed check reflects the
+    -- saved variable even if the template swallows our OnShow hook.
+    hideCheck:SetChecked(LootProConfig.hideWelcome)
+    hideCheck:HookScript("OnShow", function(self) self:SetChecked(LootProConfig.hideWelcome) end)
+    hideCheck:SetScript("OnClick", function(self) LootProConfig.hideWelcome = self:GetChecked() and true or false end)
+    
+    -- M6: Closing via the X button also persists hideWelcome if the user
+    -- checked the box mid-session (defensive; OnClick already writes it).
+    welcome:HookScript("OnHide", function()
+        if hideCheck:GetChecked() then
+            LootProConfig.hideWelcome = true
+        end
+    end)
     
     ns.UI.welcomeFrame = welcome
 
@@ -334,6 +366,7 @@ function ns.UI:Initialize()
         cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines)
         lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
         cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
+        mQual:Refresh()
         cEntEB:SetText(LootProConfig.combatEnterText); cLveEB:SetText(LootProConfig.combatLeaveText)
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
@@ -344,6 +377,7 @@ function ns.UI:Initialize()
 
     ns.UI:RefreshAllWidgets()
     SetActiveTab("layout")
-    SLASH_LOOTPRO1 = "/lp"
-    SlashCmdList["LOOTPRO"] = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
+    -- L7: Slash command is registered at file-load time in LootPro.lua so it
+    -- works during loading screens; this just wires the GUI reference.
+    ns.UI.toggleGUI = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
 end

@@ -13,8 +13,8 @@ addon.DEFAULTS = {
     combatLeaveText = "Combat End",
     hideWelcome = false, -- New variable to track the popup state
     minimap = { hide = false, minimapPos = 220 },
-    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", x = 0, y = 50, maxLines = 4 }, -- Resized to 200x200
-    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", x = 0, y = 150, maxLines = 4 }, -- Resized to 200x200
+    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 }, -- Resized to 200x200
+    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 }, -- Resized to 200x200
     colors = {
         money = {r = 1.0, g = 0.82, b = 0.0},
         currency = {r = 0.65, g = 0.85, b = 1.0},
@@ -62,6 +62,20 @@ function addon:InitSettings()
             end
         end
         validate(addon.DEFAULTS, LootProConfig)
+
+        -- L3: Prune keys that no longer exist in the schema. Only prunes inside
+        -- tables defined by DEFAULTS (e.g. colors, notifications, loot, combat,
+        -- minimap); user-side tables outside of DEFAULTS are never touched.
+        local function prune(src, dst)
+            for k, v in pairs(dst) do
+                if src[k] == nil then
+                    dst[k] = nil
+                elseif type(v) == "table" and type(src[k]) == "table" then
+                    prune(src[k], v)
+                end
+            end
+        end
+        prune(addon.DEFAULTS, LootProConfig)
     end
 end
 
