@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write   # allow packager to create a GitHub Release for the tag
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -15,7 +18,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify required secrets
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: |
+          if [ -z "$CF_API_KEY" ]; then
+            echo "::error::CF_API_KEY secret is not set on this repository."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "CF_API_KEY is present (length: ${#CF_API_KEY})."
+
+      - name: Show tag info
+        run: |
+          echo "Ref: $GITHUB_REF"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Tag: $TAG"
+          TYPE=$(git cat-file -t "$TAG" || echo "unknown")
+          echo "Tag object type: $TYPE  (should be 'tag' for an annotated release)"
+          if [ "$TYPE" != "tag" ]; then
+            echo "::warning::Lightweight tag detected. The packager will treat this as an alpha build."
+            echo "For a stable CurseForge release use: git tag -a $TAG -m \"$TAG\" && git push origin $TAG"
+          fi
+
       - name: Package and release
         uses: BigWigsMods/packager@v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
