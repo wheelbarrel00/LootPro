@@ -1,7 +1,5 @@
 package-as: LootPro
 
-curse-id: 1510306
-
 enable-nolib-creation: no
 
 changelog-title: LootPro
