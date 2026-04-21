@@ -430,12 +430,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
+        -- Taint break: Blizzard may flag arg1 as a "secret" tainted string when
+        -- it originates from a secure code path (e.g. certain faction/loot
+        -- flows). Calling string methods directly on a tainted value raises
+        -- "attempt to index local 'arg1' (a secret string value tainted by
+        -- 'LootPro')". Copying through tostring() yields an untainted local
+        -- that we can safely :match() / :find() against.
+        local msg = tostring(arg1) or ""
+
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
         if event == "CHAT_MSG_COMBAT_XP_GAIN" then
-            local name, amount2 = arg1:match("(.+) has gained ([%d%p%s]*%d)%s+%a+")
+            local name, amount2 = msg:match("(.+) has gained ([%d%p%s]*%d)%s+%a+")
             -- If there's a named subject, treat as follower/pet XP.
-            if name and amount2 and not arg1:match("^You") then
+            if name and amount2 and not msg:match("^You") then
                 if not LootProConfig.showFollowerXP then return end
                 if n.xp then
                     name = name:gsub("|c%x+", ""):gsub("|r", "")
@@ -446,14 +454,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
         end
 
         if event == "CHAT_MSG_COMBAT_XP_GAIN" and n.xp then
-            self.combatFrame.display:AddMessage(CleanMessage(arg1, event), c.xp.r, c.xp.g, c.xp.b)
+            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
             
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             -- M2: Use Blizzard's localized format string to parse faction +/-.
             local fac, amt = nil, nil
-            if PAT_FACTION_UP then fac, amt = arg1:match(PAT_FACTION_UP) end
+            if PAT_FACTION_UP then fac, amt = msg:match(PAT_FACTION_UP) end
             local lossFac, lossAmt = nil, nil
-            if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = arg1:match(PAT_FACTION_DOWN) end
+            if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = msg:match(PAT_FACTION_DOWN) end
             if amt and n.repGain then 
                 self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
             elseif lossAmt and n.repLoss then 
@@ -461,14 +469,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
             
         elseif event == "CHAT_MSG_SKILL" and n.skill then
-            self.combatFrame.display:AddMessage(CleanMessage(arg1, event), c.skill.r, c.skill.g, c.skill.b)
+            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
             
         elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" and n.honor then
-            self.combatFrame.display:AddMessage(CleanMessage(arg1, event), c.honor.r, c.honor.g, c.honor.b)
+            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
             
         elseif event == "CHAT_MSG_SYSTEM" and n.delver then
-            if arg1:find("Companion XP") then
-                local amt = arg1:match("gains ([%d,]+) Companion")
+            if msg:find("Companion XP") then
+                local amt = msg:match("gains ([%d,]+) Companion")
                 if amt then
                     local cD = c.delver or {r=1, g=0.7, b=0.2}
                     self.combatFrame.display:AddMessage("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
@@ -477,9 +485,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
             
         elseif event == "CHAT_MSG_MONEY" and n.money then
             if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
-                local g = arg1:match("(%d+)%s*[Gg]old")
-                local s = arg1:match("(%d+)%s*[Ss]ilver")
-                local co = arg1:match("(%d+)%s*[Cc]opper")
+                local g = msg:match("(%d+)%s*[Gg]old")
+                local s = msg:match("(%d+)%s*[Ss]ilver")
+                local co = msg:match("(%d+)%s*[Cc]opper")
                 local st = ""
                 
                 if g then st = st .. g .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t " end
@@ -488,14 +496,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 
                 self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
             else 
-                self.lootFrame.display:AddMessage(GetIconString(arg1) .. arg1, c.money.r, c.money.g, c.money.b) 
+                self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b) 
             end
             
         elseif event == "CHAT_MSG_CURRENCY" and n.currency then
-            self.lootFrame.display:AddMessage(GetIconString(arg1) .. CleanMessage(arg1, event), c.currency.r, c.currency.g, c.currency.b)
+            self.lootFrame.display:AddMessage(GetIconString(msg) .. CleanMessage(msg, event), c.currency.r, c.currency.g, c.currency.b)
             
         elseif event == "CHAT_MSG_LOOT" and n.loot then
-            local itemID = arg1:match("item:(%d+)")
+            local itemID = msg:match("item:(%d+)")
             -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
             -- minQuality as the fallback so uncached items always pass the filter.
             local rawQ = itemID and (addon.IS_RETAIL and C_Item.GetItemQualityByID(itemID)
@@ -503,11 +511,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local q = rawQ or LootProConfig.minQuality
 
             if q >= LootProConfig.minQuality then
-                local amt = tonumber(arg1:match("x(%d+)%.?$")) or 1
+                local amt = tonumber(msg:match("x(%d+)%.?$")) or 1
 
                 if LootProConfig.cleanMode then
                     local function ShowLoot(countStr)
-                        self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(arg1) .. CleanMessage(arg1, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
+                        self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(msg) .. CleanMessage(msg, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
                     end
 
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
@@ -529,7 +537,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         ShowLoot("")
                     end
                 else
-                    self.lootFrame.display:AddMessage(GetIconString(arg1) .. arg1, c.loot.r, c.loot.g, c.loot.b)
+                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.loot.r, c.loot.g, c.loot.b)
                 end
             end
         end

@@ -5,6 +5,18 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-04-20
+
+### Fixed
+- **Lua taint crash on `CHAT_MSG_COMBAT_FACTION_CHANGE`** — "attempt to
+  index local 'arg1' (a secret string value tainted by 'LootPro')" when
+  reputation events originated from a secure code path. The event handler
+  now copies `arg1` through `tostring()` into an untainted local (`msg`)
+  before any pattern matching, breaking taint propagation.
+- Same taint-break applied defensively to every other `CHAT_MSG_*` branch
+  in the handler (`XP`, `SKILL`, `HONOR`, `SYSTEM`, `MONEY`, `CURRENCY`,
+  `LOOT`) so the bug can't recur on a different event.
+
 ## [2.2.0] - 2026-04-20
 
 ### Added
