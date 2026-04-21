@@ -5,6 +5,40 @@ local addon = ns.addon
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 
+local function SafeSetFont(region, path, size, flags)
+    if addon._SafeSetFont then return addon._SafeSetFont(region, path, size, flags) end
+    pcall(function() region:SetFont(path, size, flags) end)
+end
+
+-- H2: Cache the SharedMedia font list. Rebuilding + sorting this table on
+-- every slider-driven refresh is pure waste. Cache is invalidated whenever a
+-- new font is registered with LSM.
+local _fontCache
+local function GetFonts()
+    if _fontCache then return _fontCache end
+    local t = {}
+    if LSM then
+        for n in pairs(LSM:HashTable("font")) do t[#t+1] = n end
+    end
+    if #t == 0 then t[1] = "Friz Quadrata TT" end
+    table.sort(t)
+    _fontCache = t
+    return t
+end
+if LSM and LSM.RegisterCallback then
+    local sink = {}
+    LSM.RegisterCallback(sink, "LibSharedMedia_Registered", function(_, mediatype)
+        if mediatype == "font" then _fontCache = nil end
+    end)
+end
+
+-- Helper so widgets can target root-level config keys (e.g. minQuality) as
+-- well as nested tables (e.g. LootProConfig.combat.size).
+local function GetCfg(configKey)
+    if configKey == "root" then return LootProConfig end
+    return LootProConfig[configKey]
+end
+
 function U.CreateFontCycler(name, title, parent, configKey)
     local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
     l:SetText(title)
@@ -29,20 +63,11 @@ function U.CreateFontCycler(name, title, parent, configKey)
     
     local function Update()
         local cfg = LootProConfig[configKey]
-        local fonts = {} 
-        
-        if LSM then 
-            for n in pairs(LSM:HashTable("font")) do 
-                table.insert(fonts, n) 
-            end 
-        else 
-            fonts = {"Friz Quadrata TT"} 
-        end 
-        table.sort(fonts) 
+        local fonts = GetFonts()
         
         t:SetText(cfg.font or "Friz Quadrata TT") 
         local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT 
-        pcall(function() t:SetFont(p, 13, "") end) 
+        SafeSetFont(t, p, 13, "") 
         
         if addon.UpdateAllVisuals then 
             addon:UpdateAllVisuals() 
@@ -51,16 +76,7 @@ function U.CreateFontCycler(name, title, parent, configKey)
     
     local function Cycle(d) 
         local cfg = LootProConfig[configKey]
-        local fonts = {} 
-        
-        if LSM then 
-            for n in pairs(LSM:HashTable("font")) do 
-                table.insert(fonts, n) 
-            end 
-        else 
-            fonts = {"Friz Quadrata TT"} 
-        end 
-        table.sort(fonts) 
+        local fonts = GetFonts()
         
         local idx = 1 
         for i, v in ipairs(fonts) do 
@@ -119,17 +135,24 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
     t:SetPoint("CENTER")
     
     local function UpdateText() 
-        local cfg = LootProConfig[configKey]
+        local cfg = GetCfg(configKey)
+        local cur = cfg[settingKey]
         
         for _, v in ipairs(list) do 
-            if v.val == cfg[settingKey] then 
+            if v.val == cur then 
                 t:SetText(v.lbl) 
             end 
         end 
         
-        local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
-        local f = (cfg[settingKey] == "NONE") and "" or cfg[settingKey]
-        pcall(function() t:SetFont(p, 13, f) end)
+        -- Font styling is only meaningful when the cycler represents an outline
+        -- value for a nested readout config. Root-level cyclers just show text.
+        if configKey ~= "root" then
+            local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
+            local f = (cur == "NONE") and "" or cur
+            if type(f) == "string" then
+                SafeSetFont(t, p, 13, f)
+            end
+        end
         
         if addon.UpdateAllVisuals then 
             addon:UpdateAllVisuals() 
@@ -137,7 +160,7 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
     end
     
     local function Cycle(d) 
-        local cfg = LootProConfig[configKey]
+        local cfg = GetCfg(configKey)
         local idx = 1 
         
         for i, v in ipairs(list) do 
