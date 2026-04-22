@@ -5,6 +5,18 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-04-21
+
+### Fixed
+- **Loot count display** no longer shows `(0)` for instant-use items, currencies,
+  or non-stacking items that never occupy bag space (e.g. Boon of Power, Chunk
+  of Companion Experience, Voidlight Marl). If `GetItemCount()` returns 0 after
+  looting, the parenthetical count is omitted entirely rather than displaying a
+  misleading zero.
+- Items whose bag count hasn't updated yet when the loot message fires (race
+  condition between `CHAT_MSG_LOOT` and the bag-update event) also benefit from
+  the same rule — a stale 0 is suppressed instead of shown.
+
 ## [2.2.2] - 2026-04-21
 
 ### Changed

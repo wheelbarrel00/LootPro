@@ -518,21 +518,36 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(msg) .. CleanMessage(msg, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
                     end
 
+                    -- Bag-count display rule: only append "(N)" when the item
+                    -- actually occupies bag space after looting. Returning 0
+                    -- from GetItemCount means either:
+                    --   (a) instant-use / currency / non-bag item (Boon of
+                    --       Power, Chunk of Companion Experience, etc.) —
+                    --       never shows a meaningful count
+                    --   (b) bag-update hasn't fired yet / item not cached —
+                    --       a displayed 0 would be misleading
+                    -- Either way, suppress the parenthetical rather than
+                    -- print "(0)".
+                    local function CountSuffix(n)
+                        n = tonumber(n) or 0
+                        if n <= 0 then return "" end
+                        return " (" .. n .. ")"
+                    end
+
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
                         -- M5: Skip the 100 ms defer when the item is already cached.
                         -- Under AoE loot this avoids scheduling dozens of timers per pull.
                         local id = tonumber(itemID)
                         if id and C_Item.GetItemNameByID(id) then
-                            ShowLoot(" (" .. (C_Item.GetItemCount(id, true) or 0) .. ")")
+                            ShowLoot(CountSuffix(C_Item.GetItemCount(id, true)))
                         else
                             C_Timer.After(0.1, function()
-                                ShowLoot(" (" .. (C_Item.GetItemCount(id, true) or 0) .. ")")
+                                ShowLoot(CountSuffix(C_Item.GetItemCount(id, true)))
                             end)
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
                         -- C_Timer doesn't exist in BCC; GetItemCount does, show immediately
-                        local total = GetItemCount(itemID, true) or 0
-                        ShowLoot(" (" .. total .. ")")
+                        ShowLoot(CountSuffix(GetItemCount(itemID, true)))
                     else
                         ShowLoot("")
                     end
