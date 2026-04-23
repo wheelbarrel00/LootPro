@@ -104,6 +104,24 @@ local function CleanMessage(msg, event)
     return msg
 end
 
+-- Items that read wrong with the generic "+<amt> <Name> (<count>)" format.
+-- These arrive via CHAT_MSG_LOOT or CHAT_MSG_CURRENCY but the gained
+-- quantity is either an instant consumable (Boon of Power) or the XP
+-- amount itself (Companion XP) — not a stack count. Render these as just
+-- "<icon> <Name>" with no left-side prefix and no bag-count suffix.
+local NO_COUNT_PATTERNS = {
+    "Companion XP",
+    "Companion Experience",
+    "Boon of Power",
+}
+local function IsNoCountItem(cleanName)
+    if not cleanName then return false end
+    for _, pat in ipairs(NO_COUNT_PATTERNS) do
+        if cleanName:find(pat, 1, true) then return true end
+    end
+    return false
+end
+
 local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     local f = CreateFrame("Frame", name.."Anchor", UIParent, "BackdropTemplate")
     f.configKey = configKey
@@ -431,12 +449,13 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if not arg1 or type(arg1) ~= "string" then return end
 
         -- Taint break: Blizzard may flag arg1 as a "secret" tainted string when
-        -- it originates from a secure code path (e.g. certain faction/loot
-        -- flows). Calling string methods directly on a tainted value raises
-        -- "attempt to index local 'arg1' (a secret string value tainted by
-        -- 'LootPro')". Copying through tostring() yields an untainted local
-        -- that we can safely :match() / :find() against.
-        local msg = tostring(arg1) or ""
+        -- it originates from a secure code path. Two observed error shapes:
+        --   1) "...secret string value tainted by 'LootPro'"        (value taint)
+        --   2) "...secret string value, while execution tainted..." (frame taint)
+        -- Plain tostring() on a Lua string returns the same object, which is
+        -- not always enough for shape (2). Routing through string.format via
+        -- C produces a fresh, laundered copy that's safe to :match/:find/:gsub.
+        local msg = string.format("%s", tostring(arg1 or ""))
 
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
@@ -500,7 +519,61 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
             
         elseif event == "CHAT_MSG_CURRENCY" and n.currency then
-            self.lootFrame.display:AddMessage(GetIconString(msg) .. CleanMessage(msg, event), c.currency.r, c.currency.g, c.currency.b)
+            -- Currency display overhaul: match the loot-line format
+            --   +<amt> [icon] <Name> (<total>)
+            -- Currency messages use |Hcurrency:<id>:...|h[Name]|h hyperlinks
+            -- (not item:<id>), so GetIconString — which only recognizes item
+            -- links — cannot produce an icon here. We pull the icon and the
+            -- player's running total directly from C_CurrencyInfo.
+            local currencyID = tonumber(msg:match("currency:(%d+)"))
+            -- CURRENCY_GAINED_MULTIPLE ends with "x<N>."; single-gain uses
+            -- CURRENCY_GAINED with no suffix → amount = 1.
+            local amt = tonumber(msg:match("x(%d+)%.?$")) or 1
+
+            local iconStr, total = "", nil
+            if currencyID and addon.IS_RETAIL
+               and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+                local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+                if info then
+                    if LootProConfig.showLootIcons and info.iconFileID then
+                        iconStr = "|T" .. info.iconFileID .. ":0|t "
+                    end
+                    total = info.quantity
+                end
+            end
+
+            -- Same "suppress zero / nil" rule as the loot handler (v2.2.3):
+            -- no meaningful total ⇒ omit the parenthetical instead of "(0)".
+            local function CurrencyCountSuffix(n)
+                n = tonumber(n) or 0
+                if n <= 0 then return "" end
+                return " (" .. n .. ")"
+            end
+
+            if LootProConfig.cleanMode then
+                local cleaned = CleanMessage(msg, event)
+                if IsNoCountItem(cleaned) then
+                    -- No-count items (Companion XP, Boon of Power, etc.):
+                    -- just "<icon> <Name>". No +N prefix, no (count) suffix.
+                    self.lootFrame.display:AddMessage(
+                        iconStr .. cleaned,
+                        c.currency.r, c.currency.g, c.currency.b)
+                else
+                    self.lootFrame.display:AddMessage(
+                        "+" .. amt .. " " .. iconStr .. cleaned .. CurrencyCountSuffix(total),
+                        c.currency.r, c.currency.g, c.currency.b)
+                end
+            else
+                if IsNoCountItem(msg) then
+                    self.lootFrame.display:AddMessage(
+                        iconStr .. CleanMessage(msg, event),
+                        c.currency.r, c.currency.g, c.currency.b)
+                else
+                    self.lootFrame.display:AddMessage(
+                        iconStr .. msg .. CurrencyCountSuffix(total),
+                        c.currency.r, c.currency.g, c.currency.b)
+                end
+            end
             
         elseif event == "CHAT_MSG_LOOT" and n.loot then
             local itemID = msg:match("item:(%d+)")
@@ -514,8 +587,19 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 local amt = tonumber(msg:match("x(%d+)%.?$")) or 1
 
                 if LootProConfig.cleanMode then
+                    local cleaned = CleanMessage(msg, event)
+                    local noCount = IsNoCountItem(cleaned)
+
                     local function ShowLoot(countStr)
-                        self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(msg) .. CleanMessage(msg, event) .. countStr, c.loot.r, c.loot.g, c.loot.b)
+                        if noCount then
+                            -- No-count items (Companion XP, Boon of Power):
+                            -- just "<icon> <Name>" — no +N, no bag-count.
+                            self.lootFrame.display:AddMessage(
+                                GetIconString(msg) .. cleaned,
+                                c.loot.r, c.loot.g, c.loot.b)
+                        else
+                            self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(msg) .. cleaned .. countStr, c.loot.r, c.loot.g, c.loot.b)
+                        end
                     end
 
                     -- Bag-count display rule: only append "(N)" when the item

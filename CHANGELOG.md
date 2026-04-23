@@ -5,6 +5,31 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-04-22
+
+### Added
+- **Currency display overhaul** — currencies (Undercoin, Champion Dawncrest,
+  Coffer Key Shards, etc.) now match the loot-line format: `+<amt> [icon]
+  <Name> (<total>)`. Amount earned, inline icon, and running total are all
+  pulled from `C_CurrencyInfo`. If the currency has no icon, falls back to
+  `+<amt> <Name> (<total>)`.
+- **No-count item list** — items that are instant-use or XP rewards are
+  detected by name and rendered as `[icon] <Name>` with no `+N` prefix and
+  no `(count)` suffix. Currently: Companion XP, Companion Experience,
+  Boon of Power. Adding more is a one-line change.
+
+### Fixed
+- **Companion XP** no longer displays `+1 Companion XP` — now shows as
+  `[icon] Companion XP` (notification only; actual XP amounts remain in
+  the combat/system window).
+- **Boon of Power** no longer displays `+1 Boon of Power` — now shows as
+  `[icon] Boon of Power`.
+- **Taint break hardened** — `string.format("%s", tostring(arg1 or ""))`
+  replaces the previous `tostring(arg1)` call. Routes the laundering
+  through Lua's C-side string formatter, producing a fresh string object
+  that survives both value-taint and execution-frame-taint from Blizzard's
+  secure system.
+
 ## [2.2.3] - 2026-04-21
 
 ### Fixed
