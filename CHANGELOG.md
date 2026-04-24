@@ -5,6 +5,26 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-04-23
+
+### Fixed
+- **Taint crash on `CHAT_MSG_COMBAT_FACTION_CHANGE` — final fix.** Three
+  previous attempts (`tostring()`, `string.format("%s", ...)`,
+  `C_Timer.After(0, ...)` re-dispatch) all failed because every launder
+  step ran inside the tainted execution frame — the cleaned value was
+  re-poisoned the moment the closure captured it. Blizzard's secure
+  delve/faction paths taint the frame itself, not just `arg1`.
+- Chat messages are now captured via
+  `ChatFrame_AddMessageEventFilter` callbacks, which execute in an
+  untainted Blizzard frame before `OnEvent` fires. The filter stashes the
+  message text in a module-local table keyed by event name; the event
+  handler reads from that table and never touches `arg1`. Applied to all
+  eight `CHAT_MSG_*` events the addon listens to (`LOOT`, `CURRENCY`,
+  `MONEY`, `SKILL`, `SYSTEM`, `COMBAT_FACTION_CHANGE`, `COMBAT_XP_GAIN`,
+  `COMBAT_HONOR_GAIN`).
+- `C_Timer.After(0, ...)` re-dispatch wrapper removed — no longer needed
+  and was itself part of the broken chain.
+
 ## [2.2.4] - 2026-04-22
 
 ### Added
