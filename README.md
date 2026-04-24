@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wheelbarrel00/LootPro/releases"><img src="https://img.shields.io/badge/Version-v2.1.0-FF2222?style=flat-square" alt="Version" /></a>
+  <a href="https://github.com/wheelbarrel00/LootPro/releases"><img src="https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=FF2222&label=Version" alt="Version" /></a>
   <img src="https://img.shields.io/badge/WoW-Midnight%2012.0-8B0000?style=flat-square" alt="WoW Midnight" />
   <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.5-8B0000?style=flat-square" alt="WoW BCC" />
-  <img src="https://img.shields.io/badge/Interface-120001-333333?style=flat-square" alt="Interface" />
+  <img src="https://img.shields.io/badge/Interface-120005-333333?style=flat-square" alt="Interface" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/Memory-~140KB-333333?style=flat-square" alt="Memory" />
 </p>
