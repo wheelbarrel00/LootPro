@@ -406,6 +406,39 @@ for _, v in ipairs(evts) do
     addon:RegisterEvent(v) 
 end
 
+-- v2.2.6 taint fix:
+-- Blizzard's secure delve/faction code paths can taint the chat-event
+-- execution *frame itself*, not just the arg1 value. Every in-frame laundering
+-- attempt (tostring, string.format("%s", ...), C_Timer.After closures) has
+-- been observed to fail — the taint rides the value out of the frame because
+-- the cleaning itself happens on a tainted stack.
+--
+-- ChatFrame_AddMessageEventFilter callbacks run as part of ChatFrame's
+-- OnEvent, which is an execution frame Blizzard controls — so the `msg`
+-- parameter they receive is clean before our addon ever gets a chance to
+-- touch it. We stash a copy here keyed by event name and read it from the
+-- OnEvent handler below, completely bypassing `arg1`.
+local cleanChatMsg = {}
+local FILTERED_CHAT_EVENTS = {
+    "CHAT_MSG_LOOT",
+    "CHAT_MSG_CURRENCY",
+    "CHAT_MSG_MONEY",
+    "CHAT_MSG_SKILL",
+    "CHAT_MSG_SYSTEM",
+    "CHAT_MSG_COMBAT_FACTION_CHANGE",
+    "CHAT_MSG_COMBAT_XP_GAIN",
+    "CHAT_MSG_COMBAT_HONOR_GAIN",
+}
+if _G.ChatFrame_AddMessageEventFilter then
+    for _, e in ipairs(FILTERED_CHAT_EVENTS) do
+        local evtName = e
+        ChatFrame_AddMessageEventFilter(evtName, function(_, _, msg)
+            cleanChatMsg[evtName] = msg
+            return false -- never suppress the message; we only observe it
+        end)
+    end
+end
+
 addon:SetScript("OnEvent", function(self, event, ...)
     local arg1 = ...
     
@@ -448,14 +481,13 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        -- Taint break: Blizzard may flag arg1 as a "secret" tainted string when
-        -- it originates from a secure code path. Two observed error shapes:
-        --   1) "...secret string value tainted by 'LootPro'"        (value taint)
-        --   2) "...secret string value, while execution tainted..." (frame taint)
-        -- Plain tostring() on a Lua string returns the same object, which is
-        -- not always enough for shape (2). Routing through string.format via
-        -- C produces a fresh, laundered copy that's safe to :match/:find/:gsub.
-        local msg = string.format("%s", tostring(arg1 or ""))
+        -- Pull the clean copy stashed by our ChatFrame_AddMessageEventFilter
+        -- registrations above. Reading `arg1` directly here would re-poison
+        -- the frame on tainted Blizzard paths (delves/faction), regardless
+        -- of any in-frame laundering we attempt. If the filter hasn't run
+        -- yet for some reason, bail rather than touch the tainted value.
+        local msg = cleanChatMsg[event]
+        if type(msg) ~= "string" then return end
 
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
@@ -474,25 +506,25 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if event == "CHAT_MSG_COMBAT_XP_GAIN" and n.xp then
             self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
-            
+
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             -- M2: Use Blizzard's localized format string to parse faction +/-.
             local fac, amt = nil, nil
             if PAT_FACTION_UP then fac, amt = msg:match(PAT_FACTION_UP) end
             local lossFac, lossAmt = nil, nil
             if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = msg:match(PAT_FACTION_DOWN) end
-            if amt and n.repGain then 
+            if amt and n.repGain then
                 self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
-            elseif lossAmt and n.repLoss then 
-                self.combatFrame.display:AddMessage("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b) 
+            elseif lossAmt and n.repLoss then
+                self.combatFrame.display:AddMessage("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b)
             end
-            
+
         elseif event == "CHAT_MSG_SKILL" and n.skill then
             self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
-            
+
         elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" and n.honor then
             self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
-            
+
         elseif event == "CHAT_MSG_SYSTEM" and n.delver then
             if msg:find("Companion XP") then
                 local amt = msg:match("gains ([%d,]+) Companion")
@@ -501,23 +533,23 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     self.combatFrame.display:AddMessage("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
                 end
             end
-            
+
         elseif event == "CHAT_MSG_MONEY" and n.money then
             if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
                 local g = msg:match("(%d+)%s*[Gg]old")
                 local s = msg:match("(%d+)%s*[Ss]ilver")
                 local co = msg:match("(%d+)%s*[Cc]opper")
                 local st = ""
-                
+
                 if g then st = st .. g .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t " end
                 if s then st = st .. s .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
                 if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
-                
+
                 self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
-            else 
-                self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b) 
+            else
+                self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
             end
-            
+
         elseif event == "CHAT_MSG_CURRENCY" and n.currency then
             -- Currency display overhaul: match the loot-line format
             --   +<amt> [icon] <Name> (<total>)
@@ -544,10 +576,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
             -- Same "suppress zero / nil" rule as the loot handler (v2.2.3):
             -- no meaningful total ⇒ omit the parenthetical instead of "(0)".
-            local function CurrencyCountSuffix(n)
-                n = tonumber(n) or 0
-                if n <= 0 then return "" end
-                return " (" .. n .. ")"
+            local function CurrencyCountSuffix(nn)
+                nn = tonumber(nn) or 0
+                if nn <= 0 then return "" end
+                return " (" .. nn .. ")"
             end
 
             if LootProConfig.cleanMode then
@@ -574,7 +606,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         c.currency.r, c.currency.g, c.currency.b)
                 end
             end
-            
+
         elseif event == "CHAT_MSG_LOOT" and n.loot then
             local itemID = msg:match("item:(%d+)")
             -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
@@ -612,10 +644,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     --       a displayed 0 would be misleading
                     -- Either way, suppress the parenthetical rather than
                     -- print "(0)".
-                    local function CountSuffix(n)
-                        n = tonumber(n) or 0
-                        if n <= 0 then return "" end
-                        return " (" .. n .. ")"
+                    local function CountSuffix(nn)
+                        nn = tonumber(nn) or 0
+                        if nn <= 0 then return "" end
+                        return " (" .. nn .. ")"
                     end
 
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
