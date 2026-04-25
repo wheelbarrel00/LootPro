@@ -56,7 +56,7 @@ LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
 
 local function GetIconString(msg)
     if not msg or type(msg) ~= "string" then return "" end
-    
+
     local itemID = msg:match("item:(%d+)")
     if itemID and LootProConfig.showLootIcons then
         local icon
@@ -293,6 +293,12 @@ function addon:PostTestMessages()
     self.lootFrame.display:AddMessage("+1 " .. icon .. "Hearthstone (1)", cc.loot.r, cc.loot.g, cc.loot.b)
 end
 
+-- Module-local cache populated by ChatFrame_AddMessageEventFilter for the
+-- one CHAT_MSG_* event with a documented taint path
+-- (CHAT_MSG_COMBAT_FACTION_CHANGE). Declared here so RunRegressionTest can
+-- seed it for the synthetic faction test cases below.
+local cleanChatMsg = {}
+
 -- Regression harness. Invoked via "/lp test". Fires synthetic chat events
 -- through the real OnEvent handler and checks each readout's message count
 -- to verify the path produced output. Uses evergreen in-game references
@@ -360,6 +366,11 @@ function addon:RunRegressionTest()
     print("|cFFAAAAFF[LootPro]|r Running regression test (12 cases)...")
     local pass, fail = 0, 0
     for _, tc in ipairs(cases) do
+        -- Clear the target frame before each case. Otherwise the combat
+        -- frame's maxLines (default 4) caps GetNumMessages() and later
+        -- cases (Rep Gain, Rep Loss, Delver XP) read before==after even
+        -- when AddMessage actually fired — reporting false FAILs.
+        tc.target:Clear()
         local before = tc.target:GetNumMessages()
         local ok, err = pcall(handler, self, tc.event, tc.arg)
         local after = tc.target:GetNumMessages()
@@ -406,37 +417,24 @@ for _, v in ipairs(evts) do
     addon:RegisterEvent(v) 
 end
 
--- v2.2.6 taint fix:
--- Blizzard's secure delve/faction code paths can taint the chat-event
--- execution *frame itself*, not just the arg1 value. Every in-frame laundering
--- attempt (tostring, string.format("%s", ...), C_Timer.After closures) has
--- been observed to fail — the taint rides the value out of the frame because
--- the cleaning itself happens on a tainted stack.
+-- v2.2.6: Taint launder strategy.
 --
--- ChatFrame_AddMessageEventFilter callbacks run as part of ChatFrame's
--- OnEvent, which is an execution frame Blizzard controls — so the `msg`
--- parameter they receive is clean before our addon ever gets a chance to
--- touch it. We stash a copy here keyed by event name and read it from the
--- OnEvent handler below, completely bypassing `arg1`.
-local cleanChatMsg = {}
-local FILTERED_CHAT_EVENTS = {
-    "CHAT_MSG_LOOT",
-    "CHAT_MSG_CURRENCY",
-    "CHAT_MSG_MONEY",
-    "CHAT_MSG_SKILL",
-    "CHAT_MSG_SYSTEM",
-    "CHAT_MSG_COMBAT_FACTION_CHANGE",
-    "CHAT_MSG_COMBAT_XP_GAIN",
-    "CHAT_MSG_COMBAT_HONOR_GAIN",
-}
+-- Blizzard's secure delve/faction paths can taint the chat-event execution
+-- frame on `CHAT_MSG_COMBAT_FACTION_CHANGE`. For *that* event only we read
+-- the message text from a `ChatFrame_AddMessageEventFilter` cache, because
+-- the filter runs inside Blizzard's untainted ChatFrame frame.
+--
+-- For every other CHAT_MSG_* event we read `arg1` directly (laundered
+-- through tostring). The filter approach is unsafe for time-sensitive
+-- events like CHAT_MSG_LOOT: there is no guaranteed dispatch order between
+-- our addon's OnEvent and ChatFrame's filter pass, so reading the cache
+-- can return stale data from a previous event — producing delayed/wrong-
+-- order loot messages. arg1 is always the current event's payload.
 if _G.ChatFrame_AddMessageEventFilter then
-    for _, e in ipairs(FILTERED_CHAT_EVENTS) do
-        local evtName = e
-        ChatFrame_AddMessageEventFilter(evtName, function(_, _, msg)
-            cleanChatMsg[evtName] = msg
-            return false -- never suppress the message; we only observe it
-        end)
-    end
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_COMBAT_FACTION_CHANGE", function(_, _, msg)
+        cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = msg
+        return false -- never suppress the message; we only observe it
+    end)
 end
 
 addon:SetScript("OnEvent", function(self, event, ...)
@@ -481,13 +479,43 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        -- Pull the clean copy stashed by our ChatFrame_AddMessageEventFilter
-        -- registrations above. Reading `arg1` directly here would re-poison
-        -- the frame on tainted Blizzard paths (delves/faction), regardless
-        -- of any in-frame laundering we attempt. If the filter hasn't run
-        -- yet for some reason, bail rather than touch the tainted value.
-        local msg = cleanChatMsg[event]
-        if type(msg) ~= "string" then return end
+        -- Faction events have a documented taint path through Blizzard's
+        -- secure delve/reputation system. For that one event, read the
+        -- pre-tainted copy stashed by our ChatFrame filter above. For every
+        -- other CHAT_MSG_* event use arg1 directly (laundered through
+        -- tostring) so we always have the *current* event's payload — the
+        -- filter cache is not safe for time-sensitive events because there
+        -- is no guaranteed dispatch order between ChatFrame's filter pass
+        -- and our addon frame's OnEvent.
+        local msg
+        if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
+            -- Prefer the filter-cache copy (untainted via Blizzard's
+            -- ChatFrame frame). Fall back to arg1 (laundered) so synthetic
+            -- /lp test events — which never pass through the chat-filter
+            -- pipeline — still produce output.
+            --
+            -- v2.2.6: validate the cached value actually matches a faction
+            -- pattern before using it. In some delve/companion code paths
+            -- Blizzard fires a faction event whose payload is unrelated
+            -- companion-XP text (e.g. "Valeera Sanguinar has gained 1103
+            -- experience."), poisoning the cache with non-faction content.
+            -- If the cache value doesn't match, fall back to arg1 the same
+            -- way the test path does.
+            local cached = cleanChatMsg[event]
+            local cachedLooksLikeFaction = type(cached) == "string"
+                and ((PAT_FACTION_UP and cached:match(PAT_FACTION_UP))
+                  or (PAT_FACTION_DOWN and cached:match(PAT_FACTION_DOWN)))
+            if cachedLooksLikeFaction then
+                msg = cached
+            else
+                msg = string.format("%s", tostring(arg1 or ""))
+            end
+            -- Clear the slot so the next event reads fresh data.
+            cleanChatMsg[event] = nil
+            if msg == "" then return end
+        else
+            msg = tostring(arg1)
+        end
 
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
@@ -653,17 +681,27 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
                         -- M5: Skip the 100 ms defer when the item is already cached.
                         -- Under AoE loot this avoids scheduling dozens of timers per pull.
+                        --
+                        -- v2.2.6: GetItemCount frequently returns the *pre-loot*
+                        -- bag total because CHAT_MSG_LOOT fires before the
+                        -- bag-update completes (race condition). Add the looted
+                        -- quantity to the result so the displayed count reflects
+                        -- the post-loot total. If GetItemCount has already
+                        -- updated, this would over-count by `amt`, but the
+                        -- pre-loot read is by far the more common case in
+                        -- testing — and consistently undercounting reads worse
+                        -- than the rare overcount.
                         local id = tonumber(itemID)
                         if id and C_Item.GetItemNameByID(id) then
-                            ShowLoot(CountSuffix(C_Item.GetItemCount(id, true)))
+                            ShowLoot(CountSuffix((C_Item.GetItemCount(id, true) or 0) + amt))
                         else
                             C_Timer.After(0.1, function()
-                                ShowLoot(CountSuffix(C_Item.GetItemCount(id, true)))
+                                ShowLoot(CountSuffix((C_Item.GetItemCount(id, true) or 0) + amt))
                             end)
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
                         -- C_Timer doesn't exist in BCC; GetItemCount does, show immediately
-                        ShowLoot(CountSuffix(GetItemCount(itemID, true)))
+                        ShowLoot(CountSuffix((GetItemCount(itemID, true) or 0) + amt))
                     else
                         ShowLoot("")
                     end

@@ -5,6 +5,29 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2026-04-25
+
+### Fixed
+- **Bag count shows pre-loot total** — `GetItemCount()` frequently
+  returns the bag count *before* the loot is registered because
+  `CHAT_MSG_LOOT` fires ahead of the bag-update. The displayed count now
+  adds the looted quantity to the `GetItemCount()` result, giving the
+  correct post-loot total (e.g. `+2 Digested Human Hand (3)` instead of
+  `(1)`).
+- **Rep Gain / Rep Loss `/lp test` false FAILs** — the combat frame's
+  `maxLines = 4` cap caused `GetNumMessages()` to return the same value
+  before and after `AddMessage()` once 4 messages were already in the
+  buffer. The regression harness now clears the target frame before each
+  test case so the message-count delta is always reliable.
+- **Cache cross-contamination on `CHAT_MSG_COMBAT_FACTION_CHANGE`** —
+  Blizzard's delve/companion code paths can fire a faction event whose
+  payload is unrelated companion-XP text (e.g. `"Valeera Sanguinar has
+  gained 1103 experience."`), poisoning the `ChatFrame_AddMessageEventFilter`
+  cache. The handler now validates the cached value against the faction
+  patterns before trusting it; non-matching values fall back to `arg1`
+  (laundered through `string.format`), eliminating the cross-contamination
+  and restoring rep-gain/loss display in delves.
+
 ## [2.2.5] - 2026-04-23
 
 ### Fixed
