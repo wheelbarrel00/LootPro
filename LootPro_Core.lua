@@ -371,6 +371,12 @@ function addon:RunRegressionTest()
         -- cases (Rep Gain, Rep Loss, Delver XP) read before==after even
         -- when AddMessage actually fired — reporting false FAILs.
         tc.target:Clear()
+        -- Faction handler is filter-only (taint workaround). Seed the
+        -- cache directly so synthetic events have something to read —
+        -- the real ChatFrame filter pipeline never runs for /lp test.
+        if tc.event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
+            cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = tc.arg
+        end
         local before = tc.target:GetNumMessages()
         local ok, err = pcall(handler, self, tc.event, tc.arg)
         local after = tc.target:GetNumMessages()
@@ -489,30 +495,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
         -- and our addon frame's OnEvent.
         local msg
         if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            -- Prefer the filter-cache copy (untainted via Blizzard's
-            -- ChatFrame frame). Fall back to arg1 (laundered) so synthetic
-            -- /lp test events — which never pass through the chat-filter
-            -- pipeline — still produce output.
-            --
-            -- v2.2.6: validate the cached value actually matches a faction
-            -- pattern before using it. In some delve/companion code paths
-            -- Blizzard fires a faction event whose payload is unrelated
-            -- companion-XP text (e.g. "Valeera Sanguinar has gained 1103
-            -- experience."), poisoning the cache with non-faction content.
-            -- If the cache value doesn't match, fall back to arg1 the same
-            -- way the test path does.
-            local cached = cleanChatMsg[event]
-            local cachedLooksLikeFaction = type(cached) == "string"
-                and ((PAT_FACTION_UP and cached:match(PAT_FACTION_UP))
-                  or (PAT_FACTION_DOWN and cached:match(PAT_FACTION_DOWN)))
-            if cachedLooksLikeFaction then
-                msg = cached
-            else
-                msg = string.format("%s", tostring(arg1 or ""))
-            end
-            -- Clear the slot so the next event reads fresh data.
+            -- Filter-only path. Reading arg1 here — even through
+            -- tostring/string.format laundering — propagates the taint
+            -- because the entire OnEvent execution frame is tainted by
+            -- Blizzard's secure delve/reputation code. The ChatFrame_AddMessageEventFilter
+            -- callback is the *only* untainted source for this event.
+            -- If the cache is empty, the filter hasn't run — skip rather
+            -- than touch arg1.
+            -- Synthetic /lp test events seed cleanChatMsg directly, see
+            -- RunRegressionTest below.
+            msg = cleanChatMsg[event]
             cleanChatMsg[event] = nil
-            if msg == "" then return end
+            if not msg then return end
         else
             msg = tostring(arg1)
         end
