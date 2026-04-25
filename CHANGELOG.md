@@ -5,6 +5,22 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.7] - 2026-04-25
+
+### Fixed
+- **`CHAT_MSG_COMBAT_FACTION_CHANGE` taint — definitive fix.** The
+  previous fallback to `arg1` (even through `tostring` / `string.format`
+  laundering) was still broken because Blizzard's secure delve/reputation
+  code taints the entire `OnEvent` execution *frame*, not just the value.
+  The fallback has been removed entirely. The handler is now
+  **filter-only**: it reads exclusively from the `ChatFrame_AddMessageEventFilter`
+  cache and returns immediately if that cache is empty — `arg1` is never
+  touched for this event.
+- **`/lp test` Rep Gain / Rep Loss** — the regression harness now seeds
+  `cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"]` directly before
+  firing each synthetic faction event, mirroring what the real
+  ChatFrame filter pipeline would do in-game.
+
 ## [2.2.6] - 2026-04-25
 
 ### Fixed

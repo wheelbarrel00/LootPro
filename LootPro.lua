@@ -2,7 +2,7 @@ local addonName, ns = ...
 
 -- Create the master addon frame and shared namespace
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.2.6"
+ns.addon.VERSION = "2.2.7"
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
