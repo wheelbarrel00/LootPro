@@ -96,6 +96,13 @@ local function CleanMessage(msg, event)
         for _, pat in ipairs(LOOT_PREFIX_PATS) do
             cleaned = cleaned:gsub(pat, "")
         end
+        -- v2.2.8: Recent Retail CHAT_MSG_LOOT messages embed an item icon
+        -- (|T<file>:0|t) directly inside the chat string. We always prepend
+        -- our own icon via GetIconString(), so leaving the embedded one in
+        -- place produces two icons side-by-side. Strip any |T...|t texture
+        -- tags from the cleaned text so GetIconString remains the single
+        -- source of truth for icons.
+        cleaned = cleaned:gsub("|T[^|]-|t%s*", "")
         cleaned = cleaned:gsub("%.%s*$", ""):gsub("%[", ""):gsub("%]", "")
         cleaned = cleaned:gsub("x%d+$", "") 
         return cleaned
@@ -120,6 +127,37 @@ local function IsNoCountItem(cleanName)
         if cleanName:find(pat, 1, true) then return true end
     end
     return false
+end
+
+-- v2.2.8: Vendor purchases (e.g. Restored Coffer Key) fire BOTH
+-- CHAT_MSG_LOOT and CHAT_MSG_CURRENCY for the same item, in the same
+-- frame. Without dedup the player sees the line twice — once in loot
+-- color, once in currency color. Strategy:
+--   * On every CHAT_MSG_LOOT, mark the item name as recently looted.
+--   * Defer CHAT_MSG_CURRENCY display by DEDUP_WINDOW. When the timer
+--     fires, if the same name was marked by a loot event during the
+--     wait, suppress the currency line — the loot version (rarity
+--     color + icon) already showed.
+-- Pure currency events (no matching loot) still display, just with a
+-- short delay. We keep the window tight to minimize the perceived lag.
+local recentLoot = {}
+local DEDUP_WINDOW = 0.25
+local function ExtractItemName(s)
+    if not s then return nil end
+    return s:match("|h%[(.-)%]|h")
+end
+local function MarkLootSeen(name)
+    if name then recentLoot[name] = GetTime() end
+end
+local function IsRecentLoot(name)
+    if not name then return false end
+    local t = recentLoot[name]
+    if not t then return false end
+    if GetTime() - t > DEDUP_WINDOW then
+        recentLoot[name] = nil
+        return false
+    end
+    return true
 end
 
 local function CreateReadoutFrame(name, labelText, defaultY, configKey)
@@ -579,6 +617,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- (not item:<id>), so GetIconString — which only recognizes item
             -- links — cannot produce an icon here. We pull the icon and the
             -- player's running total directly from C_CurrencyInfo.
+            local currencyName = ExtractItemName(msg)
             local currencyID = tonumber(msg:match("currency:(%d+)"))
             -- CURRENCY_GAINED_MULTIPLE ends with "x<N>."; single-gain uses
             -- CURRENCY_GAINED with no suffix → amount = 1.
@@ -606,30 +645,51 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
             if LootProConfig.cleanMode then
                 local cleaned = CleanMessage(msg, event)
-                if IsNoCountItem(cleaned) then
-                    -- No-count items (Companion XP, Boon of Power, etc.):
-                    -- just "<icon> <Name>". No +N prefix, no (count) suffix.
-                    self.lootFrame.display:AddMessage(
-                        iconStr .. cleaned,
-                        c.currency.r, c.currency.g, c.currency.b)
+                local function PostCurrency()
+                    -- v2.2.8: suppress if a CHAT_MSG_LOOT for the same name
+                    -- arrived during the dedup window (vendor-purchase dup).
+                    if IsRecentLoot(currencyName) then return end
+                    if IsNoCountItem(cleaned) then
+                        -- No-count items (Companion XP, Boon of Power, etc.):
+                        -- just "<icon> <Name>". No +N prefix, no (count) suffix.
+                        self.lootFrame.display:AddMessage(
+                            iconStr .. cleaned,
+                            c.currency.r, c.currency.g, c.currency.b)
+                    else
+                        self.lootFrame.display:AddMessage(
+                            "+" .. amt .. " " .. iconStr .. cleaned .. CurrencyCountSuffix(total),
+                            c.currency.r, c.currency.g, c.currency.b)
+                    end
+                end
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(DEDUP_WINDOW, PostCurrency)
                 else
-                    self.lootFrame.display:AddMessage(
-                        "+" .. amt .. " " .. iconStr .. cleaned .. CurrencyCountSuffix(total),
-                        c.currency.r, c.currency.g, c.currency.b)
+                    PostCurrency()
                 end
             else
-                if IsNoCountItem(msg) then
-                    self.lootFrame.display:AddMessage(
-                        iconStr .. CleanMessage(msg, event),
-                        c.currency.r, c.currency.g, c.currency.b)
+                local function PostCurrency()
+                    if IsRecentLoot(currencyName) then return end
+                    if IsNoCountItem(msg) then
+                        self.lootFrame.display:AddMessage(
+                            iconStr .. CleanMessage(msg, event),
+                            c.currency.r, c.currency.g, c.currency.b)
+                    else
+                        self.lootFrame.display:AddMessage(
+                            iconStr .. msg .. CurrencyCountSuffix(total),
+                            c.currency.r, c.currency.g, c.currency.b)
+                    end
+                end
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(DEDUP_WINDOW, PostCurrency)
                 else
-                    self.lootFrame.display:AddMessage(
-                        iconStr .. msg .. CurrencyCountSuffix(total),
-                        c.currency.r, c.currency.g, c.currency.b)
+                    PostCurrency()
                 end
             end
 
         elseif event == "CHAT_MSG_LOOT" and n.loot then
+            -- v2.2.8: register name for the loot/currency dedup window so
+            -- a paired CHAT_MSG_CURRENCY (vendor purchase) gets suppressed.
+            MarkLootSeen(ExtractItemName(msg))
             local itemID = msg:match("item:(%d+)")
             -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
             -- minQuality as the fallback so uncached items always pass the filter.
