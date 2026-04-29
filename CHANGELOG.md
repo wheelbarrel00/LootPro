@@ -5,6 +5,32 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-04-28
+
+### New Features
+- **Settings UI restyled** to match the Everything Delves visual style.
+  Flat near-black background (`#0D0D0D`) with a thin 1px red border
+  (`#6D0501`), red 25 pt `OUTLINE` title, custom flat "X" close button,
+  and a flat tab row with red active / dark-grey inactive states plus a
+  thin red accent divider. All action buttons (Lock/Unlock, Test Mode,
+  Sync, Reset, Open Settings) are now flat red with gold (`#EBB706`)
+  text and a lighter-red hover state.
+- **Escape closes the settings window** — `LootProGUI` is registered
+  with `UISpecialFrames`.
+- **Version label** moved to the top-right corner, immediately left of
+  the close button (ED parity).
+
+### Improvements
+- **Tabs auto-size** to fit their labels, allowing the longer
+  "Notifications" name in place of the previous "Notifs".
+- **Notifications tab rebalanced**: 7 left / 8 right + the centered
+  Minimum Loot Quality cycler. "Display Experience" lives on the left
+  under the Clean Mode description; "Show Combat Follower XP" lives on
+  the right under "Display Combat END". Both columns shifted right so
+  the block is centered horizontally in the page.
+- **Welcome popup** now uses the same flat shell, custom close button,
+  red title, and styled "Open Settings" button.
+
 ## [2.2.8] - 2026-04-26
 
 ### Fixed
