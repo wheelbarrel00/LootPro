@@ -4,33 +4,23 @@ local U = ns.U
 
 ns.UI = {}
 
--- Creates the two main addon frames (settings window + welcome popup) in a way
--- that works on both retail (BasicFrameTemplateWithInset exists) and BCC (it
--- doesn't — title bar and close button are set up manually instead).
--- Note: BackdropTemplate IS needed in BCC (the 2021 client shares the
--- Shadowlands engine change that removed SetBackdrop from bare Frame objects).
+-- v2.2.9: Restyled to match the Everything Delves visual style — flat
+-- near-black background with a thin red border, custom title and close
+-- button, flat ED-style tab row, and red/gold buttons. All widget logic
+-- and saved variables are unchanged; this is shell-only chrome.
+--
+-- BackdropTemplate is required on both retail and BCC (the 2021 client
+-- shares the Shadowlands-era SetBackdrop change), so we use the same
+-- flat backdrop on every supported client — no template fork.
 local function CreateVersionedMainFrame(name, parent)
-    local f
-    if addon.IS_RETAIL then
-        f = CreateFrame("Frame", name, parent, "BasicFrameTemplateWithInset, BackdropTemplate")
-    else
-        f = CreateFrame("Frame", name, parent, "BackdropTemplate")
-        f:SetBackdrop({
-            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            tile = true, tileSize = 32, edgeSize = 32,
-            insets = {left=11, right=12, top=12, bottom=11},
-        })
-        -- Synthetic TitleBg so the existing title font-string anchors still work
-        f.TitleBg = f:CreateTexture(nil, "BACKGROUND")
-        f.TitleBg:SetPoint("TOPLEFT", 4, -4)
-        f.TitleBg:SetPoint("TOPRIGHT", -4, -24)
-        f.TitleBg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-        -- Standard close button
-        f.CloseButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-        f.CloseButton:SetPoint("TOPRIGHT", -3, -3)
-        f.CloseButton:SetScript("OnClick", function() f:Hide() end)
-    end
+    local f = CreateFrame("Frame", name, parent, "BackdropTemplate")
+    f:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    f:SetBackdropColor(0.05, 0.05, 0.05, 0.95)        -- #0D0D0D
+    f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0) -- #6D0501
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -39,15 +29,90 @@ local function CreateVersionedMainFrame(name, parent)
     return f
 end
 
+-- ED-style flat close button (top-right "X").
+local function CreateCloseButton(parent)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetSize(20, 20)
+    b:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -6, -6)
+    b:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    b:SetBackdropColor(0.30, 0.00, 0.00, 0.80)
+    b:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
+
+    local lbl = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lbl:SetPoint("CENTER", 0, 1)
+    lbl:SetFont(lbl:GetFont(), 12, "OUTLINE")
+    lbl:SetText("|cFFFFFFFFX|r")
+
+    b:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.55, 0.05, 0.05, 1.0)
+    end)
+    b:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.30, 0.00, 0.00, 0.80)
+    end)
+    b:SetScript("OnClick", function() parent:Hide() end)
+    return b
+end
+
+-- ED-style flat red/gold action button. Returns a Button with `.label`
+-- font string, plus injected `SetText` / `GetFontString` shims so call
+-- sites that used GameMenuButtonTemplate keep working unchanged.
+local function CreateStyledButton(parent, width, height, label)
+    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    btn:SetSize(width, height)
+    btn:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    btn:SetBackdropColor(0.427, 0.020, 0.004, 1.0)        -- #6D0501
+    btn:SetBackdropBorderColor(0.10, 0.00, 0.00, 1.0)
+
+    local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetPoint("CENTER")
+    text:SetFont(text:GetFont(), 11)
+    text:SetText(label or "")
+    text:SetTextColor(0.922, 0.718, 0.024, 1.0)            -- #EBB706
+    btn.label = text
+
+    btn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.541, 0.024, 0.004, 1.0)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
+    end)
+
+    btn.SetText = function(self, t) self.label:SetText(t) end
+    btn.GetFontString = function(self) return self.label end
+    return btn
+end
+
 function ns.UI:Initialize()
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
     gui:SetSize(520, 680)
     gui:SetPoint("CENTER")
     gui:Hide()
 
-    gui.title = gui:CreateFontString(nil, "OVERLAY", "GameFontHighlight") 
-    gui.title:SetPoint("CENTER", gui.TitleBg, "CENTER", 0, 0) 
-    gui.title:SetText("Loot Pro ("..addon.VERSION..")")
+    -- ED parity: Escape closes the settings window.
+    tinsert(UISpecialFrames, "LootProGUI")
+
+    CreateCloseButton(gui)
+
+    gui.title = gui:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    gui.title:SetPoint("TOP", gui, "TOP", 0, -18)
+    gui.title:SetFont(gui.title:GetFont(), 25, "OUTLINE")
+    gui.title:SetText("|cFFFF2222Loot Pro|r")
+
+    -- Version label, top-right next to the close button (ED parity).
+    -- closeBtn is anchored TOPRIGHT (-6,-6) with 20px width, so we place
+    -- the version string just to its left.
+    local verLabel = gui:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    verLabel:SetPoint("TOPRIGHT", gui, "TOPRIGHT", -30, -10)
+    verLabel:SetFont(verLabel:GetFont(), 11)
+    verLabel:SetText("|cFF999999v" .. addon.VERSION .. "|r")
 
     local pages = { 
         layout = CreateFrame("Frame", nil, gui), 
@@ -58,7 +123,7 @@ function ns.UI:Initialize()
 
     for _, p in pairs(pages) do 
         p:SetSize(500, 550) 
-        p:SetPoint("TOP", 0, -110) 
+        p:SetPoint("TOP", 0, -140) 
         p:Hide() 
     end
 
@@ -69,50 +134,104 @@ function ns.UI:Initialize()
     end
 
     local tabs = {}
+    local currentActiveTab = nil
 
     local function SetActiveTab(activeName)
+        currentActiveTab = activeName
         for tName, btn in pairs(tabs) do
-            local fs = btn:GetFontString()
             if tName == activeName then
-                fs:SetTextColor(1, 0.82, 0)
+                btn:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
+                btn:SetBackdropBorderColor(0.55, 0.02, 0.00, 1.0)
+                btn.label:SetText("|cFFFFFFFF" .. btn._labelText .. "|r")
             else
-                fs:SetTextColor(0.5, 0.5, 0.5)
+                btn:SetBackdropColor(0.15, 0.15, 0.15, 1.0)
+                btn:SetBackdropBorderColor(0.25, 0.25, 0.25, 0.50)
+                btn.label:SetText("|cFFE0E0E0" .. btn._labelText .. "|r")
             end
         end
         ShowPage(activeName)
     end
 
-    local function CreateTab(name, label, x)
-        local b = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
-        b:SetSize(100, 25)
-        b:SetPoint("TOPLEFT", x, -30)
-        b:SetText(label)
-        local fontString = b:GetFontString()
-        if fontString then fontString:SetFont("Fonts\\FRIZQT__.TTF", 10, "") end
-        b:SetScript("OnClick", function() SetActiveTab(name) end)
-        tabs[name] = b
-        return b
+    -- Hidden font string for measuring tab labels so each tab auto-sizes
+    -- to fit its text with consistent padding (matches ED's tab row).
+    local measure = gui:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    measure:Hide()
+
+    local TAB_HEIGHT  = 28
+    local TAB_Y       = -54
+    local TAB_PADDING = 4
+    local tabIndex    = 0
+    local lastTab     = nil
+
+    local function CreateTab(name, label)
+        tabIndex = tabIndex + 1
+        local tab = CreateFrame("Button", nil, gui, "BackdropTemplate")
+        tab:SetHeight(TAB_HEIGHT)
+
+        measure:SetText(label)
+        tab:SetWidth(measure:GetStringWidth() + 24)
+
+        if tabIndex == 1 then
+            tab:SetPoint("TOPLEFT", gui, "TOPLEFT", 10, TAB_Y)
+        else
+            tab:SetPoint("LEFT", lastTab, "RIGHT", TAB_PADDING, 0)
+        end
+
+        tab:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+        })
+        tab:SetBackdropColor(0.15, 0.15, 0.15, 1.0)
+        tab:SetBackdropBorderColor(0.25, 0.25, 0.25, 0.50)
+
+        local tabLabel = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        tabLabel:SetPoint("CENTER")
+        tabLabel:SetFont(tabLabel:GetFont(), 11)
+        tabLabel:SetText("|cFFE0E0E0" .. label .. "|r")
+        tab.label = tabLabel
+        tab._labelText = label
+        tab._tabIndex = tabIndex
+
+        tab:SetScript("OnClick", function() SetActiveTab(name) end)
+        tab:SetScript("OnEnter", function(self)
+            if self ~= tabs[currentActiveTab] then
+                self:SetBackdropColor(0.25, 0.00, 0.00, 0.80)
+            end
+        end)
+        tab:SetScript("OnLeave", function(self)
+            if self ~= tabs[currentActiveTab] then
+                self:SetBackdropColor(0.15, 0.15, 0.15, 1.0)
+            end
+        end)
+
+        tabs[name] = tab
+        lastTab = tab
+        return tab
     end
 
-    CreateTab("layout", "Layout", 25)
-    CreateTab("colors", "Colors", 145)
-    CreateTab("notifications", "Notifs", 265)
-    CreateTab("customization", "Custom", 385)
+    CreateTab("layout", "Layout")
+    CreateTab("colors", "Colors")
+    CreateTab("notifications", "Notifications")
+    CreateTab("customization", "Custom")
 
-    local lockBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
-    lockBtn:SetPoint("TOPLEFT", 25, -65) 
-    lockBtn:SetSize(140, 30)
-    lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows")
+    -- Thin red accent divider below the tab row.
+    local divider = gui:CreateTexture(nil, "ARTWORK")
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT",  gui, "TOPLEFT",   6, TAB_Y - TAB_HEIGHT - 4)
+    divider:SetPoint("TOPRIGHT", gui, "TOPRIGHT", -6, TAB_Y - TAB_HEIGHT - 4)
+    divider:SetColorTexture(0.427, 0.020, 0.004, 0.80)
+
+    local lockBtn = CreateStyledButton(gui, 140, 26, LootProConfig.locked and "Unlock Windows" or "Lock Windows")
+    lockBtn:SetPoint("TOPLEFT", 25, -100)
     lockBtn:SetScript("OnClick", function() 
         LootProConfig.locked = not LootProConfig.locked 
         addon:UpdateAllVisuals() 
         lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows") 
     end)
 
-    local testBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
-    testBtn:SetPoint("TOPRIGHT", -25, -65) 
-    testBtn:SetSize(140, 30) 
-    testBtn:SetText("Start Test Mode")
+    local testBtn = CreateStyledButton(gui, 140, 26, "Start Test Mode")
+    testBtn:SetPoint("TOPRIGHT", -25, -100)
     testBtn:SetScript("OnClick", function() 
         addon.isTesting = not addon.isTesting 
         if addon.isTesting then 
@@ -167,8 +286,8 @@ function ns.UI:Initialize()
     local lMaxLines = U.CreateSlider("LPRO_LML", "Max Loot Lines", pages.layout, 1, 20, 1, "maxLines", "loot")
     lMaxLines.label:SetPoint("TOPRIGHT", lHeight, "BOTTOMRIGHT", 0, -20); lMaxLines:SetPoint("TOPRIGHT", lMaxLines.label, "BOTTOMRIGHT", 0, -10); lMaxLines:SetValue(LootProConfig.loot.maxLines)
 
-    local syncLayout = CreateFrame("Button", nil, pages.layout, "GameMenuButtonTemplate") 
-    syncLayout:SetPoint("BOTTOM", 0, 80); syncLayout:SetSize(220, 25); syncLayout:SetText("Sync Combat Layout to Loot")
+    local syncLayout = CreateStyledButton(pages.layout, 220, 25, "Sync Combat Layout to Loot")
+    syncLayout:SetPoint("BOTTOM", 0, 80)
     syncLayout:SetScript("OnClick", function() 
         LootProConfig.loot.size = LootProConfig.combat.size
         LootProConfig.loot.fade = LootProConfig.combat.fade
@@ -202,8 +321,8 @@ function ns.UI:Initialize()
     AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: Silvermoon Court" end)
     AddColor("repLoss", "Rep Loss", function() return "- 25 Rep: Bloodsail Buccaneers" end)
 
-    local resetBtn = CreateFrame("Button", nil, gui, "GameMenuButtonTemplate")
-    resetBtn:SetSize(160, 28); resetBtn:SetPoint("BOTTOM", gui, "BOTTOM", 0, 35); resetBtn:SetText("Reset to Defaults")
+    local resetBtn = CreateStyledButton(gui, 160, 28, "Reset to Defaults")
+    resetBtn:SetPoint("BOTTOM", gui, "BOTTOM", 0, 35)
     resetBtn:SetScript("OnClick", function() addon:ResetDefaults() end)
     local stubC = gui:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -3); stubC:SetText("Clears all colors, layout, and toggles.")
 
@@ -219,7 +338,7 @@ function ns.UI:Initialize()
     end
 
     local moneyT = CreateFrame("CheckButton", "LPRO_TGL_money", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    moneyT:SetPoint("TOPLEFT", 15, 0); _G[moneyT:GetName().."Text"]:SetText("Display Money")
+    moneyT:SetPoint("TOPLEFT", 40, 0); _G[moneyT:GetName().."Text"]:SetText("Display Money")
     local cM = LootProConfig.colors["money"] or {r=1, g=1, b=1}; _G[moneyT:GetName().."Text"]:SetTextColor(cM.r, cM.g, cM.b)
     moneyT:SetChecked(LootProConfig.notifications["money"])
     moneyT:SetScript("OnClick", function(self) LootProConfig.notifications["money"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
@@ -244,18 +363,31 @@ function ns.UI:Initialize()
     cleanDesc:SetPoint("TOPLEFT", cleanCheck, "BOTTOMLEFT", 25, 0); cleanDesc:SetTextColor(0.6, 0.6, 0.6); cleanDesc:SetText("(Strips text like 'You receive loot:')")
 
     local cStrT = CreateFrame("CheckButton", "LPRO_TGL_combatEnter", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    cStrT:SetPoint("TOPLEFT", 260, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
+    cStrT:SetPoint("TOPLEFT", 285, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
     local cCE = LootProConfig.colors["combatEnter"] or {r=1, g=1, b=1}; _G[cStrT:GetName().."Text"]:SetTextColor(cCE.r, cCE.g, cCE.b)
     cStrT:SetChecked(LootProConfig.notifications["combatEnter"])
     cStrT:SetScript("OnClick", function(self) LootProConfig.notifications["combatEnter"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
     toggles["combatEnter"] = cStrT
 
     local cEndT = AddToggle("combatLeave", "Display Combat END", "combatLeave", cStrT)
-    local xpT = AddToggle("xp", "Display Experience", "xp", cEndT)
-    
+
+    -- Round 3: Show Combat Follower XP sits on the RIGHT (under Combat END);
+    -- Display Experience sits on the LEFT (under the Clean Mode description).
+    -- Both swapped from the Round 2 layout so the column flow reads better.
     local fxpCheck = CreateFrame("CheckButton", "LPRO_FollowerToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    fxpCheck:SetPoint("TOPLEFT", xpT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
+    fxpCheck:SetPoint("TOPLEFT", cEndT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
     fxpCheck:SetScript("OnClick", function(self) LootProConfig.showFollowerXP = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+
+    -- Display Experience: inline (rather than AddToggle) so we can compensate
+    -- for cleanDesc's +25 x-offset and keep the checkbox flush with the
+    -- left column.
+    local xpT = CreateFrame("CheckButton", "LPRO_TGL_xp", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    xpT:SetPoint("TOPLEFT", cleanDesc, "BOTTOMLEFT", -25, -10)
+    local xpFs = _G[xpT:GetName().."Text"]; xpFs:SetText("Display Experience")
+    local cXP = LootProConfig.colors["xp"] or {r=1,g=1,b=1}; xpFs:SetTextColor(cXP.r, cXP.g, cXP.b)
+    xpT:SetChecked(LootProConfig.notifications["xp"])
+    xpT:SetScript("OnClick", function(self) LootProConfig.notifications["xp"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    toggles["xp"] = xpT
 
     local delvT = AddToggle("delver", "Display Delve Companion XP", "delver", fxpCheck) 
     local skillT = AddToggle("skill", "Display Skill Gains", "skill", delvT)
@@ -274,8 +406,12 @@ function ns.UI:Initialize()
         {val=5, lbl="Legendary+"},
     }
     local mQual = U.CreateGenericCycler("LPRO_MQ", "Minimum Loot Quality", pages.notifications, qualityList, "minQuality", "root")
-    mQual.label:SetPoint("TOPLEFT", repLT, "BOTTOMLEFT", 15, -12)
-    mQual:SetPoint("TOPLEFT", mQual.label, "BOTTOMLEFT", 0, -5)
+    -- Round 3: center under both columns instead of trailing the right column.
+    mQual.label:ClearAllPoints()
+    mQual.label:SetPoint("TOP", pages.notifications, "TOP", 0, -285)
+    mQual.label:SetJustifyH("CENTER")
+    mQual:ClearAllPoints()
+    mQual:SetPoint("TOP", mQual.label, "BOTTOM", 0, -5)
     mQual:Refresh()
 
     local cFont = U.CreateFontCycler("LPRO_CF", "Combat Font", pages.customization, "combat")
@@ -305,8 +441,8 @@ function ns.UI:Initialize()
     local lOut = U.CreateGenericCycler("LPRO_LO", "Loot Outline", pages.customization, outList, "outline", "loot") 
     lOut.label:SetPoint("TOPRIGHT", lFont, "BOTTOMRIGHT", -40, -15); lOut:SetPoint("TOPRIGHT", lOut.label, "BOTTOMRIGHT", 0, -5); pages.customization.lO = lOut
 
-    local syncCustom = CreateFrame("Button", nil, pages.customization, "GameMenuButtonTemplate") 
-    syncCustom:SetPoint("BOTTOM", 0, 80); syncCustom:SetSize(220, 25); syncCustom:SetText("Sync Combat Fonts to Loot")
+    local syncCustom = CreateStyledButton(pages.customization, 220, 25, "Sync Combat Fonts to Loot")
+    syncCustom:SetPoint("BOTTOM", 0, 80)
     syncCustom:SetScript("OnClick", function() 
         LootProConfig.loot.font = LootProConfig.combat.font; LootProConfig.loot.outline = LootProConfig.combat.outline
         pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals() 
@@ -320,21 +456,22 @@ function ns.UI:Initialize()
     welcome:SetPoint("CENTER")
     welcome:SetFrameStrata("HIGH")
     welcome:Hide()
-    
-    welcome.title = welcome:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    welcome.title:SetPoint("CENTER", welcome.TitleBg, "CENTER", 0, 0)
-    welcome.title:SetText("Loot Pro")
-    
+
+    CreateCloseButton(welcome)
+
+    welcome.title = welcome:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    welcome.title:SetPoint("TOP", welcome, "TOP", 0, -18)
+    welcome.title:SetFont(welcome.title:GetFont(), 25, "OUTLINE")
+    welcome.title:SetText("|cFFFF2222Loot Pro|r")
+
     local msg = welcome:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    msg:SetPoint("TOP", 0, -40)
+    msg:SetPoint("TOP", 0, -55)
     msg:SetWidth(280)
     msg:SetJustifyH("CENTER")
     msg:SetText("Configure settings for first time use of Loot Pro")
-    
-    local openBtn = CreateFrame("Button", nil, welcome, "GameMenuButtonTemplate")
-    openBtn:SetSize(140, 30)
-    openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -5)
-    openBtn:SetText("Open Settings")
+
+    local openBtn = CreateStyledButton(welcome, 140, 28, "Open Settings")
+    openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -10)
     openBtn:SetScript("OnClick", function()
         -- M6: A user clicking "Open Settings" is clearly onboarding; never nag
         -- them with this popup again.
