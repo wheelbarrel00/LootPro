@@ -140,8 +140,19 @@ end
 --     color + icon) already showed.
 -- Pure currency events (no matching loot) still display, just with a
 -- short delay. We keep the window tight to minimize the perceived lag.
+--
+-- v2.3.1: Some delve / system events fire CHAT_MSG_CURRENCY *twice*
+-- for the same payload (e.g. "Grand Sanctified Spoils Will Manifest
+-- Upon Delve Completion"). The original dedup only handled loot↔currency
+-- pairs, so two back-to-back currency events for the same name slipped
+-- through. We now also track recently-displayed currency names and
+-- suppress any second currency line within CURRENCY_DEDUP_WINDOW.
+-- The window is intentionally tight (0.5 s) so genuine repeated
+-- currency gains separated by user actions still display normally.
 local recentLoot = {}
+local recentCurrency = {}
 local DEDUP_WINDOW = 0.25
+local CURRENCY_DEDUP_WINDOW = 0.5
 local function ExtractItemName(s)
     if not s then return nil end
     return s:match("|h%[(.-)%]|h")
@@ -155,6 +166,19 @@ local function IsRecentLoot(name)
     if not t then return false end
     if GetTime() - t > DEDUP_WINDOW then
         recentLoot[name] = nil
+        return false
+    end
+    return true
+end
+local function MarkCurrencyShown(name)
+    if name then recentCurrency[name] = GetTime() end
+end
+local function IsRecentCurrency(name)
+    if not name then return false end
+    local t = recentCurrency[name]
+    if not t then return false end
+    if GetTime() - t > CURRENCY_DEDUP_WINDOW then
+        recentCurrency[name] = nil
         return false
     end
     return true
@@ -642,6 +666,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if nn <= 0 then return "" end
                 return " (" .. nn .. ")"
             end
+
+            -- v2.3.1: currency-vs-currency dedup. Mark/check synchronously
+            -- (before the timer schedules) so a second event arriving in
+            -- the same frame is dropped immediately. If we deferred the
+            -- check until the timer body, both closures would see an
+            -- empty cache and both would display.
+            -- Key falls back to the raw msg when there is no parseable
+            -- |h[Name]|h hyperlink (e.g. delve-completion system payloads
+            -- delivered via CHAT_MSG_CURRENCY).
+            local dedupKey = currencyName or msg
+            if IsRecentCurrency(dedupKey) then return end
+            MarkCurrencyShown(dedupKey)
 
             if LootProConfig.cleanMode then
                 local cleaned = CleanMessage(msg, event)

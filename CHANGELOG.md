@@ -5,6 +5,20 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-04-30
+
+### Fixed
+- **Currency-vs-currency double display** — some delve / system payloads
+  (e.g. *"Grand Sanctified Spoils Will Manifest Upon Delve Completion"*)
+  fire `CHAT_MSG_CURRENCY` twice for the same message in the same frame,
+  producing two stacked cyan lines. The 2.2.8 dedup only handled
+  loot↔currency pairs, so currency↔currency duplicates slipped through.
+  Added a `recentCurrency` cache (0.5 s window) checked synchronously at
+  the start of the `CHAT_MSG_CURRENCY` branch — before the display timer
+  is scheduled — so the second event is dropped immediately. Falls back
+  to the raw message text as the dedup key when no `|h[Name]|h`
+  hyperlink is present (system-style payloads).
+
 ## [2.3.0] - 2026-04-28
 
 ### New Features
