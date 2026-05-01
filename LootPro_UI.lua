@@ -362,6 +362,17 @@ function ns.UI:Initialize()
     local cleanDesc = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cleanDesc:SetPoint("TOPLEFT", cleanCheck, "BOTTOMLEFT", 25, 0); cleanDesc:SetTextColor(0.6, 0.6, 0.6); cleanDesc:SetText("(Strips text like 'You receive loot:')")
 
+    -- Display Party Loot: suppresses other group members' loot lines while
+    -- keeping your own. Anchored so it sits between cleanDesc and xpT in the
+    -- left column.
+    local partyT = CreateFrame("CheckButton", "LPRO_TGL_partyLoot", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+    partyT:SetPoint("TOPLEFT", cleanDesc, "BOTTOMLEFT", -25, -10)
+    local partyFs = _G[partyT:GetName().."Text"]; partyFs:SetText("Display Party Loot")
+    local cLoot = LootProConfig.colors["loot"] or {r=1,g=1,b=1}; partyFs:SetTextColor(cLoot.r, cLoot.g, cLoot.b)
+    partyT:SetChecked(LootProConfig.notifications["partyLoot"])
+    partyT:SetScript("OnClick", function(self) LootProConfig.notifications["partyLoot"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    toggles["partyLoot"] = partyT
+
     local cStrT = CreateFrame("CheckButton", "LPRO_TGL_combatEnter", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     cStrT:SetPoint("TOPLEFT", 285, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
     local cCE = LootProConfig.colors["combatEnter"] or {r=1, g=1, b=1}; _G[cStrT:GetName().."Text"]:SetTextColor(cCE.r, cCE.g, cCE.b)
@@ -378,11 +389,10 @@ function ns.UI:Initialize()
     fxpCheck:SetPoint("TOPLEFT", cEndT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
     fxpCheck:SetScript("OnClick", function(self) LootProConfig.showFollowerXP = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
 
-    -- Display Experience: inline (rather than AddToggle) so we can compensate
-    -- for cleanDesc's +25 x-offset and keep the checkbox flush with the
-    -- left column.
+    -- Display Experience: inline (rather than AddToggle) so we can chain
+    -- directly off the Party Loot checkbox in the left column.
     local xpT = CreateFrame("CheckButton", "LPRO_TGL_xp", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    xpT:SetPoint("TOPLEFT", cleanDesc, "BOTTOMLEFT", -25, -10)
+    xpT:SetPoint("TOPLEFT", partyT, "BOTTOMLEFT", 0, -5)
     local xpFs = _G[xpT:GetName().."Text"]; xpFs:SetText("Display Experience")
     local cXP = LootProConfig.colors["xp"] or {r=1,g=1,b=1}; xpFs:SetTextColor(cXP.r, cXP.g, cXP.b)
     xpT:SetChecked(LootProConfig.notifications["xp"])

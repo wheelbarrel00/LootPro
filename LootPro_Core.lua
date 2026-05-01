@@ -54,6 +54,18 @@ LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive item: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive currency: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
 
+-- Party loot detection: any CHAT_MSG_LOOT message that does NOT start with a
+-- known self-loot prefix is treated as a group/party member's loot. Used by
+-- the "Display Party Loot" notification toggle to suppress other players'
+-- loot lines without affecting your own.
+local function IsSelfLoot(msg)
+    if not msg or type(msg) ~= "string" then return false end
+    for _, pat in ipairs(LOOT_PREFIX_PATS) do
+        if msg:find(pat) then return true end
+    end
+    return false
+end
+
 local function GetIconString(msg)
     if not msg or type(msg) ~= "string" then return "" end
 
@@ -232,8 +244,7 @@ local LDBIcon = LibStub("LibDBIcon-1.0")
 addon.lootProLDB = LDB:NewDataObject("LootPro", {
     type = "launcher",
     text = "Loot Pro",
-    icon = "Interface\\Icons\\INV_Misc_Bag_08",
-    iconR = 0.6, iconG = 0.2, iconB = 1.0,
+    icon = "Interface\\AddOns\\LootPro\\Media\\LootProIcon",
     OnClick = function(_, button)
         if ns.UI and LootProGUI then
             if LootProGUI:IsShown() then LootProGUI:Hide() else LootProGUI:Show() end
@@ -723,6 +734,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif event == "CHAT_MSG_LOOT" and n.loot then
+            -- Party-loot filter: when partyLoot is disabled, drop any
+            -- CHAT_MSG_LOOT line that isn't a self-loot prefix (i.e. another
+            -- group member's loot). Self-loot still flows through.
+            if n.partyLoot == false and not IsSelfLoot(msg) then return end
             -- v2.2.8: register name for the loot/currency dedup window so
             -- a paired CHAT_MSG_CURRENCY (vendor purchase) gets suppressed.
             MarkLootSeen(ExtractItemName(msg))
