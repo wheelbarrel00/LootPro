@@ -3,15 +3,39 @@ local addon = ns.addon
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 
+-- L-4: Pre-localize hot Blizzard APIs and Lua built-ins used in per-event
+-- paths (CHAT_MSG_LOOT/CURRENCY/MONEY, CleanMessage, UpdateAllVisuals).
+-- Underscore-prefixed names cannot collide with any exposed global.
+-- Defensive `and` guards handle Classic/BCC where some C_* namespaces
+-- don't exist; BCC has no C_Item, so we fall back to the legacy globals
+-- (GetItemCount, GetItemInfo) where applicable.
+local _tonumber, _tostring = tonumber, tostring
+local _match, _format, _gsub, _find = string.match, string.format, string.gsub, string.find
+local _select = select
+local _GetTime = GetTime
+local _After = C_Timer and C_Timer.After
+local _NewTicker = C_Timer and C_Timer.NewTicker
+local _GetItemCount = (C_Item and C_Item.GetItemCount) or GetItemCount
+local _GetItemInfo = GetItemInfo
+local _GetItemInfoInstant = GetItemInfoInstant
+local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
+local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
+local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+
 -- M4: Report font load failures once per bad path so users aren't left with a
 -- silently-broken readout. Warnings are rate-limited to one print per path.
+-- L-2: Hard-cap the cache at 50 entries so a pathological font list can't
+-- grow it unboundedly. The keyed (hash) shape requires a separate counter.
 addon._badFonts = addon._badFonts or {}
+local _badFontCount = 0
+local _BAD_FONT_LIMIT = 50
 local function SafeSetFont(region, path, size, flags)
     local ok = pcall(function() region:SetFont(path, size, flags) end)
     if ok then return true end
-    if not addon._badFonts[path or "?"] then
+    if not addon._badFonts[path or "?"] and _badFontCount < _BAD_FONT_LIMIT then
         addon._badFonts[path or "?"] = true
-        print("|cFFFF6060[LootPro]|r Failed to load font '"..tostring(path).."', falling back to default.")
+        _badFontCount = _badFontCount + 1
+        print("|cFFFF6060[LootPro]|r Failed to load font '".._tostring(path).."', falling back to default.")
     end
     pcall(function() region:SetFont(DEFAULT_FONT, size, flags) end)
     return false
@@ -54,6 +78,21 @@ LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive item: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive currency: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
 
+-- M-2: Dedup so enUS clients don't run the locale-derived pattern AND
+-- the identical English fallback on every CleanMessage call.
+do
+    local seen = {}
+    local deduped = {}
+    for _, pat in ipairs(LOOT_PREFIX_PATS) do
+        if not seen[pat] then
+            seen[pat] = true
+            deduped[#deduped + 1] = pat
+        end
+    end
+    LOOT_PREFIX_PATS = deduped
+    seen = nil
+end
+
 -- Party loot detection: any CHAT_MSG_LOOT message that does NOT start with a
 -- known self-loot prefix is treated as a group/party member's loot. Used by
 -- the "Display Party Loot" notification toggle to suppress other players'
@@ -61,7 +100,7 @@ LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
 local function IsSelfLoot(msg)
     if not msg or type(msg) ~= "string" then return false end
     for _, pat in ipairs(LOOT_PREFIX_PATS) do
-        if msg:find(pat) then return true end
+        if _find(msg, pat) then return true end
     end
     return false
 end
@@ -69,14 +108,14 @@ end
 local function GetIconString(msg)
     if not msg or type(msg) ~= "string" then return "" end
 
-    local itemID = msg:match("item:(%d+)")
+    local itemID = _match(msg, "item:(%d+)")
     if itemID and LootProConfig.showLootIcons then
         local icon
-        if addon.IS_RETAIL then
-            local _, _, _, _, _icon = GetItemInfoInstant(itemID)
+        if addon.IS_RETAIL and _GetItemInfoInstant then
+            local _, _, _, _, _icon = _GetItemInfoInstant(itemID)
             icon = _icon
         else
-            icon = select(10, GetItemInfo(itemID))  -- returns nil if not yet cached
+            icon = _select(10, _GetItemInfo(itemID))  -- returns nil if not yet cached
         end
         if icon then
             return "|T" .. icon .. ":0|t "
@@ -90,23 +129,28 @@ local function CleanMessage(msg, event)
     
     if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
         if PAT_FACTION_UP then
-            local fac = msg:match(PAT_FACTION_UP)
+            local fac = _match(msg, PAT_FACTION_UP)
             if fac then return fac end
         end
         if PAT_FACTION_DOWN then
-            local fac = msg:match(PAT_FACTION_DOWN)
+            local fac = _match(msg, PAT_FACTION_DOWN)
             if fac then return fac end
         end
         
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         -- Locale-agnostic: grab the first number sequence from the message.
-        local amount = msg:match("([%d%p%s]*%d)")
+        local amount = _match(msg, "([%d%p%s]*%d)")
         if amount then return "+ " .. amount .. " XP" end
         
-    elseif event:find("CHAT_MSG_LOOT") or event:find("CHAT_MSG_CURRENCY") then
+    elseif _find(event, "CHAT_MSG_LOOT") or _find(event, "CHAT_MSG_CURRENCY") then
+        -- M-1: Break on first prefix match (gsub's count return tells us
+        -- whether the pattern hit), and merge the bracket strips into a
+        -- single character-class pass. 4 gsub passes total instead of 5.
         local cleaned = msg
+        local n
         for _, pat in ipairs(LOOT_PREFIX_PATS) do
-            cleaned = cleaned:gsub(pat, "")
+            cleaned, n = _gsub(cleaned, pat, "")
+            if n > 0 then break end
         end
         -- v2.2.8: Recent Retail CHAT_MSG_LOOT messages embed an item icon
         -- (|T<file>:0|t) directly inside the chat string. We always prepend
@@ -114,9 +158,23 @@ local function CleanMessage(msg, event)
         -- place produces two icons side-by-side. Strip any |T...|t texture
         -- tags from the cleaned text so GetIconString remains the single
         -- source of truth for icons.
-        cleaned = cleaned:gsub("|T[^|]-|t%s*", "")
-        cleaned = cleaned:gsub("%.%s*$", ""):gsub("%[", ""):gsub("%]", "")
-        cleaned = cleaned:gsub("x%d+$", "") 
+        --
+        -- M-1: down from 4 trailing gsubs → 3.
+        --   pass 1: textures (|T...|t)
+        --   pass 2: bracket chars [ and ] (anywhere in the string -- can't
+        --           be merged with the trailing strip because brackets are
+        --           not anchored at end)
+        --   pass 3: trailing junk -- "x<count>", ".", or both -- in one
+        --           anchored callback gsub. The callback declines to
+        --           consume bare trailing digits (e.g. "Pristine Wing 5")
+        --           which a permissive `%d*$` would eat.
+        cleaned = _gsub(cleaned, "|T[^|]-|t%s*", "")
+        cleaned = _gsub(cleaned, "[%[%]]", "")
+        cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", function(m)
+            if m == "" then return m end
+            if _find(m, "x%d") or _find(m, "%.") then return "" end
+            return m
+        end)
         return cleaned
     end
     
@@ -167,34 +225,137 @@ local DEDUP_WINDOW = 0.25
 local CURRENCY_DEDUP_WINDOW = 0.5
 local function ExtractItemName(s)
     if not s then return nil end
-    return s:match("|h%[(.-)%]|h")
+    return _match(s, "|h%[(.-)%]|h")
 end
 local function MarkLootSeen(name)
-    if name then recentLoot[name] = GetTime() end
+    if name then recentLoot[name] = _GetTime() end
 end
 local function IsRecentLoot(name)
     if not name then return false end
     local t = recentLoot[name]
     if not t then return false end
-    if GetTime() - t > DEDUP_WINDOW then
+    if _GetTime() - t > DEDUP_WINDOW then
         recentLoot[name] = nil
         return false
     end
     return true
 end
 local function MarkCurrencyShown(name)
-    if name then recentCurrency[name] = GetTime() end
+    if name then recentCurrency[name] = _GetTime() end
 end
 local function IsRecentCurrency(name)
     if not name then return false end
     local t = recentCurrency[name]
     if not t then return false end
-    if GetTime() - t > CURRENCY_DEDUP_WINDOW then
+    if _GetTime() - t > CURRENCY_DEDUP_WINDOW then
         recentCurrency[name] = nil
         return false
     end
     return true
 end
+
+-- H-1: Periodic sweeper. Lazy expiry-on-read leaves entries lingering
+-- forever for items that are looted once and never seen again. Over a
+-- multi-hour farming session this leaks 5-25 KB. The sweeper walks both
+-- tables every 60 s and deletes entries older than their respective
+-- dedup windows. In-flight entries younger than the window survive --
+-- we never wipe() the tables wholesale. Function is module-level (not a
+-- per-tick closure) so the ticker captures one stable reference.
+local function _SweepDedup()
+    local now = _GetTime()
+    for name, t in pairs(recentLoot) do
+        if now - t > DEDUP_WINDOW then
+            recentLoot[name] = nil
+        end
+    end
+    for name, t in pairs(recentCurrency) do
+        if now - t > CURRENCY_DEDUP_WINDOW then
+            recentCurrency[name] = nil
+        end
+    end
+end
+local _dedupTicker = _NewTicker and _NewTicker(60, _SweepDedup) or nil
+
+-- H-2: Hot-path closure pools. PostCurrency, ShowLoot, and the deferred
+-- loot-count fetch were previously rebuilt as closures on every chat
+-- event. Under heavy AoE loot (10-30 events/sec) this churns the GC.
+--
+-- Strategy: pre-allocate a fixed number of param tables and pre-bind a
+-- function to each slot at init. Per event we rotate to the next slot
+-- and write the params; the timer body reads from its bound slot. ZERO
+-- closures created per event.
+--
+-- Concurrent-timer correctness: a slot is reused only after POOL_SIZE
+-- subsequent events fire. With POOL_SIZE=16 and DEDUP_WINDOW=0.25s, the
+-- earliest slot 1 can be reused (slot indices 1, 17, 33, ...) requires
+-- 16 events in 0.25s = 64 events/sec. Realistic peak under AoE loot is
+-- ~30/sec, giving 2x headroom. If the rate ever exceeds 64/sec the
+-- worst case is a single dropped/overwritten line, never corruption of
+-- another addon's state.
+local POOL_SIZE = 16
+local _curParams = {}
+local _curFns    = {}
+local _lootParams = {}
+local _lootFns    = {}
+local _curSlot, _lootSlot = 0, 0
+
+-- Hoisted: shared count-suffix formatter for both currency and loot.
+local function CountSuffix(nn)
+    nn = _tonumber(nn) or 0
+    if nn <= 0 then return "" end
+    return " (" .. nn .. ")"
+end
+
+-- Hoisted: posts the currency line. Reads everything from a slot in
+-- _curParams. Honors loot/currency dedup at fire time.
+local function PostCurrency(p)
+    if IsRecentLoot(p.currencyName) then return end
+    local display = addon.lootFrame.display
+    if p.noCount then
+        display:AddMessage(p.iconStr .. p.text, p.cR, p.cG, p.cB)
+    elseif p.cleanMode then
+        display:AddMessage(
+            "+" .. p.amt .. " " .. p.iconStr .. p.text .. CountSuffix(p.total),
+            p.cR, p.cG, p.cB)
+    else
+        display:AddMessage(
+            p.iconStr .. p.text .. CountSuffix(p.total),
+            p.cR, p.cG, p.cB)
+    end
+end
+
+-- Hoisted: posts the loot line. Synchronous use only -- the deferred
+-- count path (Retail uncached items) goes through PostDeferredLoot.
+local function ShowLoot(p, countStr)
+    local display = addon.lootFrame.display
+    if p.noCount then
+        display:AddMessage(p.iconStr .. p.cleaned, p.cR, p.cG, p.cB)
+    else
+        display:AddMessage(
+            "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr,
+            p.cR, p.cG, p.cB)
+    end
+end
+
+-- Hoisted: deferred loot post for Retail uncached items (0.1s timer).
+local function PostDeferredLoot(p)
+    local cnt = ((_GetItemCount and _GetItemCount(p.itemID, true)) or 0) + p.amt
+    ShowLoot(p, CountSuffix(cnt))
+end
+
+for i = 1, POOL_SIZE do
+    _curParams[i]  = {}
+    _lootParams[i] = {}
+    local idx = i
+    _curFns[i]  = function() PostCurrency(_curParams[idx]) end
+    _lootFns[i] = function() PostDeferredLoot(_lootParams[idx]) end
+end
+
+-- H-2: dedicated reusable param table for SYNCHRONOUS loot paths
+-- (cached Retail items, BCC, no-itemID/no-count fallback). Synchronous
+-- callers consume the table before returning, so a single shared slot
+-- is safe and never overwrites a pending timer.
+local _lootSync = {}
 
 local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     local f = CreateFrame("Frame", name.."Anchor", UIParent, "BackdropTemplate")
@@ -260,6 +421,13 @@ addon.LDBIcon = LDBIcon
 addon.combatFrame = CreateReadoutFrame("LootProCombat", "COMBAT & SYSTEM", 150, "combat")
 addon.lootFrame = CreateReadoutFrame("LootProLoot", "LOOT & MONEY", 50, "loot")
 
+-- L-3: Hoist the per-call configs table out of UpdateAllVisuals. The
+-- function fires on every slider tick / checkbox click / color change,
+-- and a fresh 2-element table per call was wasted churn. The buffer is
+-- private to UpdateAllVisuals (no external code retains a reference to
+-- it between calls), so in-place mutation is safe.
+local _updateConfigsBuf = { {}, {} }
+
 function addon:UpdateAllVisuals()
     if not self:IsReady() then return end
     
@@ -269,17 +437,15 @@ function addon:UpdateAllVisuals()
         self.LDBIcon:Show("LootPro")
     end    
     
-    local configs = { 
-        {f = self.combatFrame, s = LootProConfig.combat}, 
-        {f = self.lootFrame, s = LootProConfig.loot} 
-    }
-    
+    _updateConfigsBuf[1].f, _updateConfigsBuf[1].s = self.combatFrame, LootProConfig.combat
+    _updateConfigsBuf[2].f, _updateConfigsBuf[2].s = self.lootFrame,   LootProConfig.loot
+
     -- H1: Many of the setters below are expensive (SetBackdrop rebuilds border
     -- textures; SetMaxLines clears the message buffer and is visible to the
     -- user). UpdateAllVisuals is called from every slider tick, every checkbox
     -- click, every color change -- so we guard each expensive op with a cache
     -- key and only re-apply when the relevant inputs actually changed.
-    for _, cfg in ipairs(configs) do
+    for _, cfg in ipairs(_updateConfigsBuf) do
         local f, s = cfg.f, cfg.s
 
         local width, height = s.width or 800, s.height or 250
@@ -338,7 +504,7 @@ function addon:UpdateAllVisuals()
             f.display:SetShadowOffset(0, 0) 
         end
 
-        local fontKey = tostring(fontPath).."|"..tostring(s.size).."|"..flags
+        local fontKey = _tostring(fontPath).."|".._tostring(s.size).."|"..flags
         if f.display._fontKey ~= fontKey then
             SafeSetFont(f.display, fontPath, s.size, flags)
             f.display._fontKey = fontKey
@@ -456,11 +622,11 @@ function addon:RunRegressionTest()
         local produced = after > before
         if ok and produced then
             pass = pass + 1
-            print(string.format("  |cFF00FF00[PASS]|r %-22s (+%d msg)", tc.name, after - before))
+            print(_format("  |cFF00FF00[PASS]|r %-22s (+%d msg)", tc.name, after - before))
         else
             fail = fail + 1
-            local reason = (not ok) and ("error: "..tostring(err)) or "no output produced"
-            print(string.format("  |cFFFF4040[FAIL]|r %-22s (%s)", tc.name, reason))
+            local reason = (not ok) and ("error: ".._tostring(err)) or "no output produced"
+            print(_format("  |cFFFF4040[FAIL]|r %-22s (%s)", tc.name, reason))
         end
     end
 
@@ -473,7 +639,7 @@ function addon:RunRegressionTest()
     LootProConfig.showMoneyIcons = snapshot.showMoneyIcons
     LootProConfig.minQuality = snapshot.minQuality
 
-    print(string.format("|cFFAAAAFF[LootPro]|r Result: |cFF00FF00%d passed|r, |cFFFF4040%d failed|r (of %d).",
+    print(_format("|cFFAAAAFF[LootPro]|r Result: |cFF00FF00%d passed|r, |cFFFF4040%d failed|r (of %d).",
         pass, fail, #cases))
 end
 
@@ -495,6 +661,7 @@ local evts = {
 for _, v in ipairs(evts) do 
     addon:RegisterEvent(v) 
 end
+evts = nil  -- M-3a: only used to drive the registration loop above; release.
 
 -- v2.2.6: Taint launder strategy.
 --
@@ -581,18 +748,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
             cleanChatMsg[event] = nil
             if not msg then return end
         else
-            msg = tostring(arg1)
+            msg = _tostring(arg1)
         end
 
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
         if event == "CHAT_MSG_COMBAT_XP_GAIN" then
-            local name, amount2 = msg:match("(.+) has gained ([%d%p%s]*%d)%s+%a+")
+            local name, amount2 = _match(msg, "(.+) has gained ([%d%p%s]*%d)%s+%a+")
             -- If there's a named subject, treat as follower/pet XP.
-            if name and amount2 and not msg:match("^You") then
+            if name and amount2 and not _match(msg, "^You") then
                 if not LootProConfig.showFollowerXP then return end
                 if n.xp then
-                    name = name:gsub("|c%x+", ""):gsub("|r", "")
+                    name = _gsub(_gsub(name, "|c%x+", ""), "|r", "")
                     self.combatFrame.display:AddMessage("+ " .. amount2 .. " XP (" .. name .. ")", c.xp.r, c.xp.g, c.xp.b)
                 end
                 return
@@ -605,9 +772,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             -- M2: Use Blizzard's localized format string to parse faction +/-.
             local fac, amt = nil, nil
-            if PAT_FACTION_UP then fac, amt = msg:match(PAT_FACTION_UP) end
+            if PAT_FACTION_UP then fac, amt = _match(msg, PAT_FACTION_UP) end
             local lossFac, lossAmt = nil, nil
-            if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = msg:match(PAT_FACTION_DOWN) end
+            if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN) end
             if amt and n.repGain then
                 self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
             elseif lossAmt and n.repLoss then
@@ -621,8 +788,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
             self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
 
         elseif event == "CHAT_MSG_SYSTEM" and n.delver then
-            if msg:find("Companion XP") then
-                local amt = msg:match("gains ([%d,]+) Companion")
+            if _find(msg, "Companion XP") then
+                local amt = _match(msg, "gains ([%d,]+) Companion")
                 if amt then
                     local cD = c.delver or {r=1, g=0.7, b=0.2}
                     self.combatFrame.display:AddMessage("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
@@ -631,13 +798,13 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         elseif event == "CHAT_MSG_MONEY" and n.money then
             if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
-                local g = msg:match("(%d+)%s*[Gg]old")
-                local s = msg:match("(%d+)%s*[Ss]ilver")
-                local co = msg:match("(%d+)%s*[Cc]opper")
+                local g  = _match(msg, "(%d+)%s*[Gg]old")
+                local s  = _match(msg, "(%d+)%s*[Ss]ilver")
+                local co = _match(msg, "(%d+)%s*[Cc]opper")
                 local st = ""
 
-                if g then st = st .. g .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t " end
-                if s then st = st .. s .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
+                if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
+                if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
                 if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
 
                 self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
@@ -653,29 +820,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- links — cannot produce an icon here. We pull the icon and the
             -- player's running total directly from C_CurrencyInfo.
             local currencyName = ExtractItemName(msg)
-            local currencyID = tonumber(msg:match("currency:(%d+)"))
+            local currencyID = _tonumber(_match(msg, "currency:(%d+)"))
             -- CURRENCY_GAINED_MULTIPLE ends with "x<N>."; single-gain uses
             -- CURRENCY_GAINED with no suffix → amount = 1.
-            local amt = tonumber(msg:match("x(%d+)%.?$")) or 1
+            local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
             local iconStr, total = "", nil
-            if currencyID and addon.IS_RETAIL
-               and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
-                local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+            if currencyID and addon.IS_RETAIL and _GetCurrencyInfo then
+                local info = _GetCurrencyInfo(currencyID)
                 if info then
                     if LootProConfig.showLootIcons and info.iconFileID then
                         iconStr = "|T" .. info.iconFileID .. ":0|t "
                     end
                     total = info.quantity
                 end
-            end
-
-            -- Same "suppress zero / nil" rule as the loot handler (v2.2.3):
-            -- no meaningful total ⇒ omit the parenthetical instead of "(0)".
-            local function CurrencyCountSuffix(nn)
-                nn = tonumber(nn) or 0
-                if nn <= 0 then return "" end
-                return " (" .. nn .. ")"
             end
 
             -- v2.3.1: currency-vs-currency dedup. Mark/check synchronously
@@ -690,47 +848,30 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if IsRecentCurrency(dedupKey) then return end
             MarkCurrencyShown(dedupKey)
 
+            -- H-2: rotate to the next slot in the currency pool, populate
+            -- it, and dispatch the pre-bound function (zero closure churn).
+            _curSlot = (_curSlot % POOL_SIZE) + 1
+            local p = _curParams[_curSlot]
+            p.currencyName = currencyName
+            p.iconStr = iconStr
+            p.amt     = amt
+            p.total   = total
+            p.cR, p.cG, p.cB = c.currency.r, c.currency.g, c.currency.b
             if LootProConfig.cleanMode then
                 local cleaned = CleanMessage(msg, event)
-                local function PostCurrency()
-                    -- v2.2.8: suppress if a CHAT_MSG_LOOT for the same name
-                    -- arrived during the dedup window (vendor-purchase dup).
-                    if IsRecentLoot(currencyName) then return end
-                    if IsNoCountItem(cleaned) then
-                        -- No-count items (Companion XP, Boon of Power, etc.):
-                        -- just "<icon> <Name>". No +N prefix, no (count) suffix.
-                        self.lootFrame.display:AddMessage(
-                            iconStr .. cleaned,
-                            c.currency.r, c.currency.g, c.currency.b)
-                    else
-                        self.lootFrame.display:AddMessage(
-                            "+" .. amt .. " " .. iconStr .. cleaned .. CurrencyCountSuffix(total),
-                            c.currency.r, c.currency.g, c.currency.b)
-                    end
-                end
-                if C_Timer and C_Timer.After then
-                    C_Timer.After(DEDUP_WINDOW, PostCurrency)
-                else
-                    PostCurrency()
-                end
+                p.cleanMode = true
+                p.text      = cleaned
+                p.noCount   = IsNoCountItem(cleaned)
             else
-                local function PostCurrency()
-                    if IsRecentLoot(currencyName) then return end
-                    if IsNoCountItem(msg) then
-                        self.lootFrame.display:AddMessage(
-                            iconStr .. CleanMessage(msg, event),
-                            c.currency.r, c.currency.g, c.currency.b)
-                    else
-                        self.lootFrame.display:AddMessage(
-                            iconStr .. msg .. CurrencyCountSuffix(total),
-                            c.currency.r, c.currency.g, c.currency.b)
-                    end
-                end
-                if C_Timer and C_Timer.After then
-                    C_Timer.After(DEDUP_WINDOW, PostCurrency)
-                else
-                    PostCurrency()
-                end
+                local nc = IsNoCountItem(msg)
+                p.cleanMode = false
+                p.text      = nc and CleanMessage(msg, event) or msg
+                p.noCount   = nc
+            end
+            if _After then
+                _After(DEDUP_WINDOW, _curFns[_curSlot])
+            else
+                PostCurrency(p)
             end
 
         elseif event == "CHAT_MSG_LOOT" and n.loot then
@@ -741,74 +882,61 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- v2.2.8: register name for the loot/currency dedup window so
             -- a paired CHAT_MSG_CURRENCY (vendor purchase) gets suppressed.
             MarkLootSeen(ExtractItemName(msg))
-            local itemID = msg:match("item:(%d+)")
+            -- L-1: capture and convert in one step; itemID is a number
+            -- throughout the rest of this branch.
+            local itemID = _tonumber(_match(msg, "item:(%d+)"))
             -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
             -- minQuality as the fallback so uncached items always pass the filter.
-            local rawQ = itemID and (addon.IS_RETAIL and C_Item.GetItemQualityByID(itemID)
-                                                      or select(3, GetItemInfo(itemID)))
+            local rawQ = itemID and (addon.IS_RETAIL and _GetItemQualityByID and _GetItemQualityByID(itemID)
+                                                      or _select(3, _GetItemInfo(itemID)))
             local q = rawQ or LootProConfig.minQuality
 
             if q >= LootProConfig.minQuality then
-                local amt = tonumber(msg:match("x(%d+)%.?$")) or 1
+                local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
 
-                    local function ShowLoot(countStr)
-                        if noCount then
-                            -- No-count items (Companion XP, Boon of Power):
-                            -- just "<icon> <Name>" — no +N, no bag-count.
-                            self.lootFrame.display:AddMessage(
-                                GetIconString(msg) .. cleaned,
-                                c.loot.r, c.loot.g, c.loot.b)
-                        else
-                            self.lootFrame.display:AddMessage("+" .. amt .. " " .. GetIconString(msg) .. cleaned .. countStr, c.loot.r, c.loot.g, c.loot.b)
-                        end
-                    end
-
-                    -- Bag-count display rule: only append "(N)" when the item
-                    -- actually occupies bag space after looting. Returning 0
-                    -- from GetItemCount means either:
-                    --   (a) instant-use / currency / non-bag item (Boon of
-                    --       Power, Chunk of Companion Experience, etc.) —
-                    --       never shows a meaningful count
-                    --   (b) bag-update hasn't fired yet / item not cached —
-                    --       a displayed 0 would be misleading
-                    -- Either way, suppress the parenthetical rather than
-                    -- print "(0)".
-                    local function CountSuffix(nn)
-                        nn = tonumber(nn) or 0
-                        if nn <= 0 then return "" end
-                        return " (" .. nn .. ")"
-                    end
-
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
                         -- M5: Skip the 100 ms defer when the item is already cached.
-                        -- Under AoE loot this avoids scheduling dozens of timers per pull.
-                        --
-                        -- v2.2.6: GetItemCount frequently returns the *pre-loot*
-                        -- bag total because CHAT_MSG_LOOT fires before the
-                        -- bag-update completes (race condition). Add the looted
-                        -- quantity to the result so the displayed count reflects
-                        -- the post-loot total. If GetItemCount has already
-                        -- updated, this would over-count by `amt`, but the
-                        -- pre-loot read is by far the more common case in
-                        -- testing — and consistently undercounting reads worse
-                        -- than the rare overcount.
-                        local id = tonumber(itemID)
-                        if id and C_Item.GetItemNameByID(id) then
-                            ShowLoot(CountSuffix((C_Item.GetItemCount(id, true) or 0) + amt))
+                        -- v2.2.6: GetItemCount frequently returns the pre-loot
+                        -- bag total; we add `amt` so the display reflects the
+                        -- post-loot count. Consistent under-count reads worse
+                        -- than the rare over-count when the bag update lands first.
+                        if itemID and _GetItemNameByID and _GetItemNameByID(itemID) then
+                            local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
+                            local p = _lootSync
+                            p.iconStr = GetIconString(msg); p.cleaned = cleaned
+                            p.amt = amt; p.noCount = noCount
+                            p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                            ShowLoot(p, CountSuffix(cnt))
                         else
-                            C_Timer.After(0.1, function()
-                                ShowLoot(CountSuffix((C_Item.GetItemCount(id, true) or 0) + amt))
-                            end)
+                            -- H-2: rotate to next loot-pool slot for the 0.1s defer.
+                            _lootSlot = (_lootSlot % POOL_SIZE) + 1
+                            local lp = _lootParams[_lootSlot]
+                            lp.iconStr = GetIconString(msg)
+                            lp.cleaned = cleaned
+                            lp.amt     = amt
+                            lp.noCount = noCount
+                            lp.itemID  = itemID
+                            lp.cR, lp.cG, lp.cB = c.loot.r, c.loot.g, c.loot.b
+                            _After(0.1, _lootFns[_lootSlot])
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
                         -- C_Timer doesn't exist in BCC; GetItemCount does, show immediately
-                        ShowLoot(CountSuffix((GetItemCount(itemID, true) or 0) + amt))
+                        local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
+                        local p = _lootSync
+                        p.iconStr = GetIconString(msg); p.cleaned = cleaned
+                        p.amt = amt; p.noCount = noCount
+                        p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                        ShowLoot(p, CountSuffix(cnt))
                     else
-                        ShowLoot("")
+                        local p = _lootSync
+                        p.iconStr = GetIconString(msg); p.cleaned = cleaned
+                        p.amt = amt; p.noCount = noCount
+                        p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                        ShowLoot(p, "")
                     end
                 else
                     self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.loot.r, c.loot.g, c.loot.b)

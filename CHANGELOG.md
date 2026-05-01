@@ -5,6 +5,31 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-04-30
+
+### Improvements
+- **Memory & efficiency cleanup** — full 8-phase internal audit applied:
+  - Pre-localized all hot Blizzard API and Lua built-in globals (`_tonumber`,
+    `_match`, `_gsub`, `_find`, `_format`, `_GetTime`, `_After`, etc.) to
+    module-level locals to avoid repeated global table lookups in per-event
+    paths (L-4).
+  - Added a 60-second periodic sweeper (`_SweepDedup`) that removes expired
+    entries from `recentLoot` and `recentCurrency`, eliminating multi-hour
+    5–25 KB table drift (H-1).
+  - Hoisted `PostCurrency`, `ShowLoot`, `PostDeferredLoot`, and `CountSuffix`
+    to named module-level functions with a 16-slot rotating param pool,
+    eliminating ~5–8 closure allocations per AoE loot event (H-2).
+  - Merged the four trailing `gsub` passes in `CleanMessage` into three
+    (combined trailing-count + trailing-dot strip), reducing per-event string
+    allocations under AoE loot (M-1).
+  - Deduplicated `LOOT_PREFIX_PATS` at build time so enUS clients do not run
+    identical patterns twice on every `CleanMessage` call (M-2).
+  - Released the `evts` registration table immediately after use (M-3a).
+  - Hoisted the `UpdateAllVisuals` per-call config buffer to module scope for
+    table reuse instead of per-call allocation (L-3).
+  - Added a hard ceiling of 50 entries on the `_badFonts` cache (L-2).
+  - Merged `itemID` capture and `tonumber` into a single expression (L-1).
+
 ## [2.4.0] - 2026-04-30
 
 ### New Features
