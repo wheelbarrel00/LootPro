@@ -31,7 +31,7 @@ addon.DEFAULTS = {
     notifications = {
         money = true, currency = true, loot = true, skill = true,
         honor = true, repGain = true, repLoss = true, delver = false,
-        xp = true, combatEnter = true, combatLeave = true
+        xp = true, combatEnter = true, combatLeave = true, partyLoot = true
     }
 }
 

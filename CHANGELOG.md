@@ -5,6 +5,23 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-04-30
+
+### New Features
+- **Display Party Loot toggle** — new checkbox on the Notifications tab
+  (between *Enable Clean Mode* and *Display Experience*) lets you
+  suppress group members' loot lines while keeping your own. Detection
+  uses the existing self-loot prefix patterns (`LOOT_ITEM_SELF`,
+  `LOOT_ITEM_PUSHED_SELF`, plus English fallbacks), so any
+  `CHAT_MSG_LOOT` line that doesn't start with a self-loot prefix is
+  treated as party loot. Default: enabled (unchanged behavior).
+
+### Improvements
+- **New minimap icon** — replaced the generic purple-tinted bag icon
+  with a custom Loot Pro chest artwork (`Media/LootProIcon.tga`).
+  Removed the `iconR/G/B` color tint so the artwork displays in its
+  true colors.
+
 ## [2.3.1] - 2026-04-30
 
 ### Fixed
