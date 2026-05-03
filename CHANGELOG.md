@@ -5,6 +5,12 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-05-03
+
+### Improvements
+- Added `## IconTexture` directive to both TOC files so the LootPro icon now
+  appears in the in-game Addon list instead of the default question mark.
+
 ## [2.4.1] - 2026-04-30
 
 ### Improvements
