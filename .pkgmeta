@@ -13,4 +13,6 @@ ignore:
   - .git
   - README.md
   - CHANGELOG.md
+  - .claude
+  - screenshots
   - LICENSE
