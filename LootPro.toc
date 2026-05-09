@@ -1,7 +1,7 @@
-## Interface: 120005
+## Interface: 120001, 120005, 120007
 ## Title: Loot Pro
 ## Notes: Custom Loot and Combat Text.
-## Version: 2.4.3
+## Version: 2.4.4
 ## Author: Wheelbarrel00
 ## IconTexture: Interface\AddOns\LootPro\Media\LootProIcon
 ## SavedVariables: LootProConfig
