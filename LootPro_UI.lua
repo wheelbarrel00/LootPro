@@ -424,7 +424,7 @@ function ns.UI:Initialize()
     mQual:SetPoint("TOP", mQual.label, "BOTTOM", 0, -5)
     mQual:Refresh()
 
-    local cFont = U.CreateFontCycler("LPRO_CF", "Combat Font", pages.customization, "combat")
+    local cFont = U.CreateFontDropdown("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
 
     local cOut = U.CreateGenericCycler("LPRO_CO", "Combat Outline", pages.customization, outList, "outline", "combat")
@@ -453,7 +453,7 @@ function ns.UI:Initialize()
         SetCVar("enableQuickLoot", cb:GetChecked() and "1" or "0")
     end)
 
-    local lFont = U.CreateFontCycler("LPRO_LF", "Loot Font", pages.customization, "loot") 
+    local lFont = U.CreateFontDropdown("LPRO_LF", "Loot Font", pages.customization, "loot")
     lFont.label:SetPoint("TOPRIGHT", -50, 0); lFont:SetPoint("TOPRIGHT", lFont.label, "BOTTOMRIGHT", 0, -5); pages.customization.lF = lFont
 
     local lOut = U.CreateGenericCycler("LPRO_LO", "Loot Outline", pages.customization, outList, "outline", "loot") 

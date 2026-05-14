@@ -1,15 +1,15 @@
 ## Interface: 20505
 ## Title: Loot Pro
 ## Notes: Custom Loot and Combat Text.
-## Version: 2.4.4
+## Version: 2.4.5
 ## Author: Wheelbarrel00
 ## IconTexture: Interface\AddOns\LootPro\Media\LootProIcon
 ## SavedVariables: LootProConfig
-## OptionalDeps: LibStub, LibSharedMedia-3.0
 ## X-Curse-Project-ID: 1510306
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\LibSharedMedia-3.0\lib.xml
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0\lib.xml
 LootPro.lua
