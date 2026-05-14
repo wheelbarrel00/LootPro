@@ -39,78 +39,145 @@ local function GetCfg(configKey)
     return LootProConfig[configKey]
 end
 
-function U.CreateFontCycler(name, title, parent, configKey)
-    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+-- Font picker rendered as a dropdown. The closed button shows the current
+-- font name in its own typeface; clicking opens a scrollable popup where
+-- every entry is rendered in the font it would select, so the user previews
+-- the choice before committing.
+--
+-- Returns a frame with `.label` and `.Refresh` so call sites in
+-- LootPro_UI can position and re-sync it after profile resets.
+function U.CreateFontDropdown(name, title, parent, configKey)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     l:SetText(title)
-    
-    local c = CreateFrame("Frame", name, parent, "BackdropTemplate") 
-    c:SetSize(180, 28) 
+
+    local c = CreateFrame("Button", name, parent, "BackdropTemplate")
+    c:SetSize(180, 24)
     c:SetPoint("TOP", l, "BOTTOM", 0, -5)
-    c:SetBackdrop({ 
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
-        tile = true, 
-        tileSize = 16, 
-        edgeSize = 12, 
-        insets = {left=3, right=3, top=3, bottom=3} 
+    c:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = {left=3, right=3, top=3, bottom=3}
     })
-    c:SetBackdropColor(0,0,0,0.8)
-    
-    local t = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight") 
-    t:SetPoint("CENTER") 
-    t:SetWidth(140) 
+    c:SetBackdropColor(0, 0, 0, 0.85)
+    c:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
+
+    local t = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    t:SetPoint("LEFT", 8, 0)
+    t:SetPoint("RIGHT", -22, 0)
+    t:SetJustifyH("LEFT")
     t:SetWordWrap(false)
-    
+    t:SetTextColor(0.922, 0.718, 0.024, 1.0)        -- #EBB706 yellow to match other LootPro buttons
+
+    local arrow = c:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    arrow:SetPoint("RIGHT", -6, -1)
+    arrow:SetText("v")
+    arrow:SetTextColor(0.922, 0.718, 0.024, 1.0)
+
+    -- Popup: scrollable list of font rows, parented to UIParent so it can
+    -- float above the settings window without clipping inside the tab body.
+    local ROW_H, MAX_VISIBLE = 22, 12
+    local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    popup:SetBackdropColor(0.05, 0.05, 0.05, 0.98)
+    popup:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
+    popup:Hide()
+
+    local scroll = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 4, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -24, 4)
+    local scrollChild = CreateFrame("Frame", nil, scroll)
+    scrollChild:SetSize(1, 1)
+    scroll:SetScrollChild(scrollChild)
+
+    local rows = {}
+    local function rebuildRows()
+        local fonts = GetFonts()
+        local cfg = LootProConfig[configKey]
+        for _, row in ipairs(rows) do row:Hide() end
+        for i, fontName in ipairs(fonts) do
+            local row = rows[i]
+            if not row then
+                row = CreateFrame("Button", nil, scrollChild)
+                row:SetHeight(ROW_H)
+                local hl = row:CreateTexture(nil, "HIGHLIGHT")
+                hl:SetAllPoints()
+                hl:SetColorTexture(0.541, 0.024, 0.004, 0.45)
+                row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                row.text:SetPoint("LEFT", 6, 0)
+                row.text:SetPoint("RIGHT", -6, 0)
+                row.text:SetJustifyH("LEFT")
+                row.text:SetWordWrap(false)
+                rows[i] = row
+            end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
+            row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -(i - 1) * ROW_H)
+            row.text:SetText(fontName)
+            -- Selected row gets the LootPro yellow; others are softer for contrast.
+            if fontName == cfg.font then
+                row.text:SetTextColor(0.922, 0.718, 0.024, 1.0)
+            else
+                row.text:SetTextColor(0.90, 0.90, 0.90, 1.0)
+            end
+            local p = LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT
+            SafeSetFont(row.text, p, 13, "")
+            row:SetScript("OnClick", function()
+                cfg.font = fontName
+                popup:Hide()
+                c.Refresh()
+            end)
+            row:Show()
+        end
+        scrollChild:SetSize(math.max(1, scroll:GetWidth()), math.max(1, #fonts * ROW_H))
+    end
+
     local function Update()
         local cfg = LootProConfig[configKey]
-        local fonts = GetFonts()
-        
-        t:SetText(cfg.font or "Friz Quadrata TT") 
-        local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT 
-        SafeSetFont(t, p, 13, "") 
-        
-        if addon.UpdateAllVisuals then 
-            addon:UpdateAllVisuals() 
+        t:SetText(cfg.font or "Friz Quadrata TT")
+        local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
+        SafeSetFont(t, p, 13, "")
+        if addon.UpdateAllVisuals then
+            addon:UpdateAllVisuals()
         end
     end
-    
-    local function Cycle(d) 
-        local cfg = LootProConfig[configKey]
+
+    c:SetScript("OnClick", function()
+        if popup:IsShown() then popup:Hide(); return end
         local fonts = GetFonts()
-        
-        local idx = 1 
-        for i, v in ipairs(fonts) do 
-            if v == cfg.font then 
-                idx = i 
-                break 
-            end 
-        end 
-        
-        idx = idx + d 
-        if idx > #fonts then 
-            idx = 1 
-        elseif idx < 1 then 
-            idx = #fonts 
-        end 
-        
-        cfg.font = fonts[idx] 
-        Update() 
-    end
-    
-    local pb = CreateFrame("Button", nil, c)
-    pb:SetSize(20,20)
-    pb:SetPoint("LEFT", 5, 0)
-    pb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
-    pb:SetScript("OnClick", function() Cycle(-1) end)
-    
-    local nb = CreateFrame("Button", nil, c)
-    nb:SetSize(20,20)
-    nb:SetPoint("RIGHT", -5, 0)
-    nb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
-    nb:SetScript("OnClick", function() Cycle(1) end)
-    
+        popup:ClearAllPoints()
+        popup:SetPoint("TOPLEFT",  c, "BOTTOMLEFT",  0, -2)
+        popup:SetWidth(c:GetWidth() + 40)
+        local visible = math.min(#fonts, MAX_VISIBLE)
+        popup:SetHeight(visible * ROW_H + 8)
+        rebuildRows()
+        popup:Show()
+    end)
+
+    -- Click-outside closes the popup. A full-screen invisible button parked
+    -- under the popup catches stray clicks, so we don't have to track which
+    -- frame the user might tap next.
+    popup:SetScript("OnShow", function(self)
+        self._closer = self._closer or CreateFrame("Button", nil, UIParent)
+        self._closer:SetAllPoints(UIParent)
+        self._closer:SetFrameStrata("FULLSCREEN")
+        self._closer:RegisterForClicks("AnyDown")
+        self._closer:SetScript("OnClick", function() self:Hide() end)
+        self._closer:Show()
+    end)
+    popup:SetScript("OnHide", function(self)
+        if self._closer then self._closer:Hide() end
+    end)
+
     c.Refresh = Update
-    c.label = l 
+    c.label = l
     return c
 end
 

@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.5] - 2026-05-13
+
+### New Features
+- **Font dropdown picker** — Combat Font and Loot Font in the Custom tab are now scrollable dropdown menus. Each row renders its label in the font it would select, so the choice can be previewed before committing.
+
+### Improvements
+- **LibSharedMedia-3.0 bundled internally** — the library now ships inside the addon, so users no longer need a separate SharedMedia addon to pick fonts. The TOC's `OptionalDeps` reference to LSM has been removed accordingly.
+
 ## [2.4.4] - 2026-05-08
 
 ### Improvements
