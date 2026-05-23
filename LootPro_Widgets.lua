@@ -212,8 +212,10 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
         end 
         
         -- Font styling is only meaningful when the cycler represents an outline
-        -- value for a nested readout config. Root-level cyclers just show text.
-        if configKey ~= "root" then
+        -- value for a nested readout config that carries a font (combat/loot).
+        -- Root-level cyclers and font-less nested tables (e.g. rareAlert) just
+        -- show text.
+        if configKey ~= "root" and cfg.font then
             local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
             local f = (cur == "NONE") and "" or cur
             if type(f) == "string" then

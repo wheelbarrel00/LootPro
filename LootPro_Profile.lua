@@ -9,10 +9,28 @@ addon.DEFAULTS = {
     showLootIcons = true,
     showMoneyIcons = true,
     showLootCounts = true,
+    recapEnabled = false, -- Session recap tally (off by default; opt in to track loot)
+    tooltipLoots = true, -- Show "Looted Nx this session" on item tooltips (needs recap on)
+    currencyCap = true, -- Flag a currency line when it hits its max / weekly cap (#8)
+    -- Per-class display filters for the loot feed (false = show). These hide
+    -- matching items from the readout only; the recap still tallies them.
+    lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false },
     combatEnterText = "Combat Start",
     combatLeaveText = "Combat End",
     hideWelcome = false, -- New variable to track the popup state
-    minimap = { hide = false, minimapPos = 220 },
+    whatsNewSeen = 0, -- Highest "What's New" revision the user has seen (see addon.WHATS_NEW)
+    -- Minimap button: per-click actions (#12). Values: settings|recap|lock|none.
+    minimap = { hide = false, minimapPos = 220, leftClick = "settings", rightClick = "recap", middleClick = "lock" },
+    -- Watched-item alerts. `items` is a user-managed list (persisted) of
+    -- { id = <itemID> } or { key = "<lowercased name substring>" } entries,
+    -- each carrying a `label` (and `icon` for id-based entries) for display.
+    -- Disabled by default; users opt in on the Alerts tab.
+    watchlist = { enabled = false, sound = true, items = {} },
+    -- Rare-drop alerts: when a looted item's quality >= threshold, optionally
+    -- color its loot line by quality, flash the loot frame, and play a sound.
+    -- All effects off by default; threshold pre-set to Legendary for when the
+    -- user enables them.
+    rareAlert = { threshold = 5, color = false, flash = false, sound = false },
     loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 }, -- Resized to 200x200
     combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 }, -- Resized to 200x200
     colors = {
@@ -49,6 +67,11 @@ end
 function addon:InitSettings()
     if not LootProConfig then
         LootProConfig = addon:DeepCopy(addon.DEFAULTS)
+        -- Brand-new install: this is a first-time user who gets the welcome
+        -- popup, not the "what's new" popup -- mark the current revision seen
+        -- so we don't show both. Existing users (else branch) keep the default
+        -- 0 and will see what changed.
+        LootProConfig.whatsNewSeen = addon.WHATS_NEW
 
     else
         local function validate(src, dst)
@@ -66,11 +89,16 @@ function addon:InitSettings()
         -- L3: Prune keys that no longer exist in the schema. Only prunes inside
         -- tables defined by DEFAULTS (e.g. colors, notifications, loot, combat,
         -- minimap); user-side tables outside of DEFAULTS are never touched.
+        --
+        -- An EMPTY table in DEFAULTS (e.g. watchlist.items) denotes free-form
+        -- user data: we leave its contents intact rather than deleting every
+        -- entry as an "unknown key". Without this guard the watchlist would be
+        -- wiped on every load.
         local function prune(src, dst)
             for k, v in pairs(dst) do
                 if src[k] == nil then
                     dst[k] = nil
-                elseif type(v) == "table" and type(src[k]) == "table" then
+                elseif type(v) == "table" and type(src[k]) == "table" and next(src[k]) ~= nil then
                     prune(src[k], v)
                 end
             end

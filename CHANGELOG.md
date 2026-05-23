@@ -5,6 +5,23 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-05-23
+
+A loot-awareness update. Every new alert is off by default; turn on what you want in settings. A one-time "What's New" popup summarizes these for existing users.
+
+### New Features
+- **Session Recap** — a new Recap tab (and `/lp recap`) tracks gold, items by rarity, currencies earned, and notable epic-or-better drops for the current play session. Off by default. Lives entirely in memory and resets on each login or `/reload`, so it adds no SavedVariables footprint.
+- **Watched-item alerts (Alerts tab)** — track specific items by name, item ID, or shift-clicked link, and get a center-screen toast plus a sound when you loot one. Off by default.
+- **Rare Drop Alerts** — optionally color a looted line by its quality, flash the loot frame, and play a sound when an item meets a quality threshold (default Legendary). All off by default; configured on the Alerts tab.
+- **Tooltip loot counts** — item tooltips show how many of that item you have looted this session (requires Session Recap enabled).
+- **Loot feed filters** — hide Trade Goods, Consumables, Quest Items, or Recipes from the readout (Notifications tab). The recap still tallies hidden items.
+- **Currency cap warnings** — a currency line is tagged when it reaches its maximum or weekly cap.
+- **Configurable minimap clicks** — assign left, right, and middle click to Open Settings, Print Recap, Toggle Window Lock, or Nothing (Custom tab).
+- **What's New popup** — a one-time summary of new features, shown once to upgrading users.
+
+### Improvements
+- **Locale-aware money parsing** — looted gold/silver/copper is now derived from the client's localized currency format strings, so money tallies and coin icons work on non-English clients.
+
 ## [2.4.5] - 2026-05-13
 
 ### New Features
