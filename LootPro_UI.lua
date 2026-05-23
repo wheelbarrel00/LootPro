@@ -92,7 +92,7 @@ end
 
 function ns.UI:Initialize()
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
-    gui:SetSize(520, 680)
+    gui:SetSize(560, 680)
     gui:SetPoint("CENTER")
     gui:Hide()
 
@@ -114,11 +114,13 @@ function ns.UI:Initialize()
     verLabel:SetFont(verLabel:GetFont(), 11)
     verLabel:SetText("|cFF999999v" .. addon.VERSION .. "|r")
 
-    local pages = { 
-        layout = CreateFrame("Frame", nil, gui), 
-        colors = CreateFrame("Frame", nil, gui), 
+    local pages = {
+        layout = CreateFrame("Frame", nil, gui),
+        colors = CreateFrame("Frame", nil, gui),
         notifications = CreateFrame("Frame", nil, gui),
-        customization = CreateFrame("Frame", nil, gui)
+        customization = CreateFrame("Frame", nil, gui),
+        recap = CreateFrame("Frame", nil, gui),
+        watchlist = CreateFrame("Frame", nil, gui)
     }
 
     for _, p in pairs(pages) do 
@@ -214,6 +216,8 @@ function ns.UI:Initialize()
     CreateTab("colors", "Colors")
     CreateTab("notifications", "Notifications")
     CreateTab("customization", "Custom")
+    CreateTab("recap", "Recap")
+    CreateTab("watchlist", "Alerts")
 
     -- Thin red accent divider below the tab row.
     local divider = gui:CreateTexture(nil, "ARTWORK")
@@ -424,6 +428,25 @@ function ns.UI:Initialize()
     mQual:SetPoint("TOP", mQual.label, "BOTTOM", 0, -5)
     mQual:Refresh()
 
+    -- #6: per-class loot-feed filters, below the minimum-quality cycler. These
+    -- hide matching classes from the readout; the recap still tallies them.
+    local filterHeader = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    filterHeader:SetPoint("TOP", pages.notifications, "TOP", 0, -350)
+    filterHeader:SetText("Hide from loot feed:")
+
+    local function AddFilter(key, label, x, y)
+        local cb = CreateFrame("CheckButton", "LPRO_FILT_"..key, pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", x, y)
+        _G[cb:GetName().."Text"]:SetText(label)
+        cb:SetChecked(LootProConfig.lootFilters[key])
+        cb:SetScript("OnClick", function(self) LootProConfig.lootFilters[key] = self:GetChecked() and true or false end)
+        return cb
+    end
+    local fTrade  = AddFilter("hideTradeGoods", "Trade Goods", 95, -372)
+    local fConsum = AddFilter("hideConsumable", "Consumables", 95, -397)
+    local fQuest  = AddFilter("hideQuest",      "Quest Items", 280, -372)
+    local fRecipe = AddFilter("hideRecipe",     "Recipes",     280, -397)
+
     local cFont = U.CreateFontDropdown("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
 
@@ -453,6 +476,36 @@ function ns.UI:Initialize()
         SetCVar("enableQuickLoot", cb:GetChecked() and "1" or "0")
     end)
 
+    -- #8: currency cap warning toggle.
+    local capCheck = CreateFrame("CheckButton", "LPRO_CurrencyCap", pages.customization, "InterfaceOptionsCheckButtonTemplate")
+    capCheck:SetPoint("TOPLEFT", qlCheck, "BOTTOMLEFT", 0, -5)
+    _G[capCheck:GetName().."Text"]:SetText("Warn on currency cap")
+    capCheck:SetChecked(LootProConfig.currencyCap)
+    capCheck:SetScript("OnClick", function(self) LootProConfig.currencyCap = self:GetChecked() and true or false end)
+
+    -- #12: per-click minimap actions (three cyclers in a row).
+    local mmHeader = pages.customization:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    mmHeader:SetPoint("TOPLEFT", capCheck, "BOTTOMLEFT", 4, -14)
+    mmHeader:SetText("Minimap Button Clicks:")
+
+    local mmActions = {
+        { val = "settings", lbl = "Open Settings" },
+        { val = "recap",    lbl = "Print Recap" },
+        { val = "lock",     lbl = "Toggle Lock" },
+        { val = "none",     lbl = "Nothing" },
+    }
+    local mmLeft = U.CreateGenericCycler("LPRO_MMLeft", "Left Click", pages.customization, mmActions, "leftClick", "minimap")
+    mmLeft.label:ClearAllPoints(); mmLeft.label:SetPoint("TOPLEFT", mmHeader, "BOTTOMLEFT", 0, -8)
+    mmLeft:ClearAllPoints(); mmLeft:SetPoint("TOPLEFT", mmLeft.label, "BOTTOMLEFT", 0, -4)
+
+    local mmRight = U.CreateGenericCycler("LPRO_MMRight", "Right Click", pages.customization, mmActions, "rightClick", "minimap")
+    mmRight.label:ClearAllPoints(); mmRight.label:SetPoint("LEFT", mmLeft.label, "LEFT", 150, 0)
+    mmRight:ClearAllPoints(); mmRight:SetPoint("TOPLEFT", mmRight.label, "BOTTOMLEFT", 0, -4)
+
+    local mmMid = U.CreateGenericCycler("LPRO_MMMid", "Middle Click", pages.customization, mmActions, "middleClick", "minimap")
+    mmMid.label:ClearAllPoints(); mmMid.label:SetPoint("LEFT", mmRight.label, "LEFT", 150, 0)
+    mmMid:ClearAllPoints(); mmMid:SetPoint("TOPLEFT", mmMid.label, "BOTTOMLEFT", 0, -4)
+
     local lFont = U.CreateFontDropdown("LPRO_LF", "Loot Font", pages.customization, "loot")
     lFont.label:SetPoint("TOPRIGHT", -50, 0); lFont:SetPoint("TOPRIGHT", lFont.label, "BOTTOMRIGHT", 0, -5); pages.customization.lF = lFont
 
@@ -465,6 +518,326 @@ function ns.UI:Initialize()
         LootProConfig.loot.font = LootProConfig.combat.font; LootProConfig.loot.outline = LootProConfig.combat.outline
         pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals() 
     end)
+
+    -------------------------------------------------
+    -- SESSION RECAP TAB
+    -------------------------------------------------
+    -- Live view of the in-memory session tally maintained by LootPro_Recap.
+    -- The header (duration) and body are refreshed on a throttled OnUpdate
+    -- that only fires while this page is the active tab, so there is zero
+    -- background cost when the GUI is closed or another tab is shown.
+    do
+        local page = pages.recap
+
+        local recapEnable = CreateFrame("CheckButton", "LPRO_RecapEnable", page, "InterfaceOptionsCheckButtonTemplate")
+        recapEnable:SetPoint("TOPLEFT", 26, -6)
+        _G[recapEnable:GetName().."Text"]:SetText("Enable Session Recap")
+        recapEnable:SetChecked(LootProConfig.recapEnabled)
+
+        local resetSession = CreateStyledButton(page, 130, 24, "Reset Session")
+        resetSession:SetPoint("TOPRIGHT", -30, -8)
+
+        local recapHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        recapHeader:SetPoint("TOPLEFT", 30, -40)
+        recapHeader:SetText("|cFFFF2222Session:|r 0s")
+
+        local recapBody = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        recapBody:SetPoint("TOPLEFT", 30, -68)
+        recapBody:SetWidth(440)
+        recapBody:SetJustifyH("LEFT")
+        recapBody:SetJustifyV("TOP")
+        recapBody:SetSpacing(3)
+
+        local tooltipCheck = CreateFrame("CheckButton", "LPRO_TooltipLoots", page, "InterfaceOptionsCheckButtonTemplate")
+        tooltipCheck:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 26, 134)
+        _G[tooltipCheck:GetName().."Text"]:SetText("Show \"looted this session\" on item tooltips")
+        tooltipCheck:SetScript("OnClick", function(self)
+            LootProConfig.tooltipLoots = self:GetChecked() and true or false
+        end)
+
+        local recapHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        recapHint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 110)
+        recapHint:SetWidth(440)
+        recapHint:SetJustifyH("LEFT")
+        recapHint:SetText("Counts reset on login, /reload, or Reset Session. Also available via /lp recap.")
+
+        local function BuildRecapBody()
+            local s = addon:RecapGetSession()
+            local lines = {}
+            lines[#lines + 1] = "|cFFFFD700Gold gained:|r  +" .. addon:RecapFormatMoney(s.copper)
+
+            if s.itemTotal > 0 then
+                lines[#lines + 1] = "|cFFFFFFFFItems looted:|r  " .. s.itemTotal
+                local parts = {}
+                for _, r in ipairs(addon:RecapRarityList()) do
+                    local qc = _G.ITEM_QUALITY_COLORS
+                    local hex = (qc and qc[r.quality] and qc[r.quality].hex) or "|cFFFFFFFF"
+                    parts[#parts + 1] = hex .. r.count .. " " .. string.lower(r.name) .. "|r"
+                end
+                if #parts > 0 then
+                    lines[#lines + 1] = "    " .. table.concat(parts, ", ")
+                end
+            else
+                lines[#lines + 1] = "|cFFFFFFFFItems looted:|r  none yet"
+            end
+
+            if #s.currencyOrder > 0 then
+                lines[#lines + 1] = " "
+                for _, id in ipairs(s.currencyOrder) do
+                    local e = s.currencies[id]
+                    if e then
+                        local iconStr = e.icon and ("|T" .. e.icon .. ":0|t ") or ""
+                        lines[#lines + 1] = "|cFFA6D8FF" .. (e.name or ("#" .. id)) .. ":|r  +" .. e.amount .. " " .. iconStr
+                    end
+                end
+            end
+
+            if #s.notable > 0 then
+                lines[#lines + 1] = " "
+                lines[#lines + 1] = "|cFFA335EENotable drops:|r"
+                -- newest first
+                for i = #s.notable, 1, -1 do
+                    lines[#lines + 1] = "    " .. s.notable[i]
+                end
+            end
+
+            return table.concat(lines, "\n")
+        end
+
+        local function RefreshRecap()
+            if not LootProConfig.recapEnabled then
+                recapHeader:SetText("|cFFFF2222Session:|r |cFF888888disabled|r")
+                recapBody:SetText("|cFF888888Session recap is turned off. Enable it above to start tracking gold, items, currency, and notable drops.|r")
+                return
+            end
+            recapHeader:SetText("|cFFFF2222Session:|r " .. addon:RecapFormatDuration(addon:RecapElapsed()))
+            recapBody:SetText(BuildRecapBody())
+        end
+
+        recapEnable:SetScript("OnClick", function(self)
+            LootProConfig.recapEnabled = self:GetChecked() and true or false
+            -- Fresh session on enable; empties the bounded table on disable.
+            addon:RecapReset()
+            page._lastVer = -1
+            RefreshRecap()
+        end)
+
+        resetSession:SetScript("OnClick", function()
+            addon:RecapReset()
+            page._lastVer = -1
+            RefreshRecap()
+        end)
+
+        page._lastVer = -1
+        page._throttle = 1
+        page:SetScript("OnShow", function(self)
+            self._lastVer = -1   -- force a body rebuild on (re)entry
+            self._throttle = 1
+            recapEnable:SetChecked(LootProConfig.recapEnabled)
+            tooltipCheck:SetChecked(LootProConfig.tooltipLoots)
+            RefreshRecap()
+        end)
+        page:SetScript("OnUpdate", function(self, dt)
+            self._throttle = self._throttle + dt
+            if self._throttle < 0.5 then return end
+            self._throttle = 0
+            if not LootProConfig.recapEnabled then return end
+            -- Duration ticks every refresh; the body is rebuilt only when the
+            -- session actually changed (version guard) to avoid string churn.
+            recapHeader:SetText("|cFFFF2222Session:|r " .. addon:RecapFormatDuration(addon:RecapElapsed()))
+            local s = addon:RecapGetSession()
+            if self._lastVer ~= s.version then
+                self._lastVer = s.version
+                recapBody:SetText(BuildRecapBody())
+            end
+        end)
+    end
+
+    -------------------------------------------------
+    -- ALERTS TAB (watched items + rare-drop alerts)
+    -------------------------------------------------
+    -- Top section manages watched items; bottom section configures rarity-
+    -- based alerts. List rows are pooled and reused across refreshes; the
+    -- scroll child only grows to fit the entries.
+    do
+        local page = pages.watchlist
+
+        local enableCheck = CreateFrame("CheckButton", "LPRO_WatchEnable", page, "InterfaceOptionsCheckButtonTemplate")
+        enableCheck:SetPoint("TOPLEFT", 26, -6)
+        _G[enableCheck:GetName().."Text"]:SetText("Enable Watch Alerts")
+        enableCheck:SetScript("OnClick", function(self)
+            LootProConfig.watchlist.enabled = self:GetChecked() and true or false
+        end)
+
+        local soundCheck = CreateFrame("CheckButton", "LPRO_WatchSound", page, "InterfaceOptionsCheckButtonTemplate")
+        soundCheck:SetPoint("TOPLEFT", 235, -6)
+        _G[soundCheck:GetName().."Text"]:SetText("Play Alert Sound")
+        soundCheck:SetScript("OnClick", function(self)
+            LootProConfig.watchlist.sound = self:GetChecked() and true or false
+        end)
+
+        local watchTestBtn = CreateStyledButton(page, 90, 22, "Test Alert")
+        watchTestBtn:SetPoint("TOPRIGHT", -22, -8)
+        watchTestBtn:SetScript("OnClick", function()
+            addon:WatchAlert({ label = "|cFFA335EE[Test Item]|r" }, nil, "Test Item")
+        end)
+
+        local addLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        addLabel:SetPoint("TOPLEFT", 30, -40)
+        addLabel:SetText("Add item (type a name or ID, or shift-click an item into the box):")
+
+        local addBox = CreateFrame("EditBox", "LPRO_WatchAdd", page, "InputBoxTemplate")
+        addBox:SetSize(300, 22)
+        addBox:SetPoint("TOPLEFT", 34, -58)
+        addBox:SetAutoFocus(false)
+        addBox:SetMaxLetters(200)
+
+        local addBtn = CreateStyledButton(page, 64, 22, "Add")
+        addBtn:SetPoint("LEFT", addBox, "RIGHT", 12, 0)
+
+        -- Scrollable list of current entries.
+        local scroll = CreateFrame("ScrollFrame", "LPRO_WatchScroll", page, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 30, -92)
+        scroll:SetSize(430, 184)
+        local content = CreateFrame("Frame", nil, scroll)
+        content:SetSize(410, 1)
+        scroll:SetScrollChild(content)
+
+        local rows = {}
+        local ROW_H = 26
+        local RefreshList  -- forward declaration (row remove buttons call it)
+
+        RefreshList = function()
+            local items = addon:WatchList()
+            for i, e in ipairs(items) do
+                local row = rows[i]
+                if not row then
+                    row = CreateFrame("Frame", nil, content)
+                    row:SetSize(400, ROW_H)
+                    row.icon = row:CreateTexture(nil, "ARTWORK")
+                    row.icon:SetSize(20, 20)
+                    row.icon:SetPoint("LEFT", 2, 0)
+                    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                    row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+                    row.label:SetWidth(290)
+                    row.label:SetJustifyH("LEFT")
+                    row.remove = CreateStyledButton(row, 64, 18, "Remove")
+                    row.remove:SetPoint("RIGHT", 0, 0)
+                    row.remove:SetScript("OnClick", function()
+                        addon:WatchRemove(row._index)
+                        RefreshList()
+                    end)
+                    rows[i] = row
+                end
+                row._index = i
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -((i - 1) * ROW_H))
+
+                local icon = e.icon
+                if not icon and e.id and GetItemInfoInstant then
+                    icon = select(5, GetItemInfoInstant(e.id))
+                end
+                row.icon:SetTexture(icon or 134400)
+                row.label:SetText(e.label or (e.id and ("Item #" .. e.id)) or e.key or "?")
+                row:Show()
+            end
+            for i = #items + 1, #rows do rows[i]:Hide() end
+            content:SetHeight(math.max(1, #items * ROW_H))
+        end
+
+        local function DoAdd()
+            local ok, reason = addon:WatchAdd(addBox:GetText())
+            if ok then
+                addBox:SetText("")
+                addBox:ClearFocus()
+                RefreshList()
+            elseif reason == "dupe" then
+                print("|cFFFF6060[LootPro]|r That item is already on the watchlist.")
+            elseif reason == "full" then
+                print("|cFFFF6060[LootPro]|r Watchlist is full (max 30 items).")
+            end
+        end
+        addBtn:SetScript("OnClick", DoAdd)
+        addBox:SetScript("OnEnterPressed", DoAdd)
+        addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        -- Shift-click an item (e.g. from your bags) while the add box is
+        -- focused to drop its link in. hooksecurefunc is post-only and never
+        -- alters the default click behavior.
+        if HandleModifiedItemClick then
+            hooksecurefunc("HandleModifiedItemClick", function(link)
+                if link and addBox:HasFocus() and IsShiftKeyDown() then
+                    addBox:SetText(link)
+                end
+            end)
+        end
+
+        local watchHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        watchHint:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -8)
+        watchHint:SetWidth(430)
+        watchHint:SetJustifyH("LEFT")
+        watchHint:SetText("Alerts fire when YOU loot a watched item. Name entries match any item containing that text; links and IDs match exactly.")
+
+        -- ---- Rare Drop Alerts section (#3 sound + #4 color/flash) ----
+        local rareDivider = page:CreateTexture(nil, "ARTWORK")
+        rareDivider:SetHeight(1)
+        rareDivider:SetPoint("TOPLEFT", 30, -296)
+        rareDivider:SetPoint("TOPRIGHT", -30, -296)
+        rareDivider:SetColorTexture(0.427, 0.020, 0.004, 0.7)
+
+        local rareHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        rareHeader:SetPoint("TOPLEFT", 30, -304)
+        rareHeader:SetText("|cFFFF2222Rare Drop Alerts|r")
+
+        local rareColor = CreateFrame("CheckButton", "LPRO_RareColor", page, "InterfaceOptionsCheckButtonTemplate")
+        rareColor:SetPoint("TOPLEFT", 26, -326)
+        _G[rareColor:GetName().."Text"]:SetText("Color loot line by rarity")
+        rareColor:SetScript("OnClick", function(self)
+            LootProConfig.rareAlert.color = self:GetChecked() and true or false
+        end)
+
+        local rareFlash = CreateFrame("CheckButton", "LPRO_RareFlash", page, "InterfaceOptionsCheckButtonTemplate")
+        rareFlash:SetPoint("TOPLEFT", rareColor, "BOTTOMLEFT", 0, -2)
+        _G[rareFlash:GetName().."Text"]:SetText("Flash the loot frame")
+        rareFlash:SetScript("OnClick", function(self)
+            LootProConfig.rareAlert.flash = self:GetChecked() and true or false
+        end)
+
+        local rareSound = CreateFrame("CheckButton", "LPRO_RareSound", page, "InterfaceOptionsCheckButtonTemplate")
+        rareSound:SetPoint("TOPLEFT", rareFlash, "BOTTOMLEFT", 0, -2)
+        _G[rareSound:GetName().."Text"]:SetText("Play alert sound")
+        rareSound:SetScript("OnClick", function(self)
+            LootProConfig.rareAlert.sound = self:GetChecked() and true or false
+        end)
+
+        local rareQualList = {
+            { val = 2, lbl = "Uncommon+" },
+            { val = 3, lbl = "Rare+" },
+            { val = 4, lbl = "Epic+" },
+            { val = 5, lbl = "Legendary+" },
+        }
+        local rareThresh = U.CreateGenericCycler("LPRO_RareThresh", "Alert on quality", page, rareQualList, "threshold", "rareAlert")
+        rareThresh.label:ClearAllPoints()
+        rareThresh.label:SetPoint("TOPLEFT", 280, -320)
+        rareThresh:ClearAllPoints()
+        rareThresh:SetPoint("TOPLEFT", rareThresh.label, "BOTTOMLEFT", 0, -6)
+
+        local rareTestBtn = CreateStyledButton(page, 110, 22, "Test Rare Drop")
+        rareTestBtn:SetPoint("TOPLEFT", 280, -392)
+        rareTestBtn:SetScript("OnClick", function()
+            if addon.RareTest then addon:RareTest() end
+        end)
+
+        page:SetScript("OnShow", function()
+            enableCheck:SetChecked(LootProConfig.watchlist.enabled)
+            soundCheck:SetChecked(LootProConfig.watchlist.sound)
+            rareColor:SetChecked(LootProConfig.rareAlert.color)
+            rareFlash:SetChecked(LootProConfig.rareAlert.flash)
+            rareSound:SetChecked(LootProConfig.rareAlert.sound)
+            rareThresh:Refresh()
+            RefreshList()
+        end)
+    end
 
     -------------------------------------------------
     -- FIRST-TIME WELCOME POPUP
@@ -517,14 +890,63 @@ function ns.UI:Initialize()
     
     ns.UI.welcomeFrame = welcome
 
+    -------------------------------------------------
+    -- ONE-TIME "WHAT'S NEW" POPUP
+    -------------------------------------------------
+    local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
+    wn:SetSize(470, 440)
+    wn:SetPoint("CENTER")
+    wn:SetFrameStrata("HIGH")
+    wn:Hide()
+    tinsert(UISpecialFrames, "LootProWhatsNew")
+
+    CreateCloseButton(wn)
+
+    wn.title = wn:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    wn.title:SetPoint("TOP", wn, "TOP", 0, -16)
+    wn.title:SetFont(wn.title:GetFont(), 20, "OUTLINE")
+    wn.title:SetText("|cFFFF2222What's New in Loot Pro|r")
+
+    local wnBody = wn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    wnBody:SetPoint("TOPLEFT", wn, "TOPLEFT", 24, -54)
+    wnBody:SetPoint("TOPRIGHT", wn, "TOPRIGHT", -24, -54)
+    wnBody:SetJustifyH("LEFT")
+    wnBody:SetJustifyV("TOP")
+    wnBody:SetSpacing(5)
+    wnBody:SetText(table.concat({
+        "New loot-awareness tools were added. All new alerts are |cFFFFD700off by default|r -- turn on what you want in settings.",
+        " ",
+        "- |cFFEBB706Session Recap|r: gold, items, currencies, and notable drops. Recap tab or /lp recap.",
+        "- |cFFEBB706Alerts tab|r: pop-up and sound when you loot items you are watching.",
+        "- |cFFEBB706Rare Drop Alerts|r: color, flash, and sound for high-rarity drops.",
+        "- |cFFEBB706Tooltip counts|r: see how many of an item you looted this session.",
+        "- |cFFEBB706Loot filters|r: hide trade goods, consumables, quest items, or recipes.",
+        "- |cFFEBB706Currency caps|r: a tag appears when a currency reaches its cap.",
+        "- |cFFEBB706Minimap clicks|r: set what left, right, and middle click do.",
+    }, "\n"))
+
+    local wnOpen = CreateStyledButton(wn, 150, 26, "Open Settings")
+    wnOpen:SetPoint("BOTTOM", wn, "BOTTOM", 0, 18)
+    wnOpen:SetScript("OnClick", function()
+        wn:Hide()
+        gui:Show()
+    end)
+
+    -- The revision is marked seen when the popup AUTO-shows on login (see
+    -- LootPro_Core's PLAYER_LOGIN). We deliberately do NOT mark it on hide, so
+    -- a manual /lp whatsnew preview and reload-teardown can't flip the flag.
+    ns.UI.whatsNewFrame = wn
+
     function ns.UI:RefreshAllWidgets()
         cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines)
         lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
         cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
+        mmLeft:Refresh(); mmRight:Refresh(); mmMid:Refresh(); capCheck:SetChecked(LootProConfig.currencyCap)
         mQual:Refresh()
         cEntEB:SetText(LootProConfig.combatEnterText); cLveEB:SetText(LootProConfig.combatLeaveText)
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
+        fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         for _, row in ipairs(colorRows) do row:Refresh() end
         for key, cb in pairs(toggles) do cb:SetChecked(LootProConfig.notifications[key]) end
         for key, cb in pairs(toggles) do if LootProConfig.colors[key] then local c = LootProConfig.colors[key]; _G[cb:GetName().."Text"]:SetTextColor(c.r, c.g, c.b) end end

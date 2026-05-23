@@ -93,6 +93,33 @@ do
     seen = nil
 end
 
+-- Locale-aware money parsing. CHAT_MSG_MONEY strings are composed from the
+-- GOLD_AMOUNT / SILVER_AMOUNT / COPPER_AMOUNT format strings (enUS "%d Gold",
+-- deDE "%d Gold"/"%d Silber"/"%d Kupfer", etc.), which differ per client
+-- locale. We derive a capture pattern from each so the recap tally and the
+-- coin-icon display work on non-English clients too -- not just the
+-- hard-coded English "Gold/Silver/Copper".
+local function MoneyPattern(fmt)
+    if not fmt then return nil end
+    -- Escape pattern magic chars but leave % so the %d placeholder survives
+    -- to the next step (same ordering trick as ToPattern above).
+    fmt = fmt:gsub("([%.%[%]%(%)%+%-%?%^%$])", "%%%1")
+    -- Turn the numeric placeholder into a capture that tolerates locale
+    -- digit-group separators (e.g. "1,234" / "1.234").
+    fmt = fmt:gsub("%%d", "([%%d%%p]+)")
+    return fmt
+end
+local PAT_GOLD   = MoneyPattern(_G.GOLD_AMOUNT   or "%d Gold")
+local PAT_SILVER = MoneyPattern(_G.SILVER_AMOUNT or "%d Silver")
+local PAT_COPPER = MoneyPattern(_G.COPPER_AMOUNT or "%d Copper")
+
+-- Strip any non-digit separators from a captured amount and return an integer
+-- (0 for nil/garbage). Module-level so the money path allocates no closures.
+local function MoneyAmount(s)
+    if not s then return 0 end
+    return _tonumber((_gsub(s, "%D", ""))) or 0
+end
+
 -- Party loot detection: any CHAT_MSG_LOOT message that does NOT start with a
 -- known self-loot prefix is treated as a group/party member's loot. Used by
 -- the "Display Party Loot" notification toggle to suppress other players'
@@ -311,15 +338,16 @@ end
 local function PostCurrency(p)
     if IsRecentLoot(p.currencyName) then return end
     local display = addon.lootFrame.display
+    local cap = p.capStr or ""
     if p.noCount then
-        display:AddMessage(p.iconStr .. p.text, p.cR, p.cG, p.cB)
+        display:AddMessage(p.iconStr .. p.text .. cap, p.cR, p.cG, p.cB)
     elseif p.cleanMode then
         display:AddMessage(
-            "+" .. p.amt .. " " .. p.iconStr .. p.text .. CountSuffix(p.total),
+            "+" .. p.amt .. " " .. p.iconStr .. p.text .. CountSuffix(p.total) .. cap,
             p.cR, p.cG, p.cB)
     else
         display:AddMessage(
-            p.iconStr .. p.text .. CountSuffix(p.total),
+            p.iconStr .. p.text .. CountSuffix(p.total) .. cap,
             p.cR, p.cG, p.cB)
     end
 end
@@ -402,18 +430,52 @@ end
 local LDB = LibStub("LibDataBroker-1.1")
 local LDBIcon = LibStub("LibDBIcon-1.0")
 
+-- #12: configurable minimap click actions.
+local MM_ACTION_LABEL = {
+    settings = "Open Settings",
+    recap    = "Print Recap",
+    lock     = "Toggle Window Lock",
+    none     = "Nothing",
+}
+
+function addon:DoMinimapAction(action)
+    if action == "settings" then
+        if ns.UI and LootProGUI then
+            if LootProGUI:IsShown() then LootProGUI:Hide() else LootProGUI:Show() end
+        end
+    elseif action == "recap" then
+        if self.RecapPrint then self:RecapPrint() end
+    elseif action == "lock" then
+        if self:IsReady() then
+            LootProConfig.locked = not LootProConfig.locked
+            self:UpdateAllVisuals()
+        end
+    end
+    -- "none" / unknown: do nothing
+end
+
 addon.lootProLDB = LDB:NewDataObject("LootPro", {
     type = "launcher",
     text = "Loot Pro",
     icon = "Interface\\AddOns\\LootPro\\Media\\LootProIcon",
     OnClick = function(_, button)
-        if ns.UI and LootProGUI then
-            if LootProGUI:IsShown() then LootProGUI:Hide() else LootProGUI:Show() end
+        local mm = LootProConfig and LootProConfig.minimap
+        local action = "settings"
+        if mm then
+            if button == "RightButton" then action = mm.rightClick or "none"
+            elseif button == "MiddleButton" then action = mm.middleClick or "none"
+            else action = mm.leftClick or "settings" end
         end
+        addon:DoMinimapAction(action)
     end,
     OnTooltipShow = function(tooltip)
         tooltip:AddLine("Loot Pro ("..addon.VERSION..")", 1, 1, 1)
-        tooltip:AddLine("Left-Click to open settings.")
+        local mm = LootProConfig and LootProConfig.minimap
+        if mm then
+            tooltip:AddLine("Left: "  ..(MM_ACTION_LABEL[mm.leftClick]   or "Nothing"), 0.8, 0.8, 0.8)
+            tooltip:AddLine("Right: " ..(MM_ACTION_LABEL[mm.rightClick]  or "Nothing"), 0.8, 0.8, 0.8)
+            tooltip:AddLine("Middle: "..(MM_ACTION_LABEL[mm.middleClick] or "Nothing"), 0.8, 0.8, 0.8)
+        end
     end,
 })
 addon.LDBIcon = LDBIcon
@@ -576,6 +638,11 @@ function addon:RunRegressionTest()
     LootProConfig.showMoneyIcons = true
     LootProConfig.minQuality = 0
 
+    -- Isolate the session recap: synthetic events below would otherwise add
+    -- fake Hearthstone/Kej/gold to the player's live tally. Swap in a
+    -- throwaway session for the run and restore the real one afterwards.
+    local recapPrev = self.RecapDetachSession and self:RecapDetachSession()
+
     local combat = self.combatFrame.display
     local loot = self.lootFrame.display
     combat:Clear()
@@ -631,6 +698,7 @@ function addon:RunRegressionTest()
     end
 
     -- Restore.
+    if self.RecapAttachSession then self:RecapAttachSession(recapPrev) end
     for k, v in pairs(snapshot.notifications) do n[k] = v end
     LootProConfig.cleanMode = snapshot.cleanMode
     LootProConfig.showFollowerXP = snapshot.showFollowerXP
@@ -694,17 +762,35 @@ addon:SetScript("OnEvent", function(self, event, ...)
         self:UnregisterEvent("ADDON_LOADED")
         return
         
-    elseif event == "PLAYER_LOGIN" then 
+    elseif event == "PLAYER_LOGIN" then
         -- M1: Defensive guard in case saved variables didn't initialize via
         -- the normal ADDON_LOADED path (e.g. event ordering quirks).
         if not self:IsReady() then self:InitSettings() end
         if ns.UI then ns.UI:Initialize() end
         self:UpdateAllVisuals()
-        
-        -- Trigger welcome screen on login if not disabled
-        if ns.UI and ns.UI.welcomeFrame and not LootProConfig.hideWelcome then
-            ns.UI.welcomeFrame:Show()
+
+        -- On login show, at most, one popup: the one-time "what's new" for
+        -- upgrading users (whatsNewSeen behind the current revision), otherwise
+        -- the first-time welcome. Brand-new installs are stamped as having seen
+        -- the current revision in InitSettings, so they get the welcome only.
+        --
+        -- We stamp the revision seen at SHOW time (not on the frame's OnHide):
+        -- a manual /lp whatsnew preview must not flip the flag, and a /reload
+        -- that tears down an open popup must not re-stamp it.
+        -- Defer the popup: showing a frame in the middle of the PLAYER_LOGIN
+        -- burst doesn't render reliably, so let the UI settle a moment first.
+        -- We mark the revision seen at SHOW time (not on the frame's OnHide) so
+        -- a manual /lp whatsnew preview and reload-teardown can't flip the flag.
+        local function ShowLoginPopup()
+            if not (ns.UI and addon:IsReady()) then return end
+            if ns.UI.whatsNewFrame and LootProConfig.whatsNewSeen ~= addon.WHATS_NEW then
+                LootProConfig.whatsNewSeen = addon.WHATS_NEW
+                ns.UI.whatsNewFrame:Show()
+            elseif ns.UI.welcomeFrame and not LootProConfig.hideWelcome then
+                ns.UI.welcomeFrame:Show()
+            end
         end
+        if _After then _After(1.5, ShowLoginPopup) else ShowLoginPopup() end
         
     elseif self:IsReady() then
         local c = LootProConfig.colors
@@ -796,23 +882,32 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-        elseif event == "CHAT_MSG_MONEY" and n.money then
-            if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
-                local g  = _match(msg, "(%d+)%s*[Gg]old")
-                local s  = _match(msg, "(%d+)%s*[Ss]ilver")
-                local co = _match(msg, "(%d+)%s*[Cc]opper")
-                local st = ""
+        elseif event == "CHAT_MSG_MONEY" then
+            -- Parse once (locale-aware); reused for the recap tally and the
+            -- coin-icon display.
+            local g  = PAT_GOLD   and _match(msg, PAT_GOLD)
+            local s  = PAT_SILVER and _match(msg, PAT_SILVER)
+            local co = PAT_COPPER and _match(msg, PAT_COPPER)
 
-                if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
-                if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
-                if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
-
-                self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
-            else
-                self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
+            -- Recap: tally looted money regardless of the display toggle.
+            if LootProConfig.recapEnabled and self.RecapAddMoney then
+                self:RecapAddMoney(MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co))
             end
 
-        elseif event == "CHAT_MSG_CURRENCY" and n.currency then
+            if n.money then
+                if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
+                    local st = ""
+                    if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
+                    if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
+                    if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
+
+                    self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
+                else
+                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
+                end
+            end
+
+        elseif event == "CHAT_MSG_CURRENCY" then
             -- Currency display overhaul: match the loot-line format
             --   +<amt> [icon] <Name> (<total>)
             -- Currency messages use |Hcurrency:<id>:...|h[Name]|h hyperlinks
@@ -825,17 +920,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- CURRENCY_GAINED with no suffix → amount = 1.
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
-            local iconStr, total = "", nil
-            if currencyID and addon.IS_RETAIL and _GetCurrencyInfo then
-                local info = _GetCurrencyInfo(currencyID)
-                if info then
-                    if LootProConfig.showLootIcons and info.iconFileID then
-                        iconStr = "|T" .. info.iconFileID .. ":0|t "
-                    end
-                    total = info.quantity
-                end
-            end
-
             -- v2.3.1: currency-vs-currency dedup. Mark/check synchronously
             -- (before the timer schedules) so a second event arriving in
             -- the same frame is dropped immediately. If we deferred the
@@ -844,44 +928,80 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- Key falls back to the raw msg when there is no parseable
             -- |h[Name]|h hyperlink (e.g. delve-completion system payloads
             -- delivered via CHAT_MSG_CURRENCY).
+            -- This runs ahead of the display-toggle check so the recap
+            -- tally below never double-counts a Blizzard double-fire.
             local dedupKey = currencyName or msg
             if IsRecentCurrency(dedupKey) then return end
             MarkCurrencyShown(dedupKey)
 
-            -- H-2: rotate to the next slot in the currency pool, populate
-            -- it, and dispatch the pre-bound function (zero closure churn).
-            _curSlot = (_curSlot % POOL_SIZE) + 1
-            local p = _curParams[_curSlot]
-            p.currencyName = currencyName
-            p.iconStr = iconStr
-            p.amt     = amt
-            p.total   = total
-            p.cR, p.cG, p.cB = c.currency.r, c.currency.g, c.currency.b
-            if LootProConfig.cleanMode then
-                local cleaned = CleanMessage(msg, event)
-                p.cleanMode = true
-                p.text      = cleaned
-                p.noCount   = IsNoCountItem(cleaned)
-            else
-                local nc = IsNoCountItem(msg)
-                p.cleanMode = false
-                p.text      = nc and CleanMessage(msg, event) or msg
-                p.noCount   = nc
-            end
-            if _After then
-                _After(DEDUP_WINDOW, _curFns[_curSlot])
-            else
-                PostCurrency(p)
+            local iconStr, total, iconFileID = "", nil, nil
+            local capStr = ""
+            if currencyID and addon.IS_RETAIL and _GetCurrencyInfo then
+                local info = _GetCurrencyInfo(currencyID)
+                if info then
+                    iconFileID = info.iconFileID
+                    if LootProConfig.showLootIcons and info.iconFileID then
+                        iconStr = "|T" .. info.iconFileID .. ":0|t "
+                    end
+                    total = info.quantity
+                    -- #8: flag the line when this currency has hit its cap.
+                    -- maxQuantity/maxWeeklyQuantity are 0 for uncapped currencies.
+                    if LootProConfig.currencyCap then
+                        local maxq = info.maxQuantity
+                        local wk = info.maxWeeklyQuantity
+                        if maxq and maxq > 0 and total and total >= maxq then
+                            capStr = " |cFFFF4040(capped)|r"
+                        elseif wk and wk > 0 and info.quantityEarnedThisWeek and info.quantityEarnedThisWeek >= wk then
+                            capStr = " |cFFFFA000(weekly cap)|r"
+                        end
+                    end
+                end
             end
 
-        elseif event == "CHAT_MSG_LOOT" and n.loot then
+            -- Recap: tally currency regardless of the display toggle.
+            if LootProConfig.recapEnabled and currencyID and self.RecapAddCurrency then
+                self:RecapAddCurrency(currencyID, amt, currencyName, iconFileID)
+            end
+
+            if n.currency then
+                -- H-2: rotate to the next slot in the currency pool, populate
+                -- it, and dispatch the pre-bound function (zero closure churn).
+                _curSlot = (_curSlot % POOL_SIZE) + 1
+                local p = _curParams[_curSlot]
+                p.currencyName = currencyName
+                p.iconStr = iconStr
+                p.amt     = amt
+                p.total   = total
+                p.capStr  = capStr
+                p.cR, p.cG, p.cB = c.currency.r, c.currency.g, c.currency.b
+                if LootProConfig.cleanMode then
+                    local cleaned = CleanMessage(msg, event)
+                    p.cleanMode = true
+                    p.text      = cleaned
+                    p.noCount   = IsNoCountItem(cleaned)
+                else
+                    local nc = IsNoCountItem(msg)
+                    p.cleanMode = false
+                    p.text      = nc and CleanMessage(msg, event) or msg
+                    p.noCount   = nc
+                end
+                if _After then
+                    _After(DEDUP_WINDOW, _curFns[_curSlot])
+                else
+                    PostCurrency(p)
+                end
+            end
+
+        elseif event == "CHAT_MSG_LOOT" then
+            local isSelf = IsSelfLoot(msg)
             -- Party-loot filter: when partyLoot is disabled, drop any
             -- CHAT_MSG_LOOT line that isn't a self-loot prefix (i.e. another
             -- group member's loot). Self-loot still flows through.
-            if n.partyLoot == false and not IsSelfLoot(msg) then return end
+            if n.partyLoot == false and not isSelf then return end
             -- v2.2.8: register name for the loot/currency dedup window so
             -- a paired CHAT_MSG_CURRENCY (vendor purchase) gets suppressed.
-            MarkLootSeen(ExtractItemName(msg))
+            local lname = ExtractItemName(msg)
+            MarkLootSeen(lname)
             -- L-1: capture and convert in one step; itemID is a number
             -- throughout the rest of this branch.
             local itemID = _tonumber(_match(msg, "item:(%d+)"))
@@ -890,10 +1010,56 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local rawQ = itemID and (addon.IS_RETAIL and _GetItemQualityByID and _GetItemQualityByID(itemID)
                                                       or _select(3, _GetItemInfo(itemID)))
             local q = rawQ or LootProConfig.minQuality
+            local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
-            if q >= LootProConfig.minQuality then
-                local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
+            -- Recap + watchlist act on YOUR loot only (never other group
+            -- members'), independent of the display toggles below.
+            if isSelf then
+                local link = _match(msg, "(|c%x+|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
+                -- Recap: count everything you picked up, regardless of the
+                -- minimum-quality display filter. Skipped entirely (no
+                -- per-loot accounting at all) when recap is disabled.
+                if LootProConfig.recapEnabled and self.RecapAddItem then
+                    self:RecapAddItem(itemID, amt, q, link)
+                end
+                -- Watchlist: prominent alert when a watched item is looted.
+                -- WatchOnLoot is a cheap no-op when the feature is off or
+                -- nothing matches.
+                if self.WatchOnLoot then
+                    self:WatchOnLoot(itemID, lname, link)
+                end
+                -- Rare-drop alert (#3 sound + #4 frame flash). Fires when the
+                -- looted item meets the rare threshold, independent of the
+                -- display toggles. Cheap no-op below threshold / when off.
+                if self.RareOnLoot then
+                    self:RareOnLoot(q)
+                end
+            end
 
+            -- Per-class display filter (#6): hide configured item classes from
+            -- the readout. Recap/watch above already ran, so hidden items are
+            -- still tallied; only the visible line is suppressed. The classID
+            -- lookup is skipped entirely when no class filter is active.
+            local hidden = false
+            local lfil = LootProConfig.lootFilters
+            if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe) then
+                local classID = _select(6, _GetItemInfoInstant(itemID))
+                if classID == 7 then hidden = lfil.hideTradeGoods
+                elseif classID == 0 then hidden = lfil.hideConsumable
+                elseif classID == 12 then hidden = lfil.hideQuest
+                elseif classID == 9 then hidden = lfil.hideRecipe end
+            end
+
+            if n.loot and q >= LootProConfig.minQuality and not hidden then
+                -- Rare-drop coloring (#4): render lines at/above the rare
+                -- threshold in their item-quality color instead of the
+                -- configured loot color, so an epic stands out among greens.
+                local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
+                local ra = LootProConfig.rareAlert
+                if ra and ra.color and q >= ra.threshold then
+                    local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
+                    if qc then lr, lg, lb = qc.r, qc.g, qc.b end
+                end
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
@@ -909,7 +1075,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             local p = _lootSync
                             p.iconStr = GetIconString(msg); p.cleaned = cleaned
                             p.amt = amt; p.noCount = noCount
-                            p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                            p.cR, p.cG, p.cB = lr, lg, lb
                             ShowLoot(p, CountSuffix(cnt))
                         else
                             -- H-2: rotate to next loot-pool slot for the 0.1s defer.
@@ -920,7 +1086,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.amt     = amt
                             lp.noCount = noCount
                             lp.itemID  = itemID
-                            lp.cR, lp.cG, lp.cB = c.loot.r, c.loot.g, c.loot.b
+                            lp.cR, lp.cG, lp.cB = lr, lg, lb
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
@@ -929,17 +1095,17 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
-                        p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                        p.cR, p.cG, p.cB = lr, lg, lb
                         ShowLoot(p, CountSuffix(cnt))
                     else
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
-                        p.cR, p.cG, p.cB = c.loot.r, c.loot.g, c.loot.b
+                        p.cR, p.cG, p.cB = lr, lg, lb
                         ShowLoot(p, "")
                     end
                 else
-                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.loot.r, c.loot.g, c.loot.b)
+                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, lr, lg, lb)
                 end
             end
         end
