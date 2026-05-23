@@ -14,14 +14,14 @@
   <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.5-8B0000?style=flat-square" alt="WoW BCC" />
   <img src="https://img.shields.io/badge/Interface-120005-333333?style=flat-square" alt="Interface" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Memory-~140KB-333333?style=flat-square" alt="Memory" />
+  <img src="https://img.shields.io/badge/Memory-~300KB-333333?style=flat-square" alt="Memory" />
 </p>
 
 ---
 
 ## Overview
 
-Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. The addon runs at roughly 140 KB of memory, requires no external dependencies, and supports both WoW Retail (Midnight 12.0) and BCC Anniversary (2.5.5).
+Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 300 KB of memory, requires no external dependencies, and supports both WoW Retail (Midnight 12.0) and BCC Anniversary (2.5.5).
 
 Open with **`/lp`** or the minimap button.
 
@@ -37,6 +37,10 @@ Strips the default "You receive loot:" and "You receive currency:" clutter from 
 
 Set a minimum quality threshold so only items at or above that rarity appear in the loot frame. Common grey drops can be silenced entirely while greens, blues, and epics still show. When an item has not yet been cached by the client, Loot Pro fails open and displays the message rather than silently dropping it.
 
+### Category Filtering
+
+Beyond the rarity threshold, entire item classes can be hidden from the loot frame — Trade Goods, Consumables, Quest Items, and Recipes — from the Notifications tab. Filtered items are still counted by the session recap; only their feed lines are suppressed.
+
 ### Full Color Customization
 
 All 11 message categories have independent color pickers: Money, Currency, Loot, Combat Start, Combat End, Experience, Delver XP, Skill Gains, Honor, Reputation Gain, and Reputation Loss. Colors are previewed live in the settings panel and applied instantly.
@@ -49,13 +53,33 @@ Each display frame (Combat and Loot) has its own text size, fade duration, frame
 
 Every message type can be individually enabled or disabled. Additional toggles control loot count injection, coin icon display, Clean Mode, and combat follower XP visibility.
 
+### Session Recap
+
+A dedicated Recap tab (and the `/lp recap` command) tracks your current play session: total gold, items broken down by rarity, currencies earned, and a short list of notable epic-or-better drops. The tally is held entirely in memory and resets on each login or reload, so it adds nothing to your saved variables. Disabled by default; enable it on the Recap tab.
+
+### Watched-Item Alerts
+
+The Alerts tab lets you build a watchlist by item name, item ID, or shift-clicked item link. When you loot a watched item, Loot Pro shows a center-screen toast and plays an alert sound so you never miss it. Disabled by default.
+
+### Rare Drop Alerts
+
+Optionally color a looted line by its item quality, flash the loot frame, and play a sound when a drop meets a configurable quality threshold (Legendary by default). All three effects are off by default and configured on the Alerts tab.
+
+### Loot Counts in Tooltips
+
+Item tooltips can display how many of that item you have looted during the current session, sourced from the session recap.
+
+### Currency Cap Warnings
+
+When a currency reaches its maximum or weekly cap, its line in the loot frame is tagged so you know further gains are going to waste.
+
 ### Movable Frames and Test Mode
 
 Unlock Windows mode makes both display frames draggable so you can reposition them anywhere on screen. Test Mode freezes fading and displays sample messages for every category so you can preview your color and layout choices without leaving town.
 
 ### Minimap Button
 
-A LibDBIcon minimap button provides one-click access to the settings panel. Compatible with Titan Panel, ChocolateBar, ElvUI, and other broker display addons. The button can be hidden from the Customization tab.
+A LibDBIcon minimap button provides one-click access to the settings panel. Compatible with Titan Panel, ChocolateBar, ElvUI, and other broker display addons. The button can be hidden from the Customization tab, and its left, right, and middle clicks are each configurable — open settings, print the session recap, toggle window lock, or do nothing.
 
 ---
 
@@ -85,8 +109,10 @@ A LibDBIcon minimap button provides one-click access to the settings panel. Comp
 |---|---|
 | `/lp` | Toggle the settings window |
 | `/lpro` | Toggle the settings window (alternate) |
+| `/lp recap` | Print the current session recap (gold, items, currencies, notable drops) |
+| `/lp recap reset` | Start a fresh recap session |
 
-The config UI has four tabs: Layout, Colors, Notifs, and Custom. A Reset to Defaults button at the bottom of every tab restores all settings to their original values.
+The config UI has six tabs: Layout, Colors, Notifs, Custom, Recap, and Alerts. A Reset to Defaults button at the bottom of every tab restores all settings to their original values.
 
 ---
 
