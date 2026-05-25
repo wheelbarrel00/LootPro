@@ -120,6 +120,27 @@ local function MoneyAmount(s)
     return _tonumber((_gsub(s, "%D", ""))) or 0
 end
 
+-- Reverse map from an item link's RGB color to its quality, built from
+-- ITEM_QUALITY_COLORS so it tracks Blizzard's exact hex values. The link color
+-- is the item's ACTUAL (bonus-adjusted) quality and is present in every loot
+-- message, so reading it avoids two traps of GetItemQualityByID(itemID): it
+-- uses the BASE item's quality (a downscaled green of an epic-base item would
+-- otherwise report as epic and wrongly trip the rare-drop alert), and it needs
+-- no item cache. `.hex` is "|cffRRGGBB" (or "ffRRGGBB" on some clients); the
+-- last 6 chars are the RRGGBB either way.
+local QUALITY_BY_RGB = {}
+do
+    local qc = _G.ITEM_QUALITY_COLORS
+    if qc then
+        for q = 0, 10 do
+            local c = qc[q]
+            if c and c.hex then
+                QUALITY_BY_RGB[c.hex:sub(-6):lower()] = q
+            end
+        end
+    end
+end
+
 -- Party loot detection: any CHAT_MSG_LOOT message that does NOT start with a
 -- known self-loot prefix is treated as a group/party member's loot. Used by
 -- the "Display Party Loot" notification toggle to suppress other players'
@@ -1005,17 +1026,27 @@ addon:SetScript("OnEvent", function(self, event, ...)
             -- L-1: capture and convert in one step; itemID is a number
             -- throughout the rest of this branch.
             local itemID = _tonumber(_match(msg, "item:(%d+)"))
-            -- BCC/Task2 fix: if quality is nil (item not cached yet), fail open by using
-            -- minQuality as the fallback so uncached items always pass the filter.
-            local rawQ = itemID and (addon.IS_RETAIL and _GetItemQualityByID and _GetItemQualityByID(itemID)
-                                                      or _select(3, _GetItemInfo(itemID)))
+            -- Full item link; carries bonus IDs that can change the looted
+            -- item's actual quality vs. its base itemID.
+            local link = _match(msg, "(|c%x+|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
+            -- Quality, read from the link's own color first: that is the actual
+            -- (bonus-adjusted) quality of THIS drop and needs no item cache, so
+            -- a downscaled green of an epic-base item reads as uncommon rather
+            -- than tripping the rare-drop alert. Fall back to the cached quality
+            -- (link, then base id), then to minQuality, when no color is found.
+            local rgbHex = _match(msg, "|c%x%x(%x%x%x%x%x%x)")
+            local rawQ = rgbHex and QUALITY_BY_RGB[rgbHex:lower()]
+            if not rawQ and link then rawQ = _select(3, _GetItemInfo(link)) end
+            if not rawQ and itemID then
+                rawQ = (addon.IS_RETAIL and _GetItemQualityByID and _GetItemQualityByID(itemID))
+                       or _select(3, _GetItemInfo(itemID))
+            end
             local q = rawQ or LootProConfig.minQuality
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
             -- Recap + watchlist act on YOUR loot only (never other group
             -- members'), independent of the display toggles below.
             if isSelf then
-                local link = _match(msg, "(|c%x+|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
                 -- Recap: count everything you picked up, regardless of the
                 -- minimum-quality display filter. Skipped entirely (no
                 -- per-loot accounting at all) when recap is disabled.

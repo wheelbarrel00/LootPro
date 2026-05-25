@@ -957,4 +957,49 @@ function ns.UI:Initialize()
     -- L7: Slash command is registered at file-load time in LootPro.lua so it
     -- works during loading screens; this just wires the GUI reference.
     ns.UI.toggleGUI = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
+
+    -------------------------------------------------
+    -- BLIZZARD ADDON OPTIONS ENTRY
+    -------------------------------------------------
+    -- A small panel in the game's Options > AddOns list that links to the full
+    -- Loot Pro window. Supports the modern retail Settings API and falls back
+    -- to the legacy InterfaceOptions API on older clients (BCC).
+    do
+        local panel = CreateFrame("Frame")
+        panel.name = "Loot Pro" -- used by the legacy API; harmless for the new one
+
+        local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", 16, -16)
+        title:SetText("|cFFFF2222Loot Pro|r")
+
+        local ver = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        ver:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+        ver:SetText("Version " .. addon.VERSION)
+
+        local desc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        desc:SetPoint("TOPLEFT", ver, "BOTTOMLEFT", 0, -16)
+        desc:SetWidth(540)
+        desc:SetJustifyH("LEFT")
+        desc:SetText("Loot Pro opens its full options in a dedicated window. Click the button below, or type |cFFEBB706/lp|r in chat.")
+
+        local openBtn = CreateStyledButton(panel, 220, 26, "Open Loot Pro Options")
+        openBtn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -18)
+        openBtn:SetScript("OnClick", function()
+            -- Close the options window first so the Loot Pro frame isn't hidden
+            -- behind it (the Settings panel sits at a higher strata).
+            if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then
+                HideUIPanel(SettingsPanel)
+            elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() and HideUIPanel then
+                HideUIPanel(InterfaceOptionsFrame)
+            end
+            gui:Show()
+        end)
+
+        if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+            local category = Settings.RegisterCanvasLayoutCategory(panel, "Loot Pro")
+            Settings.RegisterAddOnCategory(category)
+        elseif InterfaceOptions_AddCategory then
+            InterfaceOptions_AddCategory(panel)
+        end
+    end
 end
