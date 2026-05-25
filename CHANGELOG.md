@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-05-23
+
+### Bug Fixes
+- **Rare-drop alert misfiring on scaled items** — item quality was read from the base item ID, which ignores the bonus IDs that set a specific drop's quality. A bonus-downscaled item (for example, a green drop of an epic-base item) was treated as its base quality, so it could wrongly trigger the rare-drop flash and sound and show up mis-colored. Quality is now read from the looted item link's own color, which reflects the actual drop and needs no item cache. This corrects the rare-drop alert, the rare-line coloring, the recap rarity breakdown, and the minimum-quality filter all at once.
+
+### Improvements
+- **AddOns options entry** — Loot Pro now appears in the game's Options > AddOns list with a button that opens the full settings window. The window remains reachable via `/lp` and the minimap button as well.
+
 ## [2.5.0] - 2026-05-23
 
 A loot-awareness update. Every new alert is off by default; turn on what you want in settings. A one-time "What's New" popup summarizes these for existing users.
