@@ -21,6 +21,9 @@ local _GetItemInfoInstant = GetItemInfoInstant
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+-- WoW 12.0 (Midnight) "secret values": guard before any string op on a
+-- CHAT_MSG payload. nil on pre-12.0 clients (Classic/BCC), where it is unused.
+local _issecret = issecretvalue
 
 -- M4: Report font load failures once per bad path so users aren't left with a
 -- silently-broken readout. Warnings are rate-limited to one print per path.
@@ -625,6 +628,12 @@ local cleanChatMsg = {}
 -- through the real OnEvent handler and checks each readout's message count
 -- to verify the path produced output. Uses evergreen in-game references
 -- (Hearthstone itemID 6948, Stormwind and Bloodsail Buccaneers factions).
+--
+-- NOTE: the synthetic args are plain strings, so this only exercises the
+-- non-secret code path. There is no API to mint a secret string, so the
+-- 12.0 secret-value guard (the `_issecret(msg)` early-return in OnEvent)
+-- cannot be covered here — verify that in-game inside an active Mythic+
+-- key or boss encounter, where CHAT_MSG_* payloads become secret.
 function addon:RunRegressionTest()
     if not self:IsReady() then
         print("|cFFFF6060[LootPro]|r Cannot run test: addon not initialized.")
@@ -759,12 +768,14 @@ evts = nil  -- M-3a: only used to drive the registration loop above; release.
 -- the message text from a `ChatFrame_AddMessageEventFilter` cache, because
 -- the filter runs inside Blizzard's untainted ChatFrame frame.
 --
--- For every other CHAT_MSG_* event we read `arg1` directly (laundered
--- through tostring). The filter approach is unsafe for time-sensitive
--- events like CHAT_MSG_LOOT: there is no guaranteed dispatch order between
--- our addon's OnEvent and ChatFrame's filter pass, so reading the cache
--- can return stale data from a previous event — producing delayed/wrong-
--- order loot messages. arg1 is always the current event's payload.
+-- For every other CHAT_MSG_* event we read `arg1` directly. The filter
+-- approach is unsafe for time-sensitive events like CHAT_MSG_LOOT: there is
+-- no guaranteed dispatch order between our addon's OnEvent and ChatFrame's
+-- filter pass, so reading the cache can return stale data from a previous
+-- event — producing delayed/wrong-order loot messages. arg1 is always the
+-- current event's payload. (The filter is NOT a secret-value bypass either:
+-- inside an instanced encounter the filter receives the same secret arg1, so
+-- the OnEvent handler guards every payload with issecretvalue regardless.)
 if _G.ChatFrame_AddMessageEventFilter then
     ChatFrame_AddMessageEventFilter("CHAT_MSG_COMBAT_FACTION_CHANGE", function(_, _, msg)
         cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = msg
@@ -833,30 +844,37 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if not arg1 or type(arg1) ~= "string" then return end
 
         -- Faction events have a documented taint path through Blizzard's
-        -- secure delve/reputation system. For that one event, read the
-        -- pre-tainted copy stashed by our ChatFrame filter above. For every
-        -- other CHAT_MSG_* event use arg1 directly (laundered through
-        -- tostring) so we always have the *current* event's payload — the
-        -- filter cache is not safe for time-sensitive events because there
-        -- is no guaranteed dispatch order between ChatFrame's filter pass
-        -- and our addon frame's OnEvent.
+        -- secure delve/reputation system, so for that one event we read the
+        -- copy stashed by our ChatFrame filter above: the filter runs in an
+        -- untainted frame, which stops Blizzard's secure-path taint from
+        -- spreading into our handler. Every other CHAT_MSG_* event reads arg1
+        -- directly — the filter cache is not safe for time-sensitive events
+        -- because there is no guaranteed dispatch order between ChatFrame's
+        -- filter pass and our addon frame's OnEvent.
         local msg
         if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            -- Filter-only path. Reading arg1 here — even through
-            -- tostring/string.format laundering — propagates the taint
-            -- because the entire OnEvent execution frame is tainted by
-            -- Blizzard's secure delve/reputation code. The ChatFrame_AddMessageEventFilter
-            -- callback is the *only* untainted source for this event.
-            -- If the cache is empty, the filter hasn't run — skip rather
-            -- than touch arg1.
-            -- Synthetic /lp test events seed cleanChatMsg directly, see
-            -- RunRegressionTest below.
+            -- If the cache is empty, the filter hasn't run — skip rather than
+            -- touch arg1. Synthetic /lp test events seed cleanChatMsg
+            -- directly, see RunRegressionTest below.
             msg = cleanChatMsg[event]
             cleanChatMsg[event] = nil
             if not msg then return end
         else
-            msg = _tostring(arg1)
+            msg = arg1
         end
+
+        -- v2.5.2: WoW 12.0 (Midnight) "secret values". While an instanced
+        -- encounter is active (an M+ key in progress, a boss encounter, or a
+        -- PvP match) the CHAT_MSG_* text payload arrives as a *secret* string.
+        -- It still reports type() == "string", but any real string operation
+        -- on it from our tainted handler — match/find/gsub/tostring/concat —
+        -- raises "attempt to perform string conversion on a secret string
+        -- value". Secret-ness follows the value, not the execution frame, so
+        -- neither tostring() nor the ChatFrame filter cache launders it; the
+        -- text is simply unreadable by addons until the encounter ends. Skip
+        -- the line instead of erroring. issecretvalue() is safe to call on any
+        -- value (it never throws) and is nil on pre-12.0 clients.
+        if _issecret and _issecret(msg) then return end
 
         -- L2: Follower-XP detection only makes sense for XP events. Previously
         -- this ran on every chat/faction/currency/money event.
