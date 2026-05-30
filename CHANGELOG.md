@@ -5,6 +5,11 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-05-30
+
+### Bug Fixes
+- **"Secret string value" errors during dungeons, raids, and rated PvP** — under the Midnight (12.0) client, the game now hands chat text (loot, XP, currency, money, reputation, skill, honor) to addons as a protected "secret" value while a Mythic+ key, a boss encounter, or a PvP match is in progress, and addons are not permitted to read it. Loot Pro kept trying to parse that text, which produced a stream of Lua errors during encounters. The message is now detected and safely skipped while an encounter is active, so the errors are gone. Loot and combat notifications pause during an active encounter (the text is unreadable to addons by design) and resume automatically the moment it ends.
+
 ## [2.5.1] - 2026-05-23
 
 ### Bug Fixes
