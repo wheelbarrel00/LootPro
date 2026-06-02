@@ -114,6 +114,39 @@ function ns.UI:Initialize()
     verLabel:SetFont(verLabel:GetFont(), 11)
     verLabel:SetText("|cFF999999v" .. addon.VERSION .. "|r")
 
+    -- "Join our Discord!" link, top-left -- mirrors the version label on the
+    -- right and flanks the centered title. The Discord logo chip sits before
+    -- the text as a brand accent; text uses the #FF2222 accent (matches the
+    -- title and section headers). Click pops a copyable invite
+    -- (addon:ShowDiscord) -- WoW can't open a web browser.
+    local discord = CreateFrame("Button", nil, gui)
+    discord:SetFrameStrata("HIGH")
+    discord.icon = discord:CreateTexture(nil, "OVERLAY")
+    discord.icon:SetSize(16, 16)
+    discord.icon:SetPoint("LEFT", 0, 0)
+    -- White 64x64 TGA with alpha at Media\Textures\discord.tga. If the file
+    -- is ever missing, WoW draws a placeholder square -- replace the asset.
+    discord.icon:SetTexture("Interface\\AddOns\\LootPro\\Media\\Textures\\discord.tga")
+    discord.text = discord:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    discord.text:SetPoint("LEFT", discord.icon, "RIGHT", 5, 0)
+    discord.text:SetText("Join our Discord!")
+    discord.text:SetTextColor(1.0, 0.133, 0.133)            -- #FF2222
+    discord:SetSize(16 + 5 + discord.text:GetStringWidth() + 4, 18)
+    discord:SetPoint("TOPLEFT", gui, "TOPLEFT", 14, -12)
+    discord:SetScript("OnClick", function() addon:ShowDiscord() end)
+    discord:SetScript("OnEnter", function(s)
+        s.text:SetTextColor(1, 1, 1)
+        GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Join our Discord", 1.0, 0.133, 0.133)
+        GameTooltip:AddLine("Click to copy the invite link.", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    discord:SetScript("OnLeave", function(s)
+        s.text:SetTextColor(1.0, 0.133, 0.133)
+        GameTooltip:Hide()
+    end)
+    gui.discordButton = discord
+
     local pages = {
         layout = CreateFrame("Frame", nil, gui),
         colors = CreateFrame("Frame", nil, gui),
@@ -561,16 +594,22 @@ function ns.UI:Initialize()
         recapHint:SetJustifyH("LEFT")
         recapHint:SetText("Counts reset on login, /reload, or Reset Session. Also available via /lp recap.")
 
+        -- Scratch reused across rebuilds. BuildRecapBody returns a finished
+        -- string, so the arrays can be wiped and refilled instead of
+        -- reallocated each time the body refreshes.
+        local _lines, _parts = {}, {}
         local function BuildRecapBody()
             local s = addon:RecapGetSession()
-            local lines = {}
+            local lines = _lines
+            wipe(lines)
             lines[#lines + 1] = "|cFFFFD700Gold gained:|r  +" .. addon:RecapFormatMoney(s.copper)
 
             if s.itemTotal > 0 then
                 lines[#lines + 1] = "|cFFFFFFFFItems looted:|r  " .. s.itemTotal
-                local parts = {}
+                local parts = _parts
+                wipe(parts)
+                local qc = _G.ITEM_QUALITY_COLORS
                 for _, r in ipairs(addon:RecapRarityList()) do
-                    local qc = _G.ITEM_QUALITY_COLORS
                     local hex = (qc and qc[r.quality] and qc[r.quality].hex) or "|cFFFFFFFF"
                     parts[#parts + 1] = hex .. r.count .. " " .. string.lower(r.name) .. "|r"
                 end
@@ -605,6 +644,9 @@ function ns.UI:Initialize()
         end
 
         local function RefreshRecap()
+            -- Invalidate the OnUpdate header cache so the next tick re-syncs
+            -- the duration string after a manual refresh / enable / reset.
+            page._lastDur = nil
             if not LootProConfig.recapEnabled then
                 recapHeader:SetText("|cFFFF2222Session:|r |cFF888888disabled|r")
                 recapBody:SetText("|cFF888888Session recap is turned off. Enable it above to start tracking gold, items, currency, and notable drops.|r")
@@ -642,9 +684,15 @@ function ns.UI:Initialize()
             if self._throttle < 0.5 then return end
             self._throttle = 0
             if not LootProConfig.recapEnabled then return end
-            -- Duration ticks every refresh; the body is rebuilt only when the
-            -- session actually changed (version guard) to avoid string churn.
-            recapHeader:SetText("|cFFFF2222Session:|r " .. addon:RecapFormatDuration(addon:RecapElapsed()))
+            -- Duration ticks twice a second but only changes once a second, so
+            -- skip the concat + SetText when the formatted value is unchanged.
+            local dur = addon:RecapFormatDuration(addon:RecapElapsed())
+            if self._lastDur ~= dur then
+                self._lastDur = dur
+                recapHeader:SetText("|cFFFF2222Session:|r " .. dur)
+            end
+            -- The body is rebuilt only when the session actually changed
+            -- (version guard) to avoid string churn.
             local s = addon:RecapGetSession()
             if self._lastVer ~= s.version then
                 self._lastVer = s.version
@@ -894,7 +942,7 @@ function ns.UI:Initialize()
     -- ONE-TIME "WHAT'S NEW" POPUP
     -------------------------------------------------
     local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
-    wn:SetSize(470, 440)
+    wn:SetSize(470, 230)
     wn:SetPoint("CENTER")
     wn:SetFrameStrata("HIGH")
     wn:Hide()
@@ -914,23 +962,26 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "New loot-awareness tools were added. All new alerts are |cFFFFD700off by default|r -- turn on what you want in settings.",
+        "|cFFEBB706We have a Discord!|r",
         " ",
-        "- |cFFEBB706Session Recap|r: gold, items, currencies, and notable drops. Recap tab or /lp recap.",
-        "- |cFFEBB706Alerts tab|r: pop-up and sound when you loot items you are watching.",
-        "- |cFFEBB706Rare Drop Alerts|r: color, flash, and sound for high-rarity drops.",
-        "- |cFFEBB706Tooltip counts|r: see how many of an item you looted this session.",
-        "- |cFFEBB706Loot filters|r: hide trade goods, consumables, quest items, or recipes.",
-        "- |cFFEBB706Currency caps|r: a tag appears when a currency reaches its cap.",
-        "- |cFFEBB706Minimap clicks|r: set what left, right, and middle click do.",
+        "Loot Pro now has a community Discord for help, feedback, suggestions, and update news. Click \"Join our Discord!\" below (or the link in the top-left of the settings window) to copy the invite -- come say hi!",
     }, "\n"))
 
+    -- Primary button sits right-of-center so the Discord chip fits beside it
+    -- (screenshot parity with the sibling addons).
     local wnOpen = CreateStyledButton(wn, 150, 26, "Open Settings")
-    wnOpen:SetPoint("BOTTOM", wn, "BOTTOM", 0, 18)
+    wnOpen:SetPoint("BOTTOM", wn, "BOTTOM", 75, 18)
     wnOpen:SetScript("OnClick", function()
         wn:Hide()
         gui:Show()
     end)
+
+    -- "Join our Discord!" to the left of the primary button. Reusable popup
+    -- chip from Widgets so every future popup gets the identical button. Does
+    -- NOT mark the revision seen, so the player can copy the invite and keep
+    -- reading (the auto-show in LootPro_Core marks it on login).
+    local wnDiscord = U.CreateDiscordButton(wn)
+    wnDiscord:SetPoint("RIGHT", wnOpen, "LEFT", -10, 0)
 
     -- The revision is marked seen when the popup AUTO-shows on login (see
     -- LootPro_Core's PLAYER_LOGIN). We deliberately do NOT mark it on hide, so

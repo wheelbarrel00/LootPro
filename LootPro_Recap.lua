@@ -203,12 +203,32 @@ end
 
 -- Returns the rarity breakdown as a list of { quality, name, count } sorted
 -- high rarity first. Reused by both surfaces so ordering stays consistent.
+--
+-- The result is scratch: both callers (RecapPrint and the GUI's
+-- BuildRecapBody) consume it synchronously and never retain it, so we reuse
+-- one array plus a small pool of entry tables instead of reallocating the
+-- array, the entries, and the sort comparator on every rebuild. Invariant:
+-- do NOT hold the returned list across another RecapRarityList() call.
+local _rarityOut = {}
+local _rarityPool = {}
+local function ByQualityDesc(a, b) return a.quality > b.quality end
+
 function addon:RecapRarityList()
-    local out = {}
+    local out = _rarityOut
+    wipe(out)
     for q, count in pairs(session.byRarity) do
-        out[#out + 1] = { quality = q, name = RARITY_NAMES[q] or "?", count = count }
+        local n = #out + 1
+        local e = _rarityPool[n]
+        if not e then
+            e = {}
+            _rarityPool[n] = e
+        end
+        e.quality = q
+        e.name = RARITY_NAMES[q] or "?"
+        e.count = count
+        out[n] = e
     end
-    table.sort(out, function(a, b) return a.quality > b.quality end)
+    table.sort(out, ByQualityDesc)
     return out
 end
 
@@ -231,8 +251,8 @@ function addon:RecapPrint()
     if s.itemTotal > 0 then
         print(_format("  |cFFFFFFFFItems:|r %d looted", s.itemTotal))
         local parts = {}
+        local qc = _G.ITEM_QUALITY_COLORS
         for _, r in ipairs(self:RecapRarityList()) do
-            local qc = _G.ITEM_QUALITY_COLORS
             local hex = (qc and qc[r.quality] and qc[r.quality].hex) or "|cFFFFFFFF"
             parts[#parts + 1] = _format("%s%d %s|r", hex, r.count, r.name:lower())
         end

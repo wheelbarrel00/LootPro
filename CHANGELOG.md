@@ -5,6 +5,15 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-06-01
+
+### New Features
+- **Join our Discord!** — Loot Pro now has a community Discord for help, feedback, suggestions, and update news. A "Join our Discord!" link sits in the top-left of the settings window, and in the What's New popup. Since the game can't open a web browser, clicking it pops a pre-selected invite link you can copy with Ctrl+C. Come say hi!
+
+### Improvements
+- **Lower memory use while looting** — the watched-item check no longer builds a throwaway lowercased copy of each looted item's name when your watchlist is made of item IDs (the common case), trimming allocations on a hot path that runs on every self-loot.
+- **Lower memory use in Session Recap** — the rarity breakdown now reuses internal scratch tables instead of rebuilding them every time the recap is printed or the Recap tab refreshes.
+
 ## [2.5.2] - 2026-05-30
 
 ### Bug Fixes
