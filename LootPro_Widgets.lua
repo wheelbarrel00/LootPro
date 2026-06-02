@@ -115,12 +115,21 @@ function U.CreateFontDropdown(name, title, parent, configKey)
                 row.text:SetPoint("RIGHT", -6, 0)
                 row.text:SetJustifyH("LEFT")
                 row.text:SetWordWrap(false)
+                -- Bind the click handler once at creation. The row's target font
+                -- is stamped into row.fontName each rebuild and read via self here,
+                -- so opening the popup no longer rebuilds a closure per row.
+                row:SetScript("OnClick", function(self)
+                    LootProConfig[configKey].font = self.fontName
+                    popup:Hide()
+                    c.Refresh()
+                end)
                 rows[i] = row
             end
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
             row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -(i - 1) * ROW_H)
             row.text:SetText(fontName)
+            row.fontName = fontName
             -- Selected row gets the LootPro yellow; others are softer for contrast.
             if fontName == cfg.font then
                 row.text:SetTextColor(0.922, 0.718, 0.024, 1.0)
@@ -129,11 +138,6 @@ function U.CreateFontDropdown(name, title, parent, configKey)
             end
             local p = LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT
             SafeSetFont(row.text, p, 13, "")
-            row:SetScript("OnClick", function()
-                cfg.font = fontName
-                popup:Hide()
-                c.Refresh()
-            end)
             row:Show()
         end
         scrollChild:SetSize(math.max(1, scroll:GetWidth()), math.max(1, #fonts * ROW_H))
@@ -165,11 +169,16 @@ function U.CreateFontDropdown(name, title, parent, configKey)
     -- under the popup catches stray clicks, so we don't have to track which
     -- frame the user might tap next.
     popup:SetScript("OnShow", function(self)
-        self._closer = self._closer or CreateFrame("Button", nil, UIParent)
-        self._closer:SetAllPoints(UIParent)
-        self._closer:SetFrameStrata("FULLSCREEN")
-        self._closer:RegisterForClicks("AnyDown")
-        self._closer:SetScript("OnClick", function() self:Hide() end)
+        -- Build the click-catcher once. OnShow can fire many times over a
+        -- session; only the first needs to wire up the closer.
+        if not self._closer then
+            local closer = CreateFrame("Button", nil, UIParent)
+            closer:SetAllPoints(UIParent)
+            closer:SetFrameStrata("FULLSCREEN")
+            closer:RegisterForClicks("AnyDown")
+            closer:SetScript("OnClick", function() self:Hide() end)
+            self._closer = closer
+        end
         self._closer:Show()
     end)
     popup:SetScript("OnHide", function(self)
@@ -369,12 +378,16 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc)
             r, g, b = ColorPickerFrame.Content.ColorPicker:GetColorRGB() 
         end
         
-        if r and g and b then 
-            LootProConfig.colors[colorKey] = {r=r, g=g, b=b}
+        if r and g and b then
+            -- Mutate the stored color in place. swatchFunc fires on every drag
+            -- tick; consumers read the r/g/b fields fresh and hold no reference
+            -- to the table, so reusing it avoids a per-tick allocation.
+            local cc = LootProConfig.colors[colorKey]
+            cc.r, cc.g, cc.b = r, g, b
             Update()
-            if addon.isTesting and addon.PostTestMessages then 
-                addon:PostTestMessages() 
-            end 
+            if addon.isTesting and addon.PostTestMessages then
+                addon:PostTestMessages()
+            end
         end
     end
     
@@ -401,6 +414,38 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc)
         end
     end)
     
-    f.Refresh = Update 
+    f.Refresh = Update
     return f
+end
+
+-- Reusable "Join our Discord!" button for popups (What's New and any future
+-- dialog). A dark chip with the bundled Discord logo + #FF2222 accent text,
+-- white-on-hover; clicking opens the copyable-invite popup
+-- (addon:ShowDiscord). The caller anchors it -- this just builds and sizes
+-- it to its text. Keep this the single source of truth so every popup's
+-- Discord button stays identical: drop U.CreateDiscordButton(parent) into
+-- any new popup.
+function U.CreateDiscordButton(parent)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetHeight(24)
+
+    local bg = b:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.10, 0.10, 0.10, 0.95)
+
+    b.icon = b:CreateTexture(nil, "OVERLAY")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("LEFT", 10, 0)
+    b.icon:SetTexture("Interface\\AddOns\\LootPro\\Media\\Textures\\discord.tga")
+
+    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
+    b.text:SetText("Join our Discord!")
+    b.text:SetTextColor(1.0, 0.133, 0.133)            -- #FF2222
+    b:SetWidth(10 + 16 + 6 + b.text:GetStringWidth() + 12)
+
+    b:SetScript("OnClick", function() addon:ShowDiscord() end)
+    b:SetScript("OnEnter", function(s) s.text:SetTextColor(1, 1, 1) end)
+    b:SetScript("OnLeave", function(s) s.text:SetTextColor(1.0, 0.133, 0.133) end)
+    return b
 end

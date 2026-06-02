@@ -110,12 +110,18 @@ end
 function addon:WatchMatch(itemID, name)
     local wl = LootProConfig and LootProConfig.watchlist
     if not wl or not wl.items then return nil end
-    local lname = name and name:lower() or nil
+    -- Lowercase the looted name lazily. The common watchlist is all id-based
+    -- entries (mounts, recipes, BiS), which never reach the key branch, so we
+    -- avoid allocating a fresh lowercased string on every self-loot.
+    local lname
     for _, e in ipairs(wl.items) do
         if e.id and itemID and e.id == itemID then
             return e
-        elseif e.key and lname and lname:find(e.key, 1, true) then
-            return e
+        elseif e.key and name then
+            lname = lname or name:lower()
+            if lname:find(e.key, 1, true) then
+                return e
+            end
         end
     end
     return nil

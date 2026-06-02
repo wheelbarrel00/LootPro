@@ -2,10 +2,10 @@ local addonName, ns = ...
 
 -- Create the master addon frame and shared namespace
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.5.2"
+ns.addon.VERSION = "2.6.0"
 -- Bump when there is a new "What's New" popup to show existing users. The
 -- popup fires once per revision (tracked in LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 1
+ns.addon.WHATS_NEW = 2
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
@@ -15,6 +15,45 @@ ns.U = {}
 
 -- Expose to global environment
 _G[addonName] = ns.addon
+
+------------------------------------------------------------------------
+-- Community Discord
+-- WoW can't open a web browser, so the "Join our Discord!" link in the
+-- main window title bar pops a copyable invite instead. The edit box is
+-- pre-selected so the player just presses Ctrl+C.
+------------------------------------------------------------------------
+ns.addon.DISCORD_URL = "https://discord.gg/vm8K2WfQUE"
+
+StaticPopupDialogs["LOOTPRO_DISCORD"] = {
+    text = "Join the Loot Pro community for help, feedback, and updates.\n\nCopy the invite below (it's pre-selected — just press Ctrl+C):",
+    button1 = "Close",
+    hasEditBox = true,
+    editBoxWidth = 220,
+    OnShow = function(self)
+        local eb = self.editBox or (self.EditBox)
+        if eb then
+            eb:SetText(ns.addon.DISCORD_URL)
+            eb:HighlightText()
+            eb:SetFocus()
+            eb:SetScript("OnEscapePressed", function(box) box:GetParent():Hide() end)
+            -- Keep the link intact: re-fill + re-select if the player edits it.
+            eb:SetScript("OnTextChanged", function(box)
+                if box:GetText() ~= ns.addon.DISCORD_URL then
+                    box:SetText(ns.addon.DISCORD_URL)
+                    box:HighlightText()
+                end
+            end)
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+function ns.addon:ShowDiscord()
+    StaticPopup_Show("LOOTPRO_DISCORD")
+end
 
 -- L7: Register slash command at file-load time so it is usable during the
 -- loading screen rather than only after PLAYER_LOGIN.
