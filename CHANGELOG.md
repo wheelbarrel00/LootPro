@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-06-06
+
+### New Features
+- **Auto-sell gray items** — a new Vendor tab can automatically sell all your poor-quality (gray) junk whenever you open a merchant. Choose the sell speed, show an optional on-screen progress bar, and optionally print each item sold to chat. A "Sell Grays Now" button also sells on demand. The feature is **off by default**, so nothing changes unless you turn it on. Quest items and items with no sell value are never sold, and each bag slot is re-checked the instant before it sells, so an item that moved into a slot mid-sweep is never sold by mistake.
+
+### Improvements
+- **Lower memory use in the settings window** — the options widgets (sliders, color pickers, the font dropdown) now reuse shared backdrop definitions and avoid rebuilding strings and closures on every interaction, trimming allocations while you adjust settings.
+
 ## [2.6.0] - 2026-06-01
 
 ### New Features

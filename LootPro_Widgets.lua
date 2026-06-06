@@ -39,6 +39,35 @@ local function GetCfg(configKey)
     return LootProConfig[configKey]
 end
 
+-- Shared backdrop definitions, hoisted so each widget creation doesn't
+-- allocate a fresh backdrop table (+ insets subtable) on the fly. SetBackdrop
+-- copies the values out and keeps no reference to the table, so one shared
+-- table per style is safe to reuse across every widget that uses it. The four
+-- styles differ only in edge size / insets.
+local BACKDROP_DROPDOWN = {
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+local BACKDROP_POPUP = {
+    bgFile = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+}
+local BACKDROP_CYCLER = {
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+}
+local BACKDROP_COLORROW = {
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 14,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
 -- Font picker rendered as a dropdown. The closed button shows the current
 -- font name in its own typeface; clicking opens a scrollable popup where
 -- every entry is rendered in the font it would select, so the user previews
@@ -53,14 +82,7 @@ function U.CreateFontDropdown(name, title, parent, configKey)
     local c = CreateFrame("Button", name, parent, "BackdropTemplate")
     c:SetSize(180, 24)
     c:SetPoint("TOP", l, "BOTTOM", 0, -5)
-    c:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 12,
-        insets = {left=3, right=3, top=3, bottom=3}
-    })
+    c:SetBackdrop(BACKDROP_DROPDOWN)
     c:SetBackdropColor(0, 0, 0, 0.85)
     c:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
 
@@ -81,11 +103,7 @@ function U.CreateFontDropdown(name, title, parent, configKey)
     local ROW_H, MAX_VISIBLE = 22, 12
     local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
-    popup:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
+    popup:SetBackdrop(BACKDROP_POPUP)
     popup:SetBackdropColor(0.05, 0.05, 0.05, 0.98)
     popup:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
     popup:Hide()
@@ -125,19 +143,27 @@ function U.CreateFontDropdown(name, title, parent, configKey)
                 end)
                 rows[i] = row
             end
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
-            row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -(i - 1) * ROW_H)
-            row.text:SetText(fontName)
-            row.fontName = fontName
-            -- Selected row gets the LootPro yellow; others are softer for contrast.
+            -- Position, label, and font only change when this row's font
+            -- changes (the list is stable unless LSM registers a new font,
+            -- which reorders it). Skip the re-anchor + SetText + SetFont churn
+            -- on rows whose font is unchanged since the last open.
+            if row._builtFont ~= fontName then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
+                row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -(i - 1) * ROW_H)
+                row.text:SetText(fontName)
+                row.fontName = fontName
+                local p = LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT
+                SafeSetFont(row.text, p, 13, "")
+                row._builtFont = fontName
+            end
+            -- Selected row gets the LootPro yellow; others softer for contrast.
+            -- Cheap and can change every open, so it runs unconditionally.
             if fontName == cfg.font then
                 row.text:SetTextColor(0.922, 0.718, 0.024, 1.0)
             else
                 row.text:SetTextColor(0.90, 0.90, 0.90, 1.0)
             end
-            local p = LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT
-            SafeSetFont(row.text, p, 13, "")
             row:Show()
         end
         scrollChild:SetSize(math.max(1, scroll:GetWidth()), math.max(1, #fonts * ROW_H))
@@ -194,17 +220,10 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
     local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
     l:SetText(title)
     
-    local c = CreateFrame("Frame", name, parent, "BackdropTemplate") 
-    c:SetSize(140, 26) 
+    local c = CreateFrame("Frame", name, parent, "BackdropTemplate")
+    c:SetSize(140, 26)
     c:SetPoint("TOP", l, "BOTTOM", 0, -5)
-    c:SetBackdrop({ 
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
-        tile = true, 
-        tileSize = 16, 
-        edgeSize = 12, 
-        insets = {left=2, right=2, top=2, bottom=2} 
-    })
+    c:SetBackdrop(BACKDROP_CYCLER)
     c:SetBackdropColor(0,0,0,0.8)
     
     local t = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") 
@@ -287,23 +306,29 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
     s:SetValueStep(step) 
     s:SetObeyStepOnDrag(true)
     
-    _G[name.."Text"]:SetFontObject("GameFontNormal")
-    
-    s:SetScript("OnValueChanged", function(self, value) 
-        if not addon:IsReady() then return end 
-        local val = math.floor(value + 0.5) 
-        
-        if configKey == "root" then 
-            LootProConfig[settingKey] = val 
-        else 
-            LootProConfig[configKey][settingKey] = val 
-        end 
-        
-        _G[self:GetName().."Text"]:SetText(title .. ": " .. val .. ((settingKey == "fade") and "s" or "")) 
-        
-        if addon.UpdateAllVisuals then 
-            addon:UpdateAllVisuals() 
-        end 
+    -- Cache the value-text widget and the static label parts once, so the
+    -- per-drag-tick handler skips the _G[..] lookup and the title/suffix
+    -- rebuild; only `val` changes each tick.
+    local valText = _G[name.."Text"]
+    valText:SetFontObject("GameFontNormal")
+    local titlePrefix = title .. ": "
+    local fadeSuffix = (settingKey == "fade") and "s" or ""
+
+    s:SetScript("OnValueChanged", function(_, value)
+        if not addon:IsReady() then return end
+        local val = math.floor(value + 0.5)
+
+        if configKey == "root" then
+            LootProConfig[settingKey] = val
+        else
+            LootProConfig[configKey][settingKey] = val
+        end
+
+        valText:SetText(titlePrefix .. val .. fadeSuffix)
+
+        if addon.UpdateAllVisuals then
+            addon:UpdateAllVisuals()
+        end
     end)
     
     s.label = l 
@@ -342,14 +367,7 @@ end
 function U.CreateColorRow(name, parent, colorKey, previewFunc)
     local f = CreateFrame("Button", name, parent, "BackdropTemplate")
     f:SetSize(400, 28)
-    f:SetBackdrop({ 
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
-        tile = true, 
-        tileSize = 16, 
-        edgeSize = 14, 
-        insets = {left=3, right=3, top=3, bottom=3} 
-    })
+    f:SetBackdrop(BACKDROP_COLORROW)
     f:SetBackdropColor(0,0,0,0.5)
     
     local tex = f:CreateTexture(nil, "ARTWORK")
@@ -391,26 +409,35 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc)
         end
     end
     
+    -- Restore the saved color when the picker is cancelled. Hoisted out of
+    -- OnClick (it was a fresh closure per click, duplicated in each API
+    -- branch) and mutates the stored color in place to match the swatch path
+    -- above -- consumers read the r/g/b fields and keep no table reference.
+    local function CancelColor(prev)
+        prev = prev or ColorPickerFrame.previousValues
+        if not prev then return end
+        local cc = LootProConfig.colors[colorKey]
+        cc.r, cc.g, cc.b = prev.r, prev.g, prev.b
+        Update()
+    end
+
+    -- Reused across clicks: the modern API's info table and the legacy
+    -- previousValues table. Only r/g/b change per open; the funcs are stable.
+    local pickerInfo = { swatchFunc = OnColorChanged, cancelFunc = CancelColor }
+    local prevValues = {}
+
     f:SetScript("OnClick", function()
         local c = LootProConfig.colors[colorKey]
-        if ColorPickerFrame.SetupColorPickerAndShow then 
-            ColorPickerFrame:SetupColorPickerAndShow({ 
-                r = c.r, g = c.g, b = c.b, 
-                swatchFunc = OnColorChanged, 
-                cancelFunc = function(prev) 
-                    LootProConfig.colors[colorKey] = {r=prev.r, g=prev.g, b=prev.b}
-                    Update() 
-                end, 
-            })
-        else 
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            pickerInfo.r, pickerInfo.g, pickerInfo.b = c.r, c.g, c.b
+            ColorPickerFrame:SetupColorPickerAndShow(pickerInfo)
+        else
             ColorPickerFrame.func = OnColorChanged
-            ColorPickerFrame.cancelFunc = function(prev) 
-                LootProConfig.colors[colorKey] = {r=prev.r, g=prev.g, b=prev.b}
-                Update() 
-            end
-            ColorPickerFrame.previousValues = {r = c.r, g = c.g, b = c.b}
+            ColorPickerFrame.cancelFunc = CancelColor
+            prevValues.r, prevValues.g, prevValues.b = c.r, c.g, c.b
+            ColorPickerFrame.previousValues = prevValues
             ColorPickerFrame:SetColorRGB(c.r, c.g, c.b)
-            ColorPickerFrame:Show() 
+            ColorPickerFrame:Show()
         end
     end)
     

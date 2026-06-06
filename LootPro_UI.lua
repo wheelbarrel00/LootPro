@@ -91,8 +91,10 @@ local function CreateStyledButton(parent, width, height, label)
 end
 
 function ns.UI:Initialize()
+    -- Widened from 560 to 600 to fit the seventh tab (Vendor) on the row
+    -- without clipping. Pages are centered, so the extra width is just margin.
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
-    gui:SetSize(560, 680)
+    gui:SetSize(600, 680)
     gui:SetPoint("CENTER")
     gui:Hide()
 
@@ -153,7 +155,8 @@ function ns.UI:Initialize()
         notifications = CreateFrame("Frame", nil, gui),
         customization = CreateFrame("Frame", nil, gui),
         recap = CreateFrame("Frame", nil, gui),
-        watchlist = CreateFrame("Frame", nil, gui)
+        watchlist = CreateFrame("Frame", nil, gui),
+        vendor = CreateFrame("Frame", nil, gui)
     }
 
     for _, p in pairs(pages) do 
@@ -251,6 +254,7 @@ function ns.UI:Initialize()
     CreateTab("customization", "Custom")
     CreateTab("recap", "Recap")
     CreateTab("watchlist", "Alerts")
+    CreateTab("vendor", "Vendor")
 
     -- Thin red accent divider below the tab row.
     local divider = gui:CreateTexture(nil, "ARTWORK")
@@ -888,6 +892,109 @@ function ns.UI:Initialize()
     end
 
     -------------------------------------------------
+    -- VENDOR TAB (auto-sell gray items)
+    -------------------------------------------------
+    -- ElvUI "Vendor Grays" parity. The actual selling lives in
+    -- LootPro_Vendor.lua (MERCHANT_SHOW hook + paced seller); this tab only
+    -- edits the LootProConfig.vendorGrays knobs and offers an on-demand
+    -- "Sell Grays Now" button. Widgets re-sync from OnShow, matching the
+    -- Recap/Alerts tabs.
+    do
+        local page = pages.vendor
+
+        local enableCheck = CreateFrame("CheckButton", "LPRO_VendorEnable", page, "InterfaceOptionsCheckButtonTemplate")
+        enableCheck:SetPoint("TOPLEFT", 26, -6)
+        _G[enableCheck:GetName().."Text"]:SetText("Automatically sell gray items at vendors")
+        enableCheck:SetScript("OnClick", function(self)
+            LootProConfig.vendorGrays.enabled = self:GetChecked() and true or false
+        end)
+
+        local enableDesc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        enableDesc:SetPoint("TOPLEFT", enableCheck, "BOTTOMLEFT", 25, -2)
+        enableDesc:SetWidth(430)
+        enableDesc:SetJustifyH("LEFT")
+        enableDesc:SetText("When you open a merchant, every poor-quality (gray) item in your bags is sold automatically. Quest items and no-value items are never sold.")
+
+        -- Fractional Sell Interval slider (0.1-1.0s). U.CreateSlider rounds to
+        -- integers, so this tab builds a small dedicated slider instead.
+        local intervalLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        intervalLabel:SetText("Sell Interval")
+        intervalLabel:SetPoint("TOPLEFT", enableDesc, "BOTTOMLEFT", -25, -24)
+
+        local interval = CreateFrame("Slider", "LPRO_VendorInterval", page, "OptionsSliderTemplate")
+        interval:SetPoint("TOPLEFT", intervalLabel, "BOTTOMLEFT", 5, -18)
+        interval:SetWidth(220)
+        interval:SetMinMaxValues(0.1, 1.0)
+        interval:SetValueStep(0.1)
+        interval:SetObeyStepOnDrag(true)
+        _G["LPRO_VendorIntervalText"]:SetFontObject("GameFontNormal")
+        _G["LPRO_VendorIntervalLow"]:SetText("0.1s")
+        _G["LPRO_VendorIntervalHigh"]:SetText("1.0s")
+        interval:SetScript("OnValueChanged", function(self, value)
+            if not addon:IsReady() then return end
+            -- Snap to the nearest 0.1 (float steps can land on 0.30000004).
+            local val = math.floor(value * 10 + 0.5) / 10
+            LootProConfig.vendorGrays.interval = val
+            _G[self:GetName().."Text"]:SetText(string.format("Sell Interval: %.1fs", val))
+        end)
+
+        local intervalDesc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        intervalDesc:SetPoint("TOPLEFT", interval, "BOTTOMLEFT", -5, -12)
+        intervalDesc:SetWidth(430)
+        intervalDesc:SetJustifyH("LEFT")
+        intervalDesc:SetText("Delay between each item sold. A longer interval is gentler and makes the progress bar easier to follow.")
+
+        local progressCheck = CreateFrame("CheckButton", "LPRO_VendorProgress", page, "InterfaceOptionsCheckButtonTemplate")
+        progressCheck:SetPoint("TOPLEFT", intervalDesc, "BOTTOMLEFT", -25, -16)
+        _G[progressCheck:GetName().."Text"]:SetText("Show progress bar while selling")
+        progressCheck:SetScript("OnClick", function(self)
+            LootProConfig.vendorGrays.progressBar = self:GetChecked() and true or false
+        end)
+
+        local detailsCheck = CreateFrame("CheckButton", "LPRO_VendorDetails", page, "InterfaceOptionsCheckButtonTemplate")
+        detailsCheck:SetPoint("TOPLEFT", progressCheck, "BOTTOMLEFT", 0, -2)
+        _G[detailsCheck:GetName().."Text"]:SetText("Print each item sold to chat")
+        detailsCheck:SetScript("OnClick", function(self)
+            LootProConfig.vendorGrays.details = self:GetChecked() and true or false
+        end)
+
+        local sellNowBtn = CreateStyledButton(page, 150, 26, "Sell Grays Now")
+        sellNowBtn:SetPoint("TOPLEFT", detailsCheck, "BOTTOMLEFT", 4, -20)
+        sellNowBtn:SetScript("OnClick", function()
+            addon:VendorStart(true)
+        end)
+        -- Override the default styled-button hover so we can attach a tooltip;
+        -- the backdrop color change is replicated to keep the hover look.
+        sellNowBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.541, 0.024, 0.004, 1.0)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Sell Grays Now", 1, 1, 1)
+            if addon.VendorGrayValue then
+                GameTooltip:AddLine("Current vendor value: " .. addon:RecapFormatMoney(addon:VendorGrayValue()), 0.8, 0.8, 0.8)
+            end
+            GameTooltip:AddLine("Requires an open merchant window.", 0.6, 0.6, 0.6)
+            GameTooltip:Show()
+        end)
+        sellNowBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
+            GameTooltip:Hide()
+        end)
+
+        local vendorHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        vendorHint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 110)
+        vendorHint:SetWidth(430)
+        vendorHint:SetJustifyH("LEFT")
+        vendorHint:SetText("The merchant's own \"Sell All Junk\" button sells everything at once. This adds automatic, paced selling with an optional on-screen progress bar.")
+
+        page:SetScript("OnShow", function()
+            enableCheck:SetChecked(LootProConfig.vendorGrays.enabled)
+            progressCheck:SetChecked(LootProConfig.vendorGrays.progressBar)
+            detailsCheck:SetChecked(LootProConfig.vendorGrays.details)
+            interval:SetValue(LootProConfig.vendorGrays.interval or 0.2)
+        end)
+    end
+
+    -------------------------------------------------
     -- FIRST-TIME WELCOME POPUP
     -------------------------------------------------
     local welcome = CreateVersionedMainFrame("LootProWelcome", UIParent)
@@ -942,7 +1049,7 @@ function ns.UI:Initialize()
     -- ONE-TIME "WHAT'S NEW" POPUP
     -------------------------------------------------
     local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
-    wn:SetSize(470, 230)
+    wn:SetSize(470, 250)
     wn:SetPoint("CENTER")
     wn:SetFrameStrata("HIGH")
     wn:Hide()
@@ -962,9 +1069,11 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706We have a Discord!|r",
+        "|cFFEBB706New: Auto-Sell Gray Items|r",
         " ",
-        "Loot Pro now has a community Discord for help, feedback, suggestions, and update news. Click \"Join our Discord!\" below (or the link in the top-left of the settings window) to copy the invite -- come say hi!",
+        "A new Vendor tab can automatically sell your gray (junk) items whenever you open a merchant, with a configurable speed and an optional on-screen progress bar. It is OFF by default -- enable it on the Vendor tab if you want it.",
+        " ",
+        "Got an idea or found a bug? Join our Discord below -- feature requests and reports are always welcome!",
     }, "\n"))
 
     -- Primary button sits right-of-center so the Discord chip fits beside it

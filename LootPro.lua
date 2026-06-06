@@ -2,10 +2,10 @@ local addonName, ns = ...
 
 -- Create the master addon frame and shared namespace
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.6.0"
+ns.addon.VERSION = "2.7.0"
 -- Bump when there is a new "What's New" popup to show existing users. The
 -- popup fires once per revision (tracked in LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 2
+ns.addon.WHATS_NEW = 3
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
@@ -24,6 +24,20 @@ _G[addonName] = ns.addon
 ------------------------------------------------------------------------
 ns.addon.DISCORD_URL = "https://discord.gg/vm8K2WfQUE"
 
+-- Edit-box scripts for the copyable-invite popup, hoisted so the popup's
+-- OnShow doesn't build a fresh closure pair on every open. Both read
+-- DISCORD_URL at call time, so they carry no per-show state.
+local function DiscordBox_OnEscape(box)
+    box:GetParent():Hide()
+end
+local function DiscordBox_OnTextChanged(box)
+    -- Keep the link intact: re-fill + re-select if the player edits it.
+    if box:GetText() ~= ns.addon.DISCORD_URL then
+        box:SetText(ns.addon.DISCORD_URL)
+        box:HighlightText()
+    end
+end
+
 StaticPopupDialogs["LOOTPRO_DISCORD"] = {
     text = "Join the Loot Pro community for help, feedback, and updates.\n\nCopy the invite below (it's pre-selected — just press Ctrl+C):",
     button1 = "Close",
@@ -35,14 +49,8 @@ StaticPopupDialogs["LOOTPRO_DISCORD"] = {
             eb:SetText(ns.addon.DISCORD_URL)
             eb:HighlightText()
             eb:SetFocus()
-            eb:SetScript("OnEscapePressed", function(box) box:GetParent():Hide() end)
-            -- Keep the link intact: re-fill + re-select if the player edits it.
-            eb:SetScript("OnTextChanged", function(box)
-                if box:GetText() ~= ns.addon.DISCORD_URL then
-                    box:SetText(ns.addon.DISCORD_URL)
-                    box:HighlightText()
-                end
-            end)
+            eb:SetScript("OnEscapePressed", DiscordBox_OnEscape)
+            eb:SetScript("OnTextChanged", DiscordBox_OnTextChanged)
         end
     end,
     timeout = 0,

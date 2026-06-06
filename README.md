@@ -73,6 +73,10 @@ Item tooltips can display how many of that item you have looted during the curre
 
 When a currency reaches its maximum or weekly cap, its line in the loot frame is tagged so you know further gains are going to waste.
 
+### Auto-Sell Gray Items
+
+A dedicated Vendor tab can automatically sell your poor-quality (gray) junk whenever you open a merchant, with a configurable sell speed and an optional on-screen progress bar. A "Sell Grays Now" button sells on demand, and an optional chat report lists each item sold. Off by default; quest items and items with no sell value are never sold, and each bag slot is re-verified the moment before it sells so a misplaced item is never vendored by mistake.
+
 ### Movable Frames and Test Mode
 
 Unlock Windows mode makes both display frames draggable so you can reposition them anywhere on screen. Test Mode freezes fading and displays sample messages for every category so you can preview your color and layout choices without leaving town.
@@ -112,7 +116,7 @@ A LibDBIcon minimap button provides one-click access to the settings panel. Comp
 | `/lp recap` | Print the current session recap (gold, items, currencies, notable drops) |
 | `/lp recap reset` | Start a fresh recap session |
 
-The config UI has six tabs: Layout, Colors, Notifs, Custom, Recap, and Alerts. A Reset to Defaults button at the bottom of every tab restores all settings to their original values.
+The config UI has seven tabs: Layout, Colors, Notifs, Custom, Recap, Alerts, and Vendor. A Reset to Defaults button at the bottom of every tab restores all settings to their original values.
 
 ---
 

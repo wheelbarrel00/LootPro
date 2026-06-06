@@ -31,6 +31,11 @@ addon.DEFAULTS = {
     -- All effects off by default; threshold pre-set to Legendary for when the
     -- user enables them.
     rareAlert = { threshold = 5, color = false, flash = false, sound = false },
+    -- Auto-vendor gray (poor) items at a merchant, ElvUI-style. Sells one item
+    -- per `interval` seconds so the optional progress bar is meaningful;
+    -- `details` prints each item + price to chat. Feature is opt-in (off by
+    -- default); the progress bar defaults on so enabling it gives feedback.
+    vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
     loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 }, -- Resized to 200x200
     combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 }, -- Resized to 200x200
     colors = {
@@ -64,6 +69,38 @@ function addon:DeepCopy(t)
     return res
 end
 
+-- Backfill any keys present in DEFAULTS but missing from an existing saved
+-- config, recursing into subtables. Hoisted to file scope -- it was a local
+-- closure rebuilt on every InitSettings call and captures no upvalues.
+local function validate(src, dst)
+    for k, v in pairs(src) do
+        if type(v) == "table" then
+            if not dst[k] then dst[k] = {} end
+            validate(v, dst[k])
+        else
+            if dst[k] == nil then dst[k] = v end
+        end
+    end
+end
+
+-- L3: Prune keys that no longer exist in the schema. Only prunes inside
+-- tables defined by DEFAULTS (e.g. colors, notifications, loot, combat,
+-- minimap); user-side tables outside of DEFAULTS are never touched.
+--
+-- An EMPTY table in DEFAULTS (e.g. watchlist.items) denotes free-form user
+-- data: we leave its contents intact rather than deleting every entry as an
+-- "unknown key". Without this guard the watchlist would be wiped on every
+-- load. Hoisted to file scope alongside validate (also captures no upvalues).
+local function prune(src, dst)
+    for k, v in pairs(dst) do
+        if src[k] == nil then
+            dst[k] = nil
+        elseif type(v) == "table" and type(src[k]) == "table" and next(src[k]) ~= nil then
+            prune(src[k], v)
+        end
+    end
+end
+
 function addon:InitSettings()
     if not LootProConfig then
         LootProConfig = addon:DeepCopy(addon.DEFAULTS)
@@ -74,35 +111,7 @@ function addon:InitSettings()
         LootProConfig.whatsNewSeen = addon.WHATS_NEW
 
     else
-        local function validate(src, dst)
-            for k, v in pairs(src) do
-                if type(v) == "table" then
-                    if not dst[k] then dst[k] = {} end
-                    validate(v, dst[k])
-                else
-                    if dst[k] == nil then dst[k] = v end
-                end
-            end
-        end
         validate(addon.DEFAULTS, LootProConfig)
-
-        -- L3: Prune keys that no longer exist in the schema. Only prunes inside
-        -- tables defined by DEFAULTS (e.g. colors, notifications, loot, combat,
-        -- minimap); user-side tables outside of DEFAULTS are never touched.
-        --
-        -- An EMPTY table in DEFAULTS (e.g. watchlist.items) denotes free-form
-        -- user data: we leave its contents intact rather than deleting every
-        -- entry as an "unknown key". Without this guard the watchlist would be
-        -- wiped on every load.
-        local function prune(src, dst)
-            for k, v in pairs(dst) do
-                if src[k] == nil then
-                    dst[k] = nil
-                elseif type(v) == "table" and type(src[k]) == "table" and next(src[k]) ~= nil then
-                    prune(src[k], v)
-                end
-            end
-        end
         prune(addon.DEFAULTS, LootProConfig)
     end
 end
