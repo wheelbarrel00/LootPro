@@ -25,6 +25,17 @@ local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
 -- CHAT_MSG payload. nil on pre-12.0 clients (Classic/BCC), where it is unused.
 local _issecret = issecretvalue
 
+-- Suffix appended to a loot line when the dropped gear's transmog appearance
+-- is uncollected (feature: "Mark new transmog appearances"). Kept short so it
+-- doesn't overflow a narrow loot frame; color is the appearance/cyan accent.
+local NEW_APPEARANCE_TAG = " |cff66ccff(new look)|r"
+
+-- #4 fade-scale: each extra line on a readout adds this many seconds of
+-- visibility (so an AoE burst lingers long enough to read), capped so a huge
+-- pull can't pin lines on screen forever. The cap matches the fade slider max.
+local FADE_SCALE_PER_LINE = 0.6
+local FADE_SCALE_MAX = 30
+
 -- M4: Report font load failures once per bad path so users aren't left with a
 -- silently-broken readout. Warnings are rate-limited to one print per path.
 -- L-2: Hard-cap the cache at 50 entries so a pathological font list can't
@@ -305,6 +316,31 @@ local function IsRecentCurrency(name)
     return true
 end
 
+-- Exact-duplicate display suppression. Blizzard occasionally dispatches the
+-- same CHAT_MSG_LOOT / CHAT_MSG_CURRENCY twice (seen on delve coffer keys and
+-- the "...manifest upon delve completion" currency), producing two identical
+-- feed lines. The name-based dedup above only covers loot<->currency pairs and
+-- currency<->currency repeats, so a doubled LOOT line slips through. We catch
+-- it here on the FULLY-RENDERED string: if a line matches one shown within
+-- DISPLAY_DEDUP_WINDOW it's dropped. Because the key includes the bag count,
+-- legitimately looting another of the same item (count, and thus the line,
+-- differs) is never suppressed. Fixed ring -> no table growth, no sweeper.
+local DISPLAY_DEDUP_WINDOW = 0.3
+local DISP_RING = 8
+local _dispStr, _dispTime, _dispIdx = {}, {}, 0
+local function IsDuplicateDisplay(line)
+    local now = _GetTime()
+    for i = 1, DISP_RING do
+        if _dispStr[i] == line and (now - _dispTime[i]) <= DISPLAY_DEDUP_WINDOW then
+            return true
+        end
+    end
+    _dispIdx = (_dispIdx % DISP_RING) + 1
+    _dispStr[_dispIdx] = line
+    _dispTime[_dispIdx] = now
+    return false
+end
+
 -- H-1: Periodic sweeper. Lazy expiry-on-read leaves entries lingering
 -- forever for items that are looted once and never seen again. Over a
 -- multi-hour farming session this leaks 5-25 KB. The sweeper walks both
@@ -363,30 +399,33 @@ local function PostCurrency(p)
     if IsRecentLoot(p.currencyName) then return end
     local display = addon.lootFrame.display
     local cap = p.capStr or ""
+    local line
     if p.noCount then
-        display:AddMessage(p.iconStr .. p.text .. cap, p.cR, p.cG, p.cB)
+        line = p.iconStr .. p.text .. cap
     elseif p.cleanMode then
-        display:AddMessage(
-            "+" .. p.amt .. " " .. p.iconStr .. p.text .. CountSuffix(p.total) .. cap,
-            p.cR, p.cG, p.cB)
+        line = "+" .. p.amt .. " " .. p.iconStr .. p.text .. CountSuffix(p.total) .. cap
     else
-        display:AddMessage(
-            p.iconStr .. p.text .. CountSuffix(p.total) .. cap,
-            p.cR, p.cG, p.cB)
+        line = p.iconStr .. p.text .. CountSuffix(p.total) .. cap
     end
+    if IsDuplicateDisplay(line) then return end
+    display:AddMessage(line, p.cR, p.cG, p.cB)
 end
 
 -- Hoisted: posts the loot line. Synchronous use only -- the deferred
 -- count path (Retail uncached items) goes through PostDeferredLoot.
 local function ShowLoot(p, countStr)
     local display = addon.lootFrame.display
+    -- p.marker is "" for normal loot, or the new-appearance tag. Always set by
+    -- the caller, so a stale value can't leak across pooled-slot reuse.
+    local marker = p.marker or ""
+    local line
     if p.noCount then
-        display:AddMessage(p.iconStr .. p.cleaned, p.cR, p.cG, p.cB)
+        line = p.iconStr .. p.cleaned .. marker
     else
-        display:AddMessage(
-            "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr,
-            p.cR, p.cG, p.cB)
+        line = "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr .. marker
     end
+    if IsDuplicateDisplay(line) then return end
+    display:AddMessage(line, p.cR, p.cG, p.cB)
 end
 
 -- Hoisted: deferred loot post for Retail uncached items (0.1s timer).
@@ -446,7 +485,40 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     f.display:SetFadeDuration(1)
     f.display:SetJustifyH("CENTER")
     f.display:SetJustifyV("TOP")
-    
+
+    -- #4 hover-pause: freeze the per-line fade while the cursor is over the
+    -- readout so a busy feed can be read, then resume on leave. SetFading is
+    -- retroactive, so this affects the lines already shown. Whether these even
+    -- fire depends on the frame's mouse state, applied per lock state in
+    -- UpdateAllVisuals (motion-only when hover-pause is on, so clicks still
+    -- pass through). The guard keeps it a no-op when the option is off.
+    f:SetScript("OnEnter", function(self)
+        if LootProConfig and LootProConfig.hoverPause then
+            self.display:SetFading(false)
+        end
+    end)
+    f:SetScript("OnLeave", function(self)
+        if LootProConfig and LootProConfig.hoverPause then
+            -- Test Mode owns fading while previewing; don't fight it on leave.
+            self.display:SetFading(not addon.isTesting)
+        end
+    end)
+
+    -- #4 fade-scale: when many lines are present, lengthen how long each stays
+    -- visible so an AoE burst lingers. SetTimeVisible is retroactive (affects
+    -- shown lines too) and this self-regulates -- as lines fade out,
+    -- GetNumMessages drops and the next add eases the time back toward the base
+    -- fade. Allocates nothing; only runs on an actual message add when enabled.
+    hooksecurefunc(f.display, "AddMessage", function(disp)
+        if not (LootProConfig and LootProConfig.fadeScale) then return end
+        local s = LootProConfig[configKey]
+        local base = (s and s.fade) or 6
+        local n = disp:GetNumMessages() or 1
+        local t = base + (n - 1) * FADE_SCALE_PER_LINE
+        if t > FADE_SCALE_MAX then t = FADE_SCALE_MAX end
+        disp:SetTimeVisible(t)
+    end)
+
     return f
 end
 
@@ -567,16 +639,27 @@ function addon:UpdateAllVisuals()
             f._backdropApplied = true
         end
         
-        if LootProConfig.locked then 
+        if LootProConfig.locked then
             f:SetBackdropColor(0,0,0,0)
             f:SetBackdropBorderColor(0,0,0,0)
-            f:EnableMouse(false)
+            -- #4: with hover-pause on, take MOTION-only mouse so OnEnter/OnLeave
+            -- fire while clicks still pass through to whatever's behind the
+            -- (invisible, locked) readout. Otherwise no mouse at all -- the
+            -- original click-through behavior. SetMouse*Enabled is retail-era;
+            -- on clients without it we fall back to fully disabled.
+            if LootProConfig.hoverPause and f.SetMouseMotionEnabled and f.SetMouseClickEnabled then
+                f:SetMouseClickEnabled(false)
+                f:SetMouseMotionEnabled(true)
+            else
+                f:EnableMouse(false)
+            end
             f.label:Hide()
-        else 
+        else
             f:SetBackdropColor(0,0,0,0.7)
             f:SetBackdropBorderColor(1,1,1,1)
             f:EnableMouse(true)
-            f.label:Show() 
+            if f.SetMouseClickEnabled then f:SetMouseClickEnabled(true) end
+            f.label:Show()
         end
         
         local fontPath = LSM and LSM:Fetch("font", s.font) or DEFAULT_FONT
@@ -1064,6 +1147,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
             -- Recap + watchlist act on YOUR loot only (never other group
             -- members'), independent of the display toggles below.
+            -- new-appearance verdict, resolved once here and appended to the
+            -- visible line below. Cheap no-op when the feature is off, on BCC,
+            -- or for non-gear (the class gate short-circuits inside).
+            local isNewApp = false
+            -- notable-item verdict (#2): mounts/pets/toys/tertiary/socket gear.
+            -- Computed only when the option is on; reused by the rare alert
+            -- below and the line coloring further down.
+            local isNotable = false
             if isSelf then
                 -- Recap: count everything you picked up, regardless of the
                 -- minimum-quality display filter. Skipped entirely (no
@@ -1080,8 +1171,21 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 -- Rare-drop alert (#3 sound + #4 frame flash). Fires when the
                 -- looted item meets the rare threshold, independent of the
                 -- display toggles. Cheap no-op below threshold / when off.
+                -- #2: also flag notable items (mount/pet/toy/tertiary/socket)
+                -- so they alert even below the threshold. Gated on the toggle
+                -- so the GetItemStats lookup never runs unless asked for.
+                local ra = LootProConfig.rareAlert
+                if ra and ra.notable and self.IsNotableItem then
+                    isNotable = self:IsNotableItem(itemID, link)
+                end
                 if self.RareOnLoot then
-                    self:RareOnLoot(q)
+                    self:RareOnLoot(q, isNotable)
+                end
+                -- Flag gear carrying an appearance you don't own yet. Gated on
+                -- the toggle so non-collectors pay nothing; IsNewAppearance is
+                -- the BCC/feature-off no-op when the module reported one.
+                if LootProConfig.newAppearance and self.IsNewAppearance then
+                    isNewApp = self:IsNewAppearance(link)
                 end
             end
 
@@ -1105,10 +1209,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 -- configured loot color, so an epic stands out among greens.
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
-                if ra and ra.color and q >= ra.threshold then
+                if ra and ra.color and (q >= ra.threshold or isNotable) then
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
+                -- New-appearance marker: "" unless this is uncollected gear.
+                local newMarker = isNewApp and NEW_APPEARANCE_TAG or ""
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
@@ -1125,6 +1231,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.iconStr = GetIconString(msg); p.cleaned = cleaned
                             p.amt = amt; p.noCount = noCount
                             p.cR, p.cG, p.cB = lr, lg, lb
+                            p.marker = newMarker
                             ShowLoot(p, CountSuffix(cnt))
                         else
                             -- H-2: rotate to next loot-pool slot for the 0.1s defer.
@@ -1136,6 +1243,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.noCount = noCount
                             lp.itemID  = itemID
                             lp.cR, lp.cG, lp.cB = lr, lg, lb
+                            lp.marker  = newMarker
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
@@ -1145,16 +1253,21 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
+                        p.marker = newMarker
                         ShowLoot(p, CountSuffix(cnt))
                     else
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
+                        p.marker = newMarker
                         ShowLoot(p, "")
                     end
                 else
-                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, lr, lg, lb)
+                    local line = GetIconString(msg) .. msg .. newMarker
+                    if not IsDuplicateDisplay(line) then
+                        self.lootFrame.display:AddMessage(line, lr, lg, lb)
+                    end
                 end
             end
         end

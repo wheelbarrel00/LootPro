@@ -11,7 +11,13 @@ addon.DEFAULTS = {
     showLootCounts = true,
     recapEnabled = false, -- Session recap tally (off by default; opt in to track loot)
     tooltipLoots = true, -- Show "Looted Nx this session" on item tooltips (needs recap on)
+    tooltipSell = false, -- Show vendor sell price (and bag stack total) on item tooltips
     currencyCap = true, -- Flag a currency line when it hits its max / weekly cap (#8)
+    -- #4: readout fade behavior. hoverPause freezes fading while the cursor is
+    -- over a readout (motion-only mouse, clicks pass through); fadeScale keeps a
+    -- busy feed up longer by lengthening visibility as more lines show. Both off.
+    hoverPause = false,
+    fadeScale = false,
     -- Per-class display filters for the loot feed (false = show). These hide
     -- matching items from the readout only; the recap still tallies them.
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false },
@@ -30,7 +36,13 @@ addon.DEFAULTS = {
     -- color its loot line by quality, flash the loot frame, and play a sound.
     -- All effects off by default; threshold pre-set to Legendary for when the
     -- user enables them.
-    rareAlert = { threshold = 5, color = false, flash = false, sound = false },
+    -- `notable` (off by default) also fires the rare-alert effects for mounts,
+    -- pets, toys, and gear with a tertiary stat or socket, even below threshold.
+    rareAlert = { threshold = 5, color = false, flash = false, sound = false, notable = false },
+    -- Tag looted gear whose transmog appearance you haven't collected from any
+    -- source with a "(new look)" marker in the loot feed. Retail-only (the
+    -- transmog API doesn't exist on BCC); off by default. See LootPro_Transmog.
+    newAppearance = false,
     -- Auto-vendor gray (poor) items at a merchant, ElvUI-style. Sells one item
     -- per `interval` seconds so the optional progress bar is meaningful;
     -- `details` prints each item + price to chat. Feature is opt-in (off by

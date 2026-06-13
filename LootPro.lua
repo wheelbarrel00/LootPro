@@ -2,10 +2,10 @@ local addonName, ns = ...
 
 -- Create the master addon frame and shared namespace
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.7.0"
+ns.addon.VERSION = "2.8.0"
 -- Bump when there is a new "What's New" popup to show existing users. The
 -- popup fires once per revision (tracked in LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 3
+ns.addon.WHATS_NEW = 4
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC

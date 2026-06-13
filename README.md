@@ -14,14 +14,14 @@
   <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.5-8B0000?style=flat-square" alt="WoW BCC" />
   <img src="https://img.shields.io/badge/Interface-120005-333333?style=flat-square" alt="Interface" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Memory-~300KB-333333?style=flat-square" alt="Memory" />
+  <img src="https://img.shields.io/badge/Memory-~350KB-333333?style=flat-square" alt="Memory" />
 </p>
 
 ---
 
 ## Overview
 
-Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 300 KB of memory, requires no external dependencies, and supports both WoW Retail (Midnight 12.0) and BCC Anniversary (2.5.5).
+Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports both WoW Retail (Midnight 12.0) and BCC Anniversary (2.5.5).
 
 Open with **`/lp`** or the minimap button.
 
@@ -84,6 +84,22 @@ Unlock Windows mode makes both display frames draggable so you can reposition th
 ### Minimap Button
 
 A LibDBIcon minimap button provides one-click access to the settings panel. Compatible with Titan Panel, ChocolateBar, ElvUI, and other broker display addons. The button can be hidden from the Customization tab, and its left, right, and middle clicks are each configurable — open settings, print the session recap, toggle window lock, or do nothing.
+
+### New-Appearance Marker
+
+When you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)**, so a fresh appearance is never vendored or disenchanted by mistake. Off by default; enable it on the Alerts tab. Retail only, since BCC Anniversary has no transmog system.
+
+### Notable-Item Alerts
+
+The rare-drop alert can optionally fire for mounts, pets, and toys even when they fall below your quality threshold, so an uncommon mount or a blue battle pet still gets your configured flash, sound, and line coloring. Off by default; enable "Also alert on notable items" on the Alerts tab.
+
+### Vendor Sell Price in Tooltips
+
+Item tooltips can show the vendor sell price, plus the full stack value when you hover a stack in your bags — handy for deciding what to keep or sell. Off by default; enable it on the Vendor tab. Quest items and items with no sell value show nothing.
+
+### Loot Feed Quality-of-Life
+
+Two optional behaviors on the Customization tab: pause fading while your cursor is over a readout so a busy feed can be read, and keep busy feeds visible longer by extending how long lines stay up during a big pull. Both off by default.
 
 ---
 

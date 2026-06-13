@@ -5,6 +5,20 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-06-12
+
+### New Features
+- **New-appearance marker** — when you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)** so you never vendor or disenchant a fresh appearance by mistake. Off by default; enable it on the Alerts tab. Retail only (Burning Crusade Classic has no transmog system).
+- **Notable-item alerts** — the rare-drop alert can now also fire for **mounts, pets, and toys** even when they are below your quality threshold, so a blue battle pet or an uncommon mount still gets your configured flash, sound, and line coloring. Off by default; enable "Also alert on notable items" on the Alerts tab.
+- **Vendor sell price in tooltips** — item tooltips can show the vendor **sell price**, plus the **full stack value** when you hover a stack in your bags. Off by default; enable it on the Vendor tab. Quest items and items with no sell value show nothing.
+- **Loot feed polish** — two optional behaviors on the Customization tab: **pause fading** while your cursor is over a readout so a busy feed can be read, and **keep busy feeds up longer** by extending how long lines stay visible during a big pull. Both off by default.
+
+### Bug Fixes
+- **Duplicate loot/currency lines** — some events (notably delve coffer keys and the "...manifest upon delve completion" currency) are dispatched twice by the game, producing two identical feed lines. Identical lines shown back-to-back are now collapsed to one. The check is count-aware, so legitimately looting another of the same item (a different running count) still shows normally.
+
+### Notes
+- Every new option above is off by default and built to add no ongoing memory churn; idle memory use is unchanged.
+
 ## [2.7.0] - 2026-06-06
 
 ### New Features

@@ -551,10 +551,42 @@ function ns.UI:Initialize()
 
     local syncCustom = CreateStyledButton(pages.customization, 220, 25, "Sync Combat Fonts to Loot")
     syncCustom:SetPoint("BOTTOM", 0, 80)
-    syncCustom:SetScript("OnClick", function() 
+    syncCustom:SetScript("OnClick", function()
         LootProConfig.loot.font = LootProConfig.combat.font; LootProConfig.loot.outline = LootProConfig.combat.outline
-        pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals() 
+        pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals()
     end)
+
+    -- #4: readout fade-behavior toggles. Anchored above the Sync button (a
+    -- fixed bottom reference) so they can't collide with the window's Reset
+    -- button. UpdateAllVisuals re-applies the mouse state for hover-pause.
+    local fadeScaleCheck = CreateFrame("CheckButton", "LPRO_FadeScale", pages.customization, "InterfaceOptionsCheckButtonTemplate")
+    fadeScaleCheck:SetPoint("BOTTOMLEFT", syncCustom, "TOPLEFT", 0, 16)
+    _G[fadeScaleCheck:GetName().."Text"]:SetText("Keep busy feeds up longer")
+    fadeScaleCheck:SetChecked(LootProConfig.fadeScale)
+    fadeScaleCheck:SetScript("OnClick", function(self) LootProConfig.fadeScale = self:GetChecked() and true or false end)
+    fadeScaleCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Keep busy feeds up longer", 1, 1, 1)
+        GameTooltip:AddLine("Lengthens how long lines stay visible when many arrive at once (e.g. an AoE pull), easing back to your fade setting as they clear.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    fadeScaleCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local hoverPauseCheck = CreateFrame("CheckButton", "LPRO_HoverPause", pages.customization, "InterfaceOptionsCheckButtonTemplate")
+    hoverPauseCheck:SetPoint("BOTTOMLEFT", fadeScaleCheck, "TOPLEFT", 0, 2)
+    _G[hoverPauseCheck:GetName().."Text"]:SetText("Pause fade while hovering the feed")
+    hoverPauseCheck:SetChecked(LootProConfig.hoverPause)
+    hoverPauseCheck:SetScript("OnClick", function(self)
+        LootProConfig.hoverPause = self:GetChecked() and true or false
+        addon:UpdateAllVisuals()
+    end)
+    hoverPauseCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Pause fade while hovering the feed", 1, 1, 1)
+        GameTooltip:AddLine("Hovering a readout freezes its fade so you can read it. Clicks still pass through to whatever is behind it.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    hoverPauseCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -------------------------------------------------
     -- SESSION RECAP TAB
@@ -750,7 +782,9 @@ function ns.UI:Initialize()
         -- Scrollable list of current entries.
         local scroll = CreateFrame("ScrollFrame", "LPRO_WatchScroll", page, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 30, -92)
-        scroll:SetSize(430, 184)
+        -- Height tuned so the two-line hint below sits just above the Rare Drop
+        -- Alerts divider at -296 (small gap, not on the line; list still scrolls).
+        scroll:SetSize(430, 162)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(410, 1)
         scroll:SetScrollChild(content)
@@ -862,6 +896,27 @@ function ns.UI:Initialize()
             LootProConfig.rareAlert.sound = self:GetChecked() and true or false
         end)
 
+        -- #2: extend the rare alert to collection-worthy / specially-statted
+        -- loot the quality threshold alone would miss. Triggers whichever of
+        -- the color/flash/sound effects above are enabled. Cross-client (mount/
+        -- pet/socket work on BCC; toys/tertiary are retail, guarded in-engine).
+        local notableCheck = CreateFrame("CheckButton", "LPRO_RareNotable", page, "InterfaceOptionsCheckButtonTemplate")
+        notableCheck:SetPoint("TOPLEFT", rareSound, "BOTTOMLEFT", 0, -2)
+        _G[notableCheck:GetName().."Text"]:SetText("Also alert on notable items")
+        notableCheck:SetScript("OnClick", function(self)
+            LootProConfig.rareAlert.notable = self:GetChecked() and true or false
+        end)
+        -- Detail lives in a hover tooltip rather than an inline hint: the Alerts
+        -- tab is vertically full, and stacked wrapping hints overran the bottom
+        -- "Reset to Defaults" button.
+        notableCheck:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Notable items", 1, 1, 1)
+            GameTooltip:AddLine("Mounts, pets, and toys trigger the alert even below the quality threshold.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        notableCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
         local rareQualList = {
             { val = 2, lbl = "Uncommon+" },
             { val = 3, lbl = "Rare+" },
@@ -880,12 +935,34 @@ function ns.UI:Initialize()
             if addon.RareTest then addon:RareTest() end
         end)
 
+        -- ---- New transmog appearance marker ----
+        -- Retail-only: BCC has no transmog system, so the toggle is hidden
+        -- there entirely (the config key still exists but the feature no-ops).
+        local newAppCheck
+        if addon.IS_RETAIL then
+            newAppCheck = CreateFrame("CheckButton", "LPRO_NewAppearance", page, "InterfaceOptionsCheckButtonTemplate")
+            newAppCheck:SetPoint("TOPLEFT", notableCheck, "BOTTOMLEFT", 0, -2)
+            _G[newAppCheck:GetName().."Text"]:SetText("Mark new transmog appearances")
+            newAppCheck:SetScript("OnClick", function(self)
+                LootProConfig.newAppearance = self:GetChecked() and true or false
+            end)
+            newAppCheck:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("New transmog appearances", 1, 1, 1)
+                GameTooltip:AddLine("Adds a (new look) tag in the loot feed to gear whose appearance you haven't collected from any source yet.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            newAppCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+
         page:SetScript("OnShow", function()
             enableCheck:SetChecked(LootProConfig.watchlist.enabled)
             soundCheck:SetChecked(LootProConfig.watchlist.sound)
             rareColor:SetChecked(LootProConfig.rareAlert.color)
             rareFlash:SetChecked(LootProConfig.rareAlert.flash)
             rareSound:SetChecked(LootProConfig.rareAlert.sound)
+            notableCheck:SetChecked(LootProConfig.rareAlert.notable)
+            if newAppCheck then newAppCheck:SetChecked(LootProConfig.newAppearance) end
             rareThresh:Refresh()
             RefreshList()
         end)
@@ -980,6 +1057,21 @@ function ns.UI:Initialize()
             GameTooltip:Hide()
         end)
 
+        -- #3: vendor sell price on item tooltips. Lives here (not auto-sell,
+        -- but vendor-value related). The line plumbing is in LootPro_Tooltip.
+        local sellTipCheck = CreateFrame("CheckButton", "LPRO_TooltipSell", page, "InterfaceOptionsCheckButtonTemplate")
+        sellTipCheck:SetPoint("TOPLEFT", sellNowBtn, "BOTTOMLEFT", -4, -18)
+        _G[sellTipCheck:GetName().."Text"]:SetText("Show vendor sell price on item tooltips")
+        sellTipCheck:SetScript("OnClick", function(self)
+            LootProConfig.tooltipSell = self:GetChecked() and true or false
+        end)
+
+        local sellTipDesc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        sellTipDesc:SetPoint("TOPLEFT", sellTipCheck, "BOTTOMLEFT", 25, -2)
+        sellTipDesc:SetWidth(430)
+        sellTipDesc:SetJustifyH("LEFT")
+        sellTipDesc:SetText("Adds the sell price to item tooltips, plus the full stack value when you hover a stack in your bags.")
+
         local vendorHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         vendorHint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 110)
         vendorHint:SetWidth(430)
@@ -990,6 +1082,7 @@ function ns.UI:Initialize()
             enableCheck:SetChecked(LootProConfig.vendorGrays.enabled)
             progressCheck:SetChecked(LootProConfig.vendorGrays.progressBar)
             detailsCheck:SetChecked(LootProConfig.vendorGrays.details)
+            sellTipCheck:SetChecked(LootProConfig.tooltipSell)
             interval:SetValue(LootProConfig.vendorGrays.interval or 0.2)
         end)
     end
@@ -1049,7 +1142,7 @@ function ns.UI:Initialize()
     -- ONE-TIME "WHAT'S NEW" POPUP
     -------------------------------------------------
     local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
-    wn:SetSize(470, 250)
+    wn:SetSize(480, 360)
     wn:SetPoint("CENTER")
     wn:SetFrameStrata("HIGH")
     wn:Hide()
@@ -1069,11 +1162,17 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706New: Auto-Sell Gray Items|r",
+        "|cFFEBB706Four new options in 2.8.0, all off by default:|r",
         " ",
-        "A new Vendor tab can automatically sell your gray (junk) items whenever you open a merchant, with a configurable speed and an optional on-screen progress bar. It is OFF by default -- enable it on the Vendor tab if you want it.",
+        "|cFFEBB706New-appearance marker|r  Tags looted gear whose transmog appearance you haven't collected yet, so you never vendor a fresh look by mistake. (Alerts tab)",
         " ",
-        "Got an idea or found a bug? Join our Discord below -- feature requests and reports are always welcome!",
+        "|cFFEBB706Notable-item alerts|r  Also alert on mounts, pets, and toys, even when they're below your rare-drop quality threshold. (Alerts tab)",
+        " ",
+        "|cFFEBB706Vendor sell price in tooltips|r  Shows an item's sell value, plus the full stack value when you hover a stack in your bags. (Vendor tab)",
+        " ",
+        "|cFFEBB706Loot feed polish|r  Pause fading while your cursor is over the feed, and keep busy feeds visible longer during a big pull. (Customization tab)",
+        " ",
+        "Turn on what you want in settings. Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
 
     -- Primary button sits right-of-center so the Discord chip fits beside it

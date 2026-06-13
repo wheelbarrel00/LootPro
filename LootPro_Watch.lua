@@ -30,6 +30,15 @@ local _tonumber = tonumber
 local SOUNDKIT = _G.SOUNDKIT
 local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark
 
+-- Notable-item detection (drives the "alert on notable items" rare-alert
+-- option). Collectibles only: Miscellaneous(15) holds mounts (subclass 5),
+-- companion pets (subclass 2) and toys; Battlepet(17) is a caged pet. Gear is
+-- deliberately excluded -- socket/tertiary drops overlap with the quality
+-- threshold and just add noise. GetToyInfo is retail-only (nil-guarded).
+local CLASS_MISC, CLASS_BATTLEPET = 15, 17
+local SUBCLASS_PET, SUBCLASS_MOUNT = 2, 5
+local _GetToyInfo = C_ToyBox and C_ToyBox.GetToyInfo
+
 -- Upper bound on watched items. The list is user-managed and persisted, so a
 -- cap keeps a runaway paste from bloating SavedVariables.
 local WATCH_CAP = 30
@@ -245,11 +254,38 @@ local function RareFlash(quality)
     flash._ag:Play()
 end
 
+-- "Notable" = collection-worthy or specially-statted loot that a flat quality
+-- threshold misses: mounts, companion/battle pets, and toys. Cheap by
+-- construction -- mount/pet are integer class compares and toys a Misc-only
+-- ToyBox lookup, all allocation-free. Gear is intentionally excluded (the
+-- quality threshold already covers it). Returns false for everything else.
+function addon:IsNotableItem(itemID, link)
+    local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
+    if not classID then return false end
+
+    if classID == CLASS_MISC then
+        if subclassID == SUBCLASS_MOUNT or subclassID == SUBCLASS_PET then
+            return true
+        end
+        -- Toys live in Miscellaneous; the toy box returns nil for non-toys.
+        if _GetToyInfo and itemID and _GetToyInfo(itemID) ~= nil then
+            return true
+        end
+        return false
+    elseif classID == CLASS_BATTLEPET then
+        return true
+    end
+    return false
+end
+
 -- Entry point from the loot handler for a self-looted item of `quality`.
-function addon:RareOnLoot(quality)
+-- `isNotable` (precomputed by the caller, only when the option is on) forces an
+-- alert for items below the quality threshold.
+function addon:RareOnLoot(quality, isNotable)
     local ra = LootProConfig and LootProConfig.rareAlert
-    if not ra or not quality or quality < (ra.threshold or 4) then return end
-    if ra.flash then RareFlash(quality) end
+    if not ra then return end
+    if not ((quality and quality >= (ra.threshold or 4)) or isNotable) then return end
+    if ra.flash then RareFlash(quality or 0) end
     if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end
 
