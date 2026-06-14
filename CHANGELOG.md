@@ -5,6 +5,20 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-06-13
+
+### New Features
+- **About tab** — a new tab in the settings window showing the live version, author, and supported game versions, plus quick links (Discord, CurseForge, GitHub, Report a Bug, and a button to re-show What's New), the user-facing slash commands, sibling add-ons, credits, and the full in-game changelog. Open it directly with `/lp about`. Every link opens a copyable-URL popup, since the game can't launch a web browser.
+- **Fast Loot & Speedy AutoLoot** — two looting options on the Customization tab. **Fast Loot** is the game's built-in Auto Loot (one click grabs everything from a corpse). **Speedy AutoLoot** loots every item the instant loot is available, so the loot window never opens — even with Fast Loot off. It loots one slot per tick to avoid the rapid-loot disconnect on big pulls, and holding your auto-loot key (default Shift) opens the window manually. Each option has a mouseover tooltip. Both off by default.
+
+### Bug Fixes
+- **Quick Loot wouldn't stay checked** — the old "Enable Quick Loot" toggle wrote to a CVar that doesn't exist (`enableQuickLoot`), so it silently reverted on every reload. It is now **Fast Loot**, bound to the real, persistent `autoLootDefault` CVar, and stays on across reloads and logouts.
+- **Hover-pause brought back faded lines** — mousing over a loot or combat feed restored every line still in the frame's buffer, including ones that had faded out minutes earlier. Faded lines are now cleared once a feed goes idle, so a mouse-over only pauses what is still visible. Applies to both the loot and combat readouts.
+
+### Improvements
+- **Session Recap survives a UI reload** — your gold, item, currency, and notable-drop tally is now kept across `/reload` instead of being wiped. A real logout (or the Reset Session button) still starts a fresh session. The Reset Session button moved inline beneath Start Test Mode.
+- **Customization tab tidied** — the loot toggles (Fast Loot, Speedy AutoLoot) sit together above the minimap-click options, while the fade-behavior toggles and "Warn on currency cap" moved to the right-hand column.
+
 ## [2.8.0] - 2026-06-12
 
 ### New Features

@@ -448,6 +448,50 @@ end
 -- is safe and never overwrites a pending timer.
 local _lootSync = {}
 
+-- ---- Hover-pause buffer sweep ---------------------------------------------
+-- A ScrollingMessageFrame keeps each faded-out line in its buffer (only the
+-- alpha drops to 0); a line isn't evicted until maxLines pushes it out. That's
+-- invisible during normal play, but hover-pause calls SetFading(false), which
+-- snaps EVERY buffered line back to full alpha -- so mousing over an idle feed
+-- resurrects loot/combat text from minutes ago. To match the expected "once it
+-- fades, it's gone" behavior we clear the buffer once the feed has sat fully
+-- faded and unhovered. A line is fully gone at age timeVisible + fadeDuration;
+-- we add a small pad. Debounced through a single reusable per-frame closure
+-- (f._sweepFn): one pending sweep per readout, rescheduled while the feed is
+-- still fresh or being read, and nothing runs once the buffer is empty.
+local FADE_OUT  = 1     -- mirrors SetFadeDuration(1) on the display below
+local SWEEP_PAD = 0.3
+
+local function LineLife(disp, configKey)
+    local s = LootProConfig and LootProConfig[configKey]
+    return (disp._timeVisible or (s and s.fade) or 6) + FADE_OUT + SWEEP_PAD
+end
+
+local function SweepReadout(f)
+    f._sweepPending = false
+    -- Test Mode owns the feed while previewing; never wipe its messages.
+    if addon.isTesting then return end
+    local disp = f.display
+    if disp:GetNumMessages() == 0 then return end
+    local idle = _GetTime() - (disp._lastAdd or 0)
+    local life = LineLife(disp, f.configKey)
+    -- Still fresh, or being read right now: try again after the remaining life.
+    if idle < life or (f.IsMouseOver and f:IsMouseOver()) then
+        f._sweepPending = true
+        if _After then _After(math.max(0.3, life - idle), f._sweepFn) end
+        return
+    end
+    -- Every line is fully faded (alpha 0), so clearing is seamless and stops a
+    -- later mouse-over from bringing them back.
+    disp:Clear()
+end
+
+local function ScheduleSweep(f)
+    if f._sweepPending or not _After then return end
+    f._sweepPending = true
+    _After(LineLife(f.display, f.configKey), f._sweepFn)
+end
+
 local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     local f = CreateFrame("Frame", name.."Anchor", UIParent, "BackdropTemplate")
     f.configKey = configKey
@@ -486,37 +530,58 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     f.display:SetJustifyH("CENTER")
     f.display:SetJustifyV("TOP")
 
-    -- #4 hover-pause: freeze the per-line fade while the cursor is over the
-    -- readout so a busy feed can be read, then resume on leave. SetFading is
-    -- retroactive, so this affects the lines already shown. Whether these even
-    -- fire depends on the frame's mouse state, applied per lock state in
-    -- UpdateAllVisuals (motion-only when hover-pause is on, so clicks still
-    -- pass through). The guard keeps it a no-op when the option is off.
+    -- One reusable closure for the buffer sweep (see SweepReadout) so a long
+    -- farm never allocates a timer closure per looted line.
+    f._sweepFn = function() SweepReadout(f) end
+
+    -- #4 hover-pause: while the cursor is over the readout, freeze the per-line
+    -- fade so a busy feed can be read, then resume on leave. SetFading is
+    -- retroactive, but the frame also keeps already-faded lines in its buffer,
+    -- so revealing them blindly resurrects minutes-old text. We therefore only
+    -- un-fade when the feed is still fresh; if it has already fully faded we
+    -- clear the stale buffer instead (and ScheduleSweep keeps it clean between
+    -- bursts). Whether OnEnter/OnLeave fire depends on the frame's mouse state,
+    -- applied per lock state in UpdateAllVisuals (motion-only when hover-pause
+    -- is on, so clicks still pass through).
     f:SetScript("OnEnter", function(self)
-        if LootProConfig and LootProConfig.hoverPause then
-            self.display:SetFading(false)
+        if not (LootProConfig and LootProConfig.hoverPause) or addon.isTesting then return end
+        local disp = self.display
+        if _GetTime() - (disp._lastAdd or 0) >= LineLife(disp, self.configKey) then
+            disp:Clear()          -- already fully faded: don't resurrect it
+        else
+            disp:SetFading(false) -- still fresh: pause so it can be read
         end
     end)
     f:SetScript("OnLeave", function(self)
-        if LootProConfig and LootProConfig.hoverPause then
-            -- Test Mode owns fading while previewing; don't fight it on leave.
-            self.display:SetFading(not addon.isTesting)
-        end
+        if not (LootProConfig and LootProConfig.hoverPause) then return end
+        -- Test Mode owns fading while previewing; don't fight it on leave.
+        self.display:SetFading(not addon.isTesting)
+        if not addon.isTesting then ScheduleSweep(self) end
     end)
 
     -- #4 fade-scale: when many lines are present, lengthen how long each stays
     -- visible so an AoE burst lingers. SetTimeVisible is retroactive (affects
     -- shown lines too) and this self-regulates -- as lines fade out,
     -- GetNumMessages drops and the next add eases the time back toward the base
-    -- fade. Allocates nothing; only runs on an actual message add when enabled.
+    -- fade. We also stamp the add time and the effective visible-time here so
+    -- the hover-pause sweep above knows when the buffer has gone fully stale.
     hooksecurefunc(f.display, "AddMessage", function(disp)
-        if not (LootProConfig and LootProConfig.fadeScale) then return end
-        local s = LootProConfig[configKey]
+        disp._lastAdd = _GetTime()
+        local s = LootProConfig and LootProConfig[configKey]
         local base = (s and s.fade) or 6
-        local n = disp:GetNumMessages() or 1
-        local t = base + (n - 1) * FADE_SCALE_PER_LINE
-        if t > FADE_SCALE_MAX then t = FADE_SCALE_MAX end
-        disp:SetTimeVisible(t)
+        if LootProConfig and LootProConfig.fadeScale then
+            local n = disp:GetNumMessages() or 1
+            local t = base + (n - 1) * FADE_SCALE_PER_LINE
+            if t > FADE_SCALE_MAX then t = FADE_SCALE_MAX end
+            disp:SetTimeVisible(t)
+            disp._timeVisible = t
+        else
+            disp._timeVisible = base
+        end
+        -- Only needed while hover-pause can later resurrect buffered lines.
+        if LootProConfig and LootProConfig.hoverPause and not addon.isTesting then
+            ScheduleSweep(f)
+        end
     end)
 
     return f
@@ -696,9 +761,23 @@ function addon:PostTestMessages()
     self.combatFrame.display:AddMessage("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
     self.combatFrame.display:AddMessage(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
     
-    local icon = LootProConfig.showLootIcons and "|T134414:0|t " or ""
-    self.lootFrame.display:AddMessage("+12 |TInterface\\MoneyFrame\\UI-GoldIcon:0|t ", cc.money.r, cc.money.g, cc.money.b)
-    self.lootFrame.display:AddMessage("+1 " .. icon .. "Hearthstone (1)", cc.loot.r, cc.loot.g, cc.loot.b)
+    -- Money: a sample 204g 5s 32c haul, formatted like a real clean+icons line.
+    local money = "204 |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "
+        .. "5 |TInterface\\MoneyFrame\\UI-SilverIcon:0|t "
+        .. "32 |TInterface\\MoneyFrame\\UI-CopperIcon:0|t "
+    self.lootFrame.display:AddMessage("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
+
+    -- Loot: two sample drops. Icons come from item static data (GetItemInfoInstant
+    -- needs no cache); fall back to a generic icon if the client doesn't know the
+    -- item (e.g. these Midnight items on Burning Crusade Classic).
+    local function TestLootIcon(itemID, fallback)
+        if not LootProConfig.showLootIcons then return "" end
+        local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+        local tex = instant and select(5, instant(itemID))
+        return "|T" .. (tex or fallback) .. ":0|t "
+    end
+    self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
+    self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
 end
 
 -- Module-local cache populated by ChatFrame_AddMessageEventFilter for the
@@ -824,10 +903,89 @@ function addon:RunRegressionTest()
         pass, fail, #cases))
 end
 
+-- ---------------------------------------------------------------------------
+-- Speedy AutoLoot  (LootProConfig.speedyAutoLoot, off by default)
+-- ---------------------------------------------------------------------------
+-- Loots everything the instant loot becomes available, so the loot window
+-- never has to draw. This is our own implementation; the one technique worth
+-- borrowing from existing fast-loot addons is the THROTTLE: looting every slot
+-- in a single tight loop can trip the server's rapid-loot disconnect on a big
+-- AoE pile, so we loot one slot per timer tick (~30/sec) instead. Notes:
+--   * LOOT_READY and LOOT_OPENED both fire for one loot, so a slot-count guard
+--     (lastCount) keeps us from starting a second pass over the same corpse.
+--   * Highest slot first, so clearing a slot can't shift indices we haven't
+--     reached yet.
+--   * Holding the auto-loot-toggle key (default Shift) skips us entirely, so
+--     the player can still open the loot window by hand.
+--   * Bag-full / locked / BoP slots simply fail their LootSlot and stay in the
+--     window as normal -- we don't reparent or force-confirm anything.
+-- Kept on its own frame so it never touches the chat-display event path.
+-- _NewTicker is already localized at file scope (used by the dedup sweeper).
+local _GetNumLootItems = GetNumLootItems
+local _LootSlot        = LootSlot
+local _LootSlotHasItem = LootSlotHasItem
+local _IsModifiedClick = IsModifiedClick
+
+local speedyLoot = { ticker = nil, lastCount = nil }
+
+local function SpeedyStop()
+    if speedyLoot.ticker then
+        speedyLoot.ticker:Cancel()
+        speedyLoot.ticker = nil
+    end
+end
+
+local function SpeedyLootReady()
+    if not (LootProConfig and LootProConfig.speedyAutoLoot) then return end
+    if _IsModifiedClick and _IsModifiedClick("AUTOLOOTTOGGLE") then return end
+
+    local n = _GetNumLootItems and _GetNumLootItems() or 0
+    -- Same loot reported by both LOOT_READY and LOOT_OPENED -> process once.
+    if n == 0 or speedyLoot.lastCount == n then return end
+    speedyLoot.lastCount = n
+
+    SpeedyStop()
+    local slot = n
+    speedyLoot.ticker = _NewTicker and _NewTicker(0.03, function()
+        if slot >= 1 then
+            if _LootSlotHasItem(slot) then _LootSlot(slot) end
+            slot = slot - 1
+        else
+            SpeedyStop()
+        end
+    end, n + 1)
+    -- No C_Timer (shouldn't happen on supported clients): fall back to a single
+    -- pass so the feature still works, just without the disconnect throttle.
+    if not speedyLoot.ticker then
+        for i = n, 1, -1 do
+            if _LootSlotHasItem(i) then _LootSlot(i) end
+        end
+    end
+end
+
+local function SpeedyLootClosed()
+    speedyLoot.lastCount = nil
+    SpeedyStop()
+end
+
+local speedyLootFrame = CreateFrame("Frame")
+speedyLootFrame:RegisterEvent("LOOT_READY")
+speedyLootFrame:RegisterEvent("LOOT_OPENED")
+speedyLootFrame:RegisterEvent("LOOT_CLOSED")
+speedyLootFrame:SetScript("OnEvent", function(_, event)
+    if event == "LOOT_CLOSED" then
+        SpeedyLootClosed()
+    else
+        SpeedyLootReady()
+    end
+end)
+
 local evts = {
-    "ADDON_LOADED", 
-    "PLAYER_LOGIN", 
-    "PLAYER_REGEN_DISABLED", 
+    "ADDON_LOADED",
+    "PLAYER_LOGIN",
+    "PLAYER_ENTERING_WORLD",
+    "PLAYER_LOGOUT",
+    "PLAYER_REGEN_DISABLED",
     "PLAYER_REGEN_ENABLED",
     "CHAT_MSG_LOOT", 
     "CHAT_MSG_CURRENCY", 
@@ -906,7 +1064,24 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
         end
         if _After then _After(1.5, ShowLoginPopup) else ShowLoginPopup() end
-        
+
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Session Recap survives a /reload but not a logout. Restore the saved
+        -- snapshot only on a UI reload; a cold login (isInitialLogin) starts
+        -- fresh. Args: isInitialLogin, isReloadingUi.
+        local isInitialLogin, isReloadingUi = ...
+        if self.RecapLoad and (isInitialLogin or isReloadingUi) then
+            self:RecapLoad(isReloadingUi)
+        end
+        return
+
+    elseif event == "PLAYER_LOGOUT" then
+        -- Snapshot the recap so a following /reload can restore it. Fires on
+        -- both /reload and a real logout; the cold-login path above is what
+        -- makes a real logout still reset the recap.
+        if self.RecapPersist then self:RecapPersist() end
+        return
+
     elseif self:IsReady() then
         local c = LootProConfig.colors
         local n = LootProConfig.notifications

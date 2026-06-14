@@ -18,6 +18,11 @@ addon.DEFAULTS = {
     -- busy feed up longer by lengthening visibility as more lines show. Both off.
     hoverPause = false,
     fadeScale = false,
+    -- Speedy AutoLoot: instantly loot every slot the moment loot is available
+    -- (LOOT_READY), so the loot window never needs to draw. Addon-driven (see
+    -- LootPro_Core); off by default. The separate "Fast Loot" toggle instead
+    -- mirrors the game's own autoLootDefault CVar and isn't stored here.
+    speedyAutoLoot = false,
     -- Per-class display filters for the loot feed (false = show). These hide
     -- matching items from the readout only; the recap still tallies them.
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false },

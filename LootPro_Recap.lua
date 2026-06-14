@@ -8,12 +8,15 @@ local addon = ns.addon
 -- most recent epic-or-better drops. Surfaced via "/lp recap" (chat) and the
 -- Recap tab in the settings window.
 --
--- Lifetime / memory model (per the design decision "reset on login +
--- manual"): the session table lives only in module scope. WoW re-runs every
--- addon Lua file fresh on login AND on /reload, so the table is recreated
--- empty each time with no work on our part and nothing is ever written to
--- SavedVariables. Manual reset re-zeros it in place. Everything is
--- garbage-collected on logout.
+-- Lifetime / memory model: the session lives in module scope during play.
+-- To survive a /reload (the player shouldn't lose a session's tally just for
+-- reloading the UI) but still reset on a real logout, the session is
+-- snapshotted to a per-character SavedVariable (LootProSession) at
+-- PLAYER_LOGOUT and restored at the first PLAYER_ENTERING_WORLD *only when that
+-- load was a UI reload*. A cold login (isInitialLogin) ignores the snapshot and
+-- starts fresh, so the only ways to clear the recap are logging out or the
+-- Reset Session button. The snapshot is bounded by the same caps as the live
+-- tables (see below), so it stays tiny on disk and in memory.
 --
 -- All accumulators are bounded:
 --   * byRarity      -> at most 8 integer keys (item quality 0-7)
@@ -72,6 +75,46 @@ session = NewSession()
 
 function addon:RecapReset()
     session = NewSession()
+end
+
+-- Rebuild a live session from a SavedVariable snapshot, backfilling any field
+-- missing from an older schema so a format change can never error on restore.
+local function RestoreSession(saved)
+    local s = NewSession()
+    s.startTime     = tonumber(saved.startTime) or s.startTime
+    s.copper        = tonumber(saved.copper) or 0
+    s.itemTotal     = tonumber(saved.itemTotal) or 0
+    s.byRarity      = type(saved.byRarity) == "table" and saved.byRarity or {}
+    s.currencies    = type(saved.currencies) == "table" and saved.currencies or {}
+    s.currencyOrder = type(saved.currencyOrder) == "table" and saved.currencyOrder or {}
+    s.notable       = type(saved.notable) == "table" and saved.notable or {}
+    s.byItem        = type(saved.byItem) == "table" and saved.byItem or {}
+    s.byItemKeys    = tonumber(saved.byItemKeys) or 0
+    -- GetTime() is continuous across a /reload (the client process doesn't
+    -- restart), so the saved startTime is still valid on the restore timeline
+    -- and the session duration keeps counting.
+    s.version       = (tonumber(saved.version) or 0) + 1
+    return s
+end
+
+-- Restore on a UI reload, start fresh otherwise. Called from the first
+-- PLAYER_ENTERING_WORLD with the isReload flag the game provides.
+function addon:RecapLoad(isReload)
+    if isReload and type(_G.LootProSession) == "table" then
+        session = RestoreSession(_G.LootProSession)
+    else
+        session = NewSession()
+    end
+    -- Detach the on-disk copy now; a fresh snapshot is written at logout. This
+    -- also discards a stale cold-login snapshot so it can't linger in memory.
+    _G.LootProSession = nil
+end
+
+-- Snapshot the live session so a following /reload can restore it. Fires on
+-- both /reload and a real logout; the cold-login path in RecapLoad is what
+-- makes a real logout still reset the recap.
+function addon:RecapPersist()
+    _G.LootProSession = session
 end
 
 -- Test isolation: swap the live session out for a throwaway and hand the
