@@ -5,6 +5,11 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-06-18
+
+### Maintenance
+- Code comment cleanup across the add-on — verbose comments trimmed to clean, hand-written one-liners — plus a TOC version bump. No functional or behavioral changes.
+
 ## [2.9.0] - 2026-06-13
 
 ### New Features

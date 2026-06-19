@@ -3,12 +3,6 @@ local addon = ns.addon
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 
--- L-4: Pre-localize hot Blizzard APIs and Lua built-ins used in per-event
--- paths (CHAT_MSG_LOOT/CURRENCY/MONEY, CleanMessage, UpdateAllVisuals).
--- Underscore-prefixed names cannot collide with any exposed global.
--- Defensive `and` guards handle Classic/BCC where some C_* namespaces
--- don't exist; BCC has no C_Item, so we fall back to the legacy globals
--- (GetItemCount, GetItemInfo) where applicable.
 local _tonumber, _tostring = tonumber, tostring
 local _match, _format, _gsub, _find = string.match, string.format, string.gsub, string.find
 local _select = select
@@ -21,25 +15,14 @@ local _GetItemInfoInstant = GetItemInfoInstant
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
--- WoW 12.0 (Midnight) "secret values": guard before any string op on a
--- CHAT_MSG payload. nil on pre-12.0 clients (Classic/BCC), where it is unused.
+-- 12.0 "secret values": guard before any string op on a CHAT_MSG payload (nil pre-12.0).
 local _issecret = issecretvalue
 
--- Suffix appended to a loot line when the dropped gear's transmog appearance
--- is uncollected (feature: "Mark new transmog appearances"). Kept short so it
--- doesn't overflow a narrow loot frame; color is the appearance/cyan accent.
 local NEW_APPEARANCE_TAG = " |cff66ccff(new look)|r"
 
--- #4 fade-scale: each extra line on a readout adds this many seconds of
--- visibility (so an AoE burst lingers long enough to read), capped so a huge
--- pull can't pin lines on screen forever. The cap matches the fade slider max.
 local FADE_SCALE_PER_LINE = 0.6
 local FADE_SCALE_MAX = 30
 
--- M4: Report font load failures once per bad path so users aren't left with a
--- silently-broken readout. Warnings are rate-limited to one print per path.
--- L-2: Hard-cap the cache at 50 entries so a pathological font list can't
--- grow it unboundedly. The keyed (hash) shape requires a separate counter.
 addon._badFonts = addon._badFonts or {}
 local _badFontCount = 0
 local _BAD_FONT_LIMIT = 50
@@ -56,8 +39,6 @@ local function SafeSetFont(region, path, size, flags)
 end
 addon._SafeSetFont = SafeSetFont
 
--- M2: Convert a Blizzard format string (e.g. FACTION_STANDING_INCREASED)
--- into a Lua pattern. Handles locales with different thousands-separators.
 local function ToPattern(s)
     if not s then return nil end
     s = s:gsub("([%.%[%]%(%)%+%-%?%^%$])", "%%%1")
@@ -86,14 +67,11 @@ for _, fmt in ipairs({
     local head = LeadIn(fmt)
     if head then LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^"..EscapeLiteral(head) end
 end
--- English fallbacks for clients where globals are missing.
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive loot: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive item: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive currency: "
 LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
 
--- M-2: Dedup so enUS clients don't run the locale-derived pattern AND
--- the identical English fallback on every CleanMessage call.
 do
     local seen = {}
     local deduped = {}
@@ -107,19 +85,10 @@ do
     seen = nil
 end
 
--- Locale-aware money parsing. CHAT_MSG_MONEY strings are composed from the
--- GOLD_AMOUNT / SILVER_AMOUNT / COPPER_AMOUNT format strings (enUS "%d Gold",
--- deDE "%d Gold"/"%d Silber"/"%d Kupfer", etc.), which differ per client
--- locale. We derive a capture pattern from each so the recap tally and the
--- coin-icon display work on non-English clients too -- not just the
--- hard-coded English "Gold/Silver/Copper".
+-- Locale-aware: derive money patterns from the GOLD/SILVER/COPPER_AMOUNT globals so parsing works on non-English clients.
 local function MoneyPattern(fmt)
     if not fmt then return nil end
-    -- Escape pattern magic chars but leave % so the %d placeholder survives
-    -- to the next step (same ordering trick as ToPattern above).
     fmt = fmt:gsub("([%.%[%]%(%)%+%-%?%^%$])", "%%%1")
-    -- Turn the numeric placeholder into a capture that tolerates locale
-    -- digit-group separators (e.g. "1,234" / "1.234").
     fmt = fmt:gsub("%%d", "([%%d%%p]+)")
     return fmt
 end
@@ -127,21 +96,12 @@ local PAT_GOLD   = MoneyPattern(_G.GOLD_AMOUNT   or "%d Gold")
 local PAT_SILVER = MoneyPattern(_G.SILVER_AMOUNT or "%d Silver")
 local PAT_COPPER = MoneyPattern(_G.COPPER_AMOUNT or "%d Copper")
 
--- Strip any non-digit separators from a captured amount and return an integer
--- (0 for nil/garbage). Module-level so the money path allocates no closures.
 local function MoneyAmount(s)
     if not s then return 0 end
     return _tonumber((_gsub(s, "%D", ""))) or 0
 end
 
--- Reverse map from an item link's RGB color to its quality, built from
--- ITEM_QUALITY_COLORS so it tracks Blizzard's exact hex values. The link color
--- is the item's ACTUAL (bonus-adjusted) quality and is present in every loot
--- message, so reading it avoids two traps of GetItemQualityByID(itemID): it
--- uses the BASE item's quality (a downscaled green of an epic-base item would
--- otherwise report as epic and wrongly trip the rare-drop alert), and it needs
--- no item cache. `.hex` is "|cffRRGGBB" (or "ffRRGGBB" on some clients); the
--- last 6 chars are the RRGGBB either way.
+-- Map link RGB -> quality. The link color is the ACTUAL (bonus-adjusted) quality; GetItemQualityByID returns BASE quality (a downscaled epic-base green would wrongly trip the rare alert) and needs the item cache.
 local QUALITY_BY_RGB = {}
 do
     local qc = _G.ITEM_QUALITY_COLORS
@@ -155,10 +115,6 @@ do
     end
 end
 
--- Party loot detection: any CHAT_MSG_LOOT message that does NOT start with a
--- known self-loot prefix is treated as a group/party member's loot. Used by
--- the "Display Party Loot" notification toggle to suppress other players'
--- loot lines without affecting your own.
 local function IsSelfLoot(msg)
     if not msg or type(msg) ~= "string" then return false end
     for _, pat in ipairs(LOOT_PREFIX_PATS) do
@@ -177,7 +133,7 @@ local function GetIconString(msg)
             local _, _, _, _, _icon = _GetItemInfoInstant(itemID)
             icon = _icon
         else
-            icon = _select(10, _GetItemInfo(itemID))  -- returns nil if not yet cached
+            icon = _select(10, _GetItemInfo(itemID))
         end
         if icon then
             return "|T" .. icon .. ":0|t "
@@ -200,36 +156,17 @@ local function CleanMessage(msg, event)
         end
         
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
-        -- Locale-agnostic: grab the first number sequence from the message.
         local amount = _match(msg, "([%d%p%s]*%d)")
         if amount then return "+ " .. amount .. " XP" end
         
     elseif _find(event, "CHAT_MSG_LOOT") or _find(event, "CHAT_MSG_CURRENCY") then
-        -- M-1: Break on first prefix match (gsub's count return tells us
-        -- whether the pattern hit), and merge the bracket strips into a
-        -- single character-class pass. 4 gsub passes total instead of 5.
         local cleaned = msg
         local n
         for _, pat in ipairs(LOOT_PREFIX_PATS) do
             cleaned, n = _gsub(cleaned, pat, "")
             if n > 0 then break end
         end
-        -- v2.2.8: Recent Retail CHAT_MSG_LOOT messages embed an item icon
-        -- (|T<file>:0|t) directly inside the chat string. We always prepend
-        -- our own icon via GetIconString(), so leaving the embedded one in
-        -- place produces two icons side-by-side. Strip any |T...|t texture
-        -- tags from the cleaned text so GetIconString remains the single
-        -- source of truth for icons.
-        --
-        -- M-1: down from 4 trailing gsubs → 3.
-        --   pass 1: textures (|T...|t)
-        --   pass 2: bracket chars [ and ] (anywhere in the string -- can't
-        --           be merged with the trailing strip because brackets are
-        --           not anchored at end)
-        --   pass 3: trailing junk -- "x<count>", ".", or both -- in one
-        --           anchored callback gsub. The callback declines to
-        --           consume bare trailing digits (e.g. "Pristine Wing 5")
-        --           which a permissive `%d*$` would eat.
+        -- Retail loot messages embed their own |T..|t icon; strip it since GetIconString prepends ours (else double icons).
         cleaned = _gsub(cleaned, "|T[^|]-|t%s*", "")
         cleaned = _gsub(cleaned, "[%[%]]", "")
         cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", function(m)
@@ -243,11 +180,7 @@ local function CleanMessage(msg, event)
     return msg
 end
 
--- Items that read wrong with the generic "+<amt> <Name> (<count>)" format.
--- These arrive via CHAT_MSG_LOOT or CHAT_MSG_CURRENCY but the gained
--- quantity is either an instant consumable (Boon of Power) or the XP
--- amount itself (Companion XP) — not a stack count. Render these as just
--- "<icon> <Name>" with no left-side prefix and no bag-count suffix.
+-- These report XP or an instant consumable as the "quantity", not a stack count, so render them without a count.
 local NO_COUNT_PATTERNS = {
     "Companion XP",
     "Companion Experience",
@@ -261,26 +194,7 @@ local function IsNoCountItem(cleanName)
     return false
 end
 
--- v2.2.8: Vendor purchases (e.g. Restored Coffer Key) fire BOTH
--- CHAT_MSG_LOOT and CHAT_MSG_CURRENCY for the same item, in the same
--- frame. Without dedup the player sees the line twice — once in loot
--- color, once in currency color. Strategy:
---   * On every CHAT_MSG_LOOT, mark the item name as recently looted.
---   * Defer CHAT_MSG_CURRENCY display by DEDUP_WINDOW. When the timer
---     fires, if the same name was marked by a loot event during the
---     wait, suppress the currency line — the loot version (rarity
---     color + icon) already showed.
--- Pure currency events (no matching loot) still display, just with a
--- short delay. We keep the window tight to minimize the perceived lag.
---
--- v2.3.1: Some delve / system events fire CHAT_MSG_CURRENCY *twice*
--- for the same payload (e.g. "Grand Sanctified Spoils Will Manifest
--- Upon Delve Completion"). The original dedup only handled loot↔currency
--- pairs, so two back-to-back currency events for the same name slipped
--- through. We now also track recently-displayed currency names and
--- suppress any second currency line within CURRENCY_DEDUP_WINDOW.
--- The window is intentionally tight (0.5 s) so genuine repeated
--- currency gains separated by user actions still display normally.
+-- Some items fire both CHAT_MSG_LOOT and CHAT_MSG_CURRENCY (vendor buys), or CURRENCY twice (delve events); dedup by name within a tight window so the line shows once.
 local recentLoot = {}
 local recentCurrency = {}
 local DEDUP_WINDOW = 0.25
@@ -316,15 +230,7 @@ local function IsRecentCurrency(name)
     return true
 end
 
--- Exact-duplicate display suppression. Blizzard occasionally dispatches the
--- same CHAT_MSG_LOOT / CHAT_MSG_CURRENCY twice (seen on delve coffer keys and
--- the "...manifest upon delve completion" currency), producing two identical
--- feed lines. The name-based dedup above only covers loot<->currency pairs and
--- currency<->currency repeats, so a doubled LOOT line slips through. We catch
--- it here on the FULLY-RENDERED string: if a line matches one shown within
--- DISPLAY_DEDUP_WINDOW it's dropped. Because the key includes the bag count,
--- legitimately looting another of the same item (count, and thus the line,
--- differs) is never suppressed. Fixed ring -> no table growth, no sweeper.
+-- Final dedup on the fully-rendered line (count included) catches doubled LOOT lines the name dedup misses; a real second drop differs by count, so it still shows.
 local DISPLAY_DEDUP_WINDOW = 0.3
 local DISP_RING = 8
 local _dispStr, _dispTime, _dispIdx = {}, {}, 0
@@ -341,13 +247,7 @@ local function IsDuplicateDisplay(line)
     return false
 end
 
--- H-1: Periodic sweeper. Lazy expiry-on-read leaves entries lingering
--- forever for items that are looted once and never seen again. Over a
--- multi-hour farming session this leaks 5-25 KB. The sweeper walks both
--- tables every 60 s and deletes entries older than their respective
--- dedup windows. In-flight entries younger than the window survive --
--- we never wipe() the tables wholesale. Function is module-level (not a
--- per-tick closure) so the ticker captures one stable reference.
+-- Lazy expiry-on-read leaks entries for items looted once and never seen again; this sweep clears stale dedup entries every 60s.
 local function _SweepDedup()
     local now = _GetTime()
     for name, t in pairs(recentLoot) do
@@ -363,22 +263,7 @@ local function _SweepDedup()
 end
 local _dedupTicker = _NewTicker and _NewTicker(60, _SweepDedup) or nil
 
--- H-2: Hot-path closure pools. PostCurrency, ShowLoot, and the deferred
--- loot-count fetch were previously rebuilt as closures on every chat
--- event. Under heavy AoE loot (10-30 events/sec) this churns the GC.
---
--- Strategy: pre-allocate a fixed number of param tables and pre-bind a
--- function to each slot at init. Per event we rotate to the next slot
--- and write the params; the timer body reads from its bound slot. ZERO
--- closures created per event.
---
--- Concurrent-timer correctness: a slot is reused only after POOL_SIZE
--- subsequent events fire. With POOL_SIZE=16 and DEDUP_WINDOW=0.25s, the
--- earliest slot 1 can be reused (slot indices 1, 17, 33, ...) requires
--- 16 events in 0.25s = 64 events/sec. Realistic peak under AoE loot is
--- ~30/sec, giving 2x headroom. If the rate ever exceeds 64/sec the
--- worst case is a single dropped/overwritten line, never corruption of
--- another addon's state.
+-- Pooled param tables + pre-bound timer fns (rotated per event) so the hot loot path allocates zero closures; a slot is reused only after POOL_SIZE events.
 local POOL_SIZE = 16
 local _curParams = {}
 local _curFns    = {}
@@ -386,15 +271,12 @@ local _lootParams = {}
 local _lootFns    = {}
 local _curSlot, _lootSlot = 0, 0
 
--- Hoisted: shared count-suffix formatter for both currency and loot.
 local function CountSuffix(nn)
     nn = _tonumber(nn) or 0
     if nn <= 0 then return "" end
     return " (" .. nn .. ")"
 end
 
--- Hoisted: posts the currency line. Reads everything from a slot in
--- _curParams. Honors loot/currency dedup at fire time.
 local function PostCurrency(p)
     if IsRecentLoot(p.currencyName) then return end
     local display = addon.lootFrame.display
@@ -411,12 +293,8 @@ local function PostCurrency(p)
     display:AddMessage(line, p.cR, p.cG, p.cB)
 end
 
--- Hoisted: posts the loot line. Synchronous use only -- the deferred
--- count path (Retail uncached items) goes through PostDeferredLoot.
 local function ShowLoot(p, countStr)
     local display = addon.lootFrame.display
-    -- p.marker is "" for normal loot, or the new-appearance tag. Always set by
-    -- the caller, so a stale value can't leak across pooled-slot reuse.
     local marker = p.marker or ""
     local line
     if p.noCount then
@@ -428,7 +306,6 @@ local function ShowLoot(p, countStr)
     display:AddMessage(line, p.cR, p.cG, p.cB)
 end
 
--- Hoisted: deferred loot post for Retail uncached items (0.1s timer).
 local function PostDeferredLoot(p)
     local cnt = ((_GetItemCount and _GetItemCount(p.itemID, true)) or 0) + p.amt
     ShowLoot(p, CountSuffix(cnt))
@@ -442,24 +319,10 @@ for i = 1, POOL_SIZE do
     _lootFns[i] = function() PostDeferredLoot(_lootParams[idx]) end
 end
 
--- H-2: dedicated reusable param table for SYNCHRONOUS loot paths
--- (cached Retail items, BCC, no-itemID/no-count fallback). Synchronous
--- callers consume the table before returning, so a single shared slot
--- is safe and never overwrites a pending timer.
 local _lootSync = {}
 
--- ---- Hover-pause buffer sweep ---------------------------------------------
--- A ScrollingMessageFrame keeps each faded-out line in its buffer (only the
--- alpha drops to 0); a line isn't evicted until maxLines pushes it out. That's
--- invisible during normal play, but hover-pause calls SetFading(false), which
--- snaps EVERY buffered line back to full alpha -- so mousing over an idle feed
--- resurrects loot/combat text from minutes ago. To match the expected "once it
--- fades, it's gone" behavior we clear the buffer once the feed has sat fully
--- faded and unhovered. A line is fully gone at age timeVisible + fadeDuration;
--- we add a small pad. Debounced through a single reusable per-frame closure
--- (f._sweepFn): one pending sweep per readout, rescheduled while the feed is
--- still fresh or being read, and nothing runs once the buffer is empty.
-local FADE_OUT  = 1     -- mirrors SetFadeDuration(1) on the display below
+-- Hover-pause calls SetFading(false), which snaps every buffered (faded) line back to full alpha; clear the buffer once the feed has fully faded so a later mouse-over can't resurrect old lines.
+local FADE_OUT  = 1     -- must match SetFadeDuration below
 local SWEEP_PAD = 0.3
 
 local function LineLife(disp, configKey)
@@ -469,20 +332,16 @@ end
 
 local function SweepReadout(f)
     f._sweepPending = false
-    -- Test Mode owns the feed while previewing; never wipe its messages.
     if addon.isTesting then return end
     local disp = f.display
     if disp:GetNumMessages() == 0 then return end
     local idle = _GetTime() - (disp._lastAdd or 0)
     local life = LineLife(disp, f.configKey)
-    -- Still fresh, or being read right now: try again after the remaining life.
     if idle < life or (f.IsMouseOver and f:IsMouseOver()) then
         f._sweepPending = true
         if _After then _After(math.max(0.3, life - idle), f._sweepFn) end
         return
     end
-    -- Every line is fully faded (alpha 0), so clearing is seamless and stops a
-    -- later mouse-over from bringing them back.
     disp:Clear()
 end
 
@@ -505,9 +364,6 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     f:SetScript("OnDragStop", function(self) 
         self:StopMovingOrSizing()
         if addon:IsReady() then 
-            -- M3: Capture BOTH the self-anchor and the relative-anchor so we can
-            -- round-trip position exactly. GetPoint returns
-            -- (point, relativeTo, relativePoint, x, y).
             local p, _, rp, x, y = self:GetPoint()
             LootProConfig[self.configKey].point = p
             LootProConfig[self.configKey].relativePoint = rp or p
@@ -530,41 +386,23 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     f.display:SetJustifyH("CENTER")
     f.display:SetJustifyV("TOP")
 
-    -- One reusable closure for the buffer sweep (see SweepReadout) so a long
-    -- farm never allocates a timer closure per looted line.
     f._sweepFn = function() SweepReadout(f) end
 
-    -- #4 hover-pause: while the cursor is over the readout, freeze the per-line
-    -- fade so a busy feed can be read, then resume on leave. SetFading is
-    -- retroactive, but the frame also keeps already-faded lines in its buffer,
-    -- so revealing them blindly resurrects minutes-old text. We therefore only
-    -- un-fade when the feed is still fresh; if it has already fully faded we
-    -- clear the stale buffer instead (and ScheduleSweep keeps it clean between
-    -- bursts). Whether OnEnter/OnLeave fire depends on the frame's mouse state,
-    -- applied per lock state in UpdateAllVisuals (motion-only when hover-pause
-    -- is on, so clicks still pass through).
     f:SetScript("OnEnter", function(self)
         if not (LootProConfig and LootProConfig.hoverPause) or addon.isTesting then return end
         local disp = self.display
         if _GetTime() - (disp._lastAdd or 0) >= LineLife(disp, self.configKey) then
-            disp:Clear()          -- already fully faded: don't resurrect it
+            disp:Clear()
         else
-            disp:SetFading(false) -- still fresh: pause so it can be read
+            disp:SetFading(false)
         end
     end)
     f:SetScript("OnLeave", function(self)
         if not (LootProConfig and LootProConfig.hoverPause) then return end
-        -- Test Mode owns fading while previewing; don't fight it on leave.
         self.display:SetFading(not addon.isTesting)
         if not addon.isTesting then ScheduleSweep(self) end
     end)
 
-    -- #4 fade-scale: when many lines are present, lengthen how long each stays
-    -- visible so an AoE burst lingers. SetTimeVisible is retroactive (affects
-    -- shown lines too) and this self-regulates -- as lines fade out,
-    -- GetNumMessages drops and the next add eases the time back toward the base
-    -- fade. We also stamp the add time and the effective visible-time here so
-    -- the hover-pause sweep above knows when the buffer has gone fully stale.
     hooksecurefunc(f.display, "AddMessage", function(disp)
         disp._lastAdd = _GetTime()
         local s = LootProConfig and LootProConfig[configKey]
@@ -578,7 +416,6 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
         else
             disp._timeVisible = base
         end
-        -- Only needed while hover-pause can later resurrect buffered lines.
         if LootProConfig and LootProConfig.hoverPause and not addon.isTesting then
             ScheduleSweep(f)
         end
@@ -587,11 +424,9 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     return f
 end
 
--- Minimap icon via LibDataBroker + LibDBIcon
 local LDB = LibStub("LibDataBroker-1.1")
 local LDBIcon = LibStub("LibDBIcon-1.0")
 
--- #12: configurable minimap click actions.
 local MM_ACTION_LABEL = {
     settings = "Open Settings",
     recap    = "Print Recap",
@@ -612,7 +447,6 @@ function addon:DoMinimapAction(action)
             self:UpdateAllVisuals()
         end
     end
-    -- "none" / unknown: do nothing
 end
 
 addon.lootProLDB = LDB:NewDataObject("LootPro", {
@@ -644,11 +478,6 @@ addon.LDBIcon = LDBIcon
 addon.combatFrame = CreateReadoutFrame("LootProCombat", "COMBAT & SYSTEM", 150, "combat")
 addon.lootFrame = CreateReadoutFrame("LootProLoot", "LOOT & MONEY", 50, "loot")
 
--- L-3: Hoist the per-call configs table out of UpdateAllVisuals. The
--- function fires on every slider tick / checkbox click / color change,
--- and a fresh 2-element table per call was wasted churn. The buffer is
--- private to UpdateAllVisuals (no external code retains a reference to
--- it between calls), so in-place mutation is safe.
 local _updateConfigsBuf = { {}, {} }
 
 function addon:UpdateAllVisuals()
@@ -663,11 +492,7 @@ function addon:UpdateAllVisuals()
     _updateConfigsBuf[1].f, _updateConfigsBuf[1].s = self.combatFrame, LootProConfig.combat
     _updateConfigsBuf[2].f, _updateConfigsBuf[2].s = self.lootFrame,   LootProConfig.loot
 
-    -- H1: Many of the setters below are expensive (SetBackdrop rebuilds border
-    -- textures; SetMaxLines clears the message buffer and is visible to the
-    -- user). UpdateAllVisuals is called from every slider tick, every checkbox
-    -- click, every color change -- so we guard each expensive op with a cache
-    -- key and only re-apply when the relevant inputs actually changed.
+    -- Guard each expensive setter with a cache key; UpdateAllVisuals fires on every slider tick, and re-applying SetMaxLines visibly clears the message buffer.
     for _, cfg in ipairs(_updateConfigsBuf) do
         local f, s = cfg.f, cfg.s
 
@@ -707,11 +532,7 @@ function addon:UpdateAllVisuals()
         if LootProConfig.locked then
             f:SetBackdropColor(0,0,0,0)
             f:SetBackdropBorderColor(0,0,0,0)
-            -- #4: with hover-pause on, take MOTION-only mouse so OnEnter/OnLeave
-            -- fire while clicks still pass through to whatever's behind the
-            -- (invisible, locked) readout. Otherwise no mouse at all -- the
-            -- original click-through behavior. SetMouse*Enabled is retail-era;
-            -- on clients without it we fall back to fully disabled.
+            -- hover-pause: motion-only mouse so OnEnter/OnLeave fire while clicks pass through the locked readout (retail-era API; else fully disabled).
             if LootProConfig.hoverPause and f.SetMouseMotionEnabled and f.SetMouseClickEnabled then
                 f:SetMouseClickEnabled(false)
                 f:SetMouseMotionEnabled(true)
@@ -761,15 +582,11 @@ function addon:PostTestMessages()
     self.combatFrame.display:AddMessage("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
     self.combatFrame.display:AddMessage(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
     
-    -- Money: a sample 204g 5s 32c haul, formatted like a real clean+icons line.
     local money = "204 |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "
         .. "5 |TInterface\\MoneyFrame\\UI-SilverIcon:0|t "
         .. "32 |TInterface\\MoneyFrame\\UI-CopperIcon:0|t "
     self.lootFrame.display:AddMessage("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
 
-    -- Loot: two sample drops. Icons come from item static data (GetItemInfoInstant
-    -- needs no cache); fall back to a generic icon if the client doesn't know the
-    -- item (e.g. these Midnight items on Burning Crusade Classic).
     local function TestLootIcon(itemID, fallback)
         if not LootProConfig.showLootIcons then return "" end
         local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
@@ -780,22 +597,9 @@ function addon:PostTestMessages()
     self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
 end
 
--- Module-local cache populated by ChatFrame_AddMessageEventFilter for the
--- one CHAT_MSG_* event with a documented taint path
--- (CHAT_MSG_COMBAT_FACTION_CHANGE). Declared here so RunRegressionTest can
--- seed it for the synthetic faction test cases below.
 local cleanChatMsg = {}
 
--- Regression harness. Invoked via "/lp test". Fires synthetic chat events
--- through the real OnEvent handler and checks each readout's message count
--- to verify the path produced output. Uses evergreen in-game references
--- (Hearthstone itemID 6948, Stormwind and Bloodsail Buccaneers factions).
---
--- NOTE: the synthetic args are plain strings, so this only exercises the
--- non-secret code path. There is no API to mint a secret string, so the
--- 12.0 secret-value guard (the `_issecret(msg)` early-return in OnEvent)
--- cannot be covered here — verify that in-game inside an active Mythic+
--- key or boss encounter, where CHAT_MSG_* payloads become secret.
+-- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string); verify that in-game in an active Mythic+/boss encounter.
 function addon:RunRegressionTest()
     if not self:IsReady() then
         print("|cFFFF6060[LootPro]|r Cannot run test: addon not initialized.")
@@ -808,7 +612,6 @@ function addon:RunRegressionTest()
         return
     end
 
-    -- Snapshot every config knob the test flips so we restore cleanly.
     local n = LootProConfig.notifications
     local snapshot = {
         notifications = {},
@@ -821,18 +624,14 @@ function addon:RunRegressionTest()
     }
     for k, v in pairs(n) do snapshot.notifications[k] = v end
 
-    -- Force all paths on for the duration of the run.
     for k in pairs(n) do n[k] = true end
     LootProConfig.cleanMode = true
     LootProConfig.showFollowerXP = true
-    LootProConfig.showLootCounts = false -- suppress the C_Timer.After path
+    LootProConfig.showLootCounts = false
     LootProConfig.showLootIcons = true
     LootProConfig.showMoneyIcons = true
     LootProConfig.minQuality = 0
 
-    -- Isolate the session recap: synthetic events below would otherwise add
-    -- fake Hearthstone/Kej/gold to the player's live tally. Swap in a
-    -- throwaway session for the run and restore the real one afterwards.
     local recapPrev = self.RecapDetachSession and self:RecapDetachSession()
 
     local combat = self.combatFrame.display
@@ -843,7 +642,6 @@ function addon:RunRegressionTest()
     local FACTION_UP   = (_G.FACTION_STANDING_INCREASED or "Reputation with %s increased by %d."):format("Silvermoon Court", 250)
     local FACTION_DOWN = (_G.FACTION_STANDING_DECREASED or "Reputation with %s decreased by %d."):format("Bloodsail Buccaneers", 25)
     local CURRENCY_MSG = (_G.CURRENCY_GAINED or "You receive currency: %s."):format("Kej")
-    -- Hearthstone (itemID 6948) link form the client accepts.
     local HEARTHSTONE_LOOT = "You receive loot: |cff9d9d9d|Hitem:6948::::::::70:::::::|h[Hearthstone]|h|r."
 
     local cases = {
@@ -864,14 +662,8 @@ function addon:RunRegressionTest()
     print("|cFFAAAAFF[LootPro]|r Running regression test (12 cases)...")
     local pass, fail = 0, 0
     for _, tc in ipairs(cases) do
-        -- Clear the target frame before each case. Otherwise the combat
-        -- frame's maxLines (default 4) caps GetNumMessages() and later
-        -- cases (Rep Gain, Rep Loss, Delver XP) read before==after even
-        -- when AddMessage actually fired — reporting false FAILs.
+        -- Clear first: maxLines caps GetNumMessages(), so without it later cases read before==after and report false FAILs.
         tc.target:Clear()
-        -- Faction handler is filter-only (taint workaround). Seed the
-        -- cache directly so synthetic events have something to read —
-        -- the real ChatFrame filter pipeline never runs for /lp test.
         if tc.event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = tc.arg
         end
@@ -889,7 +681,6 @@ function addon:RunRegressionTest()
         end
     end
 
-    -- Restore.
     if self.RecapAttachSession then self:RecapAttachSession(recapPrev) end
     for k, v in pairs(snapshot.notifications) do n[k] = v end
     LootProConfig.cleanMode = snapshot.cleanMode
@@ -903,24 +694,7 @@ function addon:RunRegressionTest()
         pass, fail, #cases))
 end
 
--- ---------------------------------------------------------------------------
--- Speedy AutoLoot  (LootProConfig.speedyAutoLoot, off by default)
--- ---------------------------------------------------------------------------
--- Loots everything the instant loot becomes available, so the loot window
--- never has to draw. This is our own implementation; the one technique worth
--- borrowing from existing fast-loot addons is the THROTTLE: looting every slot
--- in a single tight loop can trip the server's rapid-loot disconnect on a big
--- AoE pile, so we loot one slot per timer tick (~30/sec) instead. Notes:
---   * LOOT_READY and LOOT_OPENED both fire for one loot, so a slot-count guard
---     (lastCount) keeps us from starting a second pass over the same corpse.
---   * Highest slot first, so clearing a slot can't shift indices we haven't
---     reached yet.
---   * Holding the auto-loot-toggle key (default Shift) skips us entirely, so
---     the player can still open the loot window by hand.
---   * Bag-full / locked / BoP slots simply fail their LootSlot and stay in the
---     window as normal -- we don't reparent or force-confirm anything.
--- Kept on its own frame so it never touches the chat-display event path.
--- _NewTicker is already localized at file scope (used by the dedup sweeper).
+-- Speedy AutoLoot: loot one slot per timer tick (~30/s), highest slot first. A tight full-loop loot can trip the server's rapid-loot disconnect on big AoE piles, and clearing low slots first would shift higher indices.
 local _GetNumLootItems = GetNumLootItems
 local _LootSlot        = LootSlot
 local _LootSlotHasItem = LootSlotHasItem
@@ -954,8 +728,6 @@ local function SpeedyLootReady()
             SpeedyStop()
         end
     end, n + 1)
-    -- No C_Timer (shouldn't happen on supported clients): fall back to a single
-    -- pass so the feature still works, just without the disconnect throttle.
     if not speedyLoot.ticker then
         for i = n, 1, -1 do
             if _LootSlotHasItem(i) then _LootSlot(i) end
@@ -1000,27 +772,13 @@ local evts = {
 for _, v in ipairs(evts) do 
     addon:RegisterEvent(v) 
 end
-evts = nil  -- M-3a: only used to drive the registration loop above; release.
+evts = nil
 
--- v2.2.6: Taint launder strategy.
---
--- Blizzard's secure delve/faction paths can taint the chat-event execution
--- frame on `CHAT_MSG_COMBAT_FACTION_CHANGE`. For *that* event only we read
--- the message text from a `ChatFrame_AddMessageEventFilter` cache, because
--- the filter runs inside Blizzard's untainted ChatFrame frame.
---
--- For every other CHAT_MSG_* event we read `arg1` directly. The filter
--- approach is unsafe for time-sensitive events like CHAT_MSG_LOOT: there is
--- no guaranteed dispatch order between our addon's OnEvent and ChatFrame's
--- filter pass, so reading the cache can return stale data from a previous
--- event — producing delayed/wrong-order loot messages. arg1 is always the
--- current event's payload. (The filter is NOT a secret-value bypass either:
--- inside an instanced encounter the filter receives the same secret arg1, so
--- the OnEvent handler guards every payload with issecretvalue regardless.)
+-- Taint launder: CHAT_MSG_COMBAT_FACTION_CHANGE can taint our event frame via Blizzard's secure faction path, so for that one event we read the text from a ChatFrame_AddMessageEventFilter cache (the filter runs in an untainted frame). Other events read arg1 directly -- the filter has no guaranteed dispatch order, so it can return stale data for time-sensitive loot. Not a secret-value bypass: the filter gets the same secret arg1, so OnEvent still guards every payload.
 if _G.ChatFrame_AddMessageEventFilter then
     ChatFrame_AddMessageEventFilter("CHAT_MSG_COMBAT_FACTION_CHANGE", function(_, _, msg)
         cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = msg
-        return false -- never suppress the message; we only observe it
+        return false
     end)
 end
 
@@ -1030,30 +788,15 @@ addon:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" and arg1 == addonName then 
         self:InitSettings()
         self.LDBIcon:Register("LootPro", self.lootProLDB, LootProConfig.minimap)
-        -- H3: We only care about our own ADDON_LOADED. Stop receiving every
-        -- other addon's load event for the rest of the session.
         self:UnregisterEvent("ADDON_LOADED")
         return
         
     elseif event == "PLAYER_LOGIN" then
-        -- M1: Defensive guard in case saved variables didn't initialize via
-        -- the normal ADDON_LOADED path (e.g. event ordering quirks).
         if not self:IsReady() then self:InitSettings() end
         if ns.UI then ns.UI:Initialize() end
         self:UpdateAllVisuals()
 
-        -- On login show, at most, one popup: the one-time "what's new" for
-        -- upgrading users (whatsNewSeen behind the current revision), otherwise
-        -- the first-time welcome. Brand-new installs are stamped as having seen
-        -- the current revision in InitSettings, so they get the welcome only.
-        --
-        -- We stamp the revision seen at SHOW time (not on the frame's OnHide):
-        -- a manual /lp whatsnew preview must not flip the flag, and a /reload
-        -- that tears down an open popup must not re-stamp it.
-        -- Defer the popup: showing a frame in the middle of the PLAYER_LOGIN
-        -- burst doesn't render reliably, so let the UI settle a moment first.
-        -- We mark the revision seen at SHOW time (not on the frame's OnHide) so
-        -- a manual /lp whatsnew preview and reload-teardown can't flip the flag.
+        -- Show at most one login popup (what's-new for upgraders, else welcome), stamped at SHOW time so a /lp whatsnew preview or reload-teardown can't flip the flag. Deferred past the PLAYER_LOGIN burst, which won't render a popup reliably.
         local function ShowLoginPopup()
             if not (ns.UI and addon:IsReady()) then return end
             if ns.UI.whatsNewFrame and LootProConfig.whatsNewSeen ~= addon.WHATS_NEW then
@@ -1066,9 +809,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if _After then _After(1.5, ShowLoginPopup) else ShowLoginPopup() end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Session Recap survives a /reload but not a logout. Restore the saved
-        -- snapshot only on a UI reload; a cold login (isInitialLogin) starts
-        -- fresh. Args: isInitialLogin, isReloadingUi.
+        -- Recap survives /reload but not logout: restore only on a UI reload; a cold login starts fresh.
         local isInitialLogin, isReloadingUi = ...
         if self.RecapLoad and (isInitialLogin or isReloadingUi) then
             self:RecapLoad(isReloadingUi)
@@ -1076,9 +817,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
         return
 
     elseif event == "PLAYER_LOGOUT" then
-        -- Snapshot the recap so a following /reload can restore it. Fires on
-        -- both /reload and a real logout; the cold-login path above is what
-        -- makes a real logout still reset the recap.
         if self.RecapPersist then self:RecapPersist() end
         return
 
@@ -1101,19 +839,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        -- Faction events have a documented taint path through Blizzard's
-        -- secure delve/reputation system, so for that one event we read the
-        -- copy stashed by our ChatFrame filter above: the filter runs in an
-        -- untainted frame, which stops Blizzard's secure-path taint from
-        -- spreading into our handler. Every other CHAT_MSG_* event reads arg1
-        -- directly — the filter cache is not safe for time-sensitive events
-        -- because there is no guaranteed dispatch order between ChatFrame's
-        -- filter pass and our addon frame's OnEvent.
         local msg
         if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            -- If the cache is empty, the filter hasn't run — skip rather than
-            -- touch arg1. Synthetic /lp test events seed cleanChatMsg
-            -- directly, see RunRegressionTest below.
             msg = cleanChatMsg[event]
             cleanChatMsg[event] = nil
             if not msg then return end
@@ -1121,24 +848,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
             msg = arg1
         end
 
-        -- v2.5.2: WoW 12.0 (Midnight) "secret values". While an instanced
-        -- encounter is active (an M+ key in progress, a boss encounter, or a
-        -- PvP match) the CHAT_MSG_* text payload arrives as a *secret* string.
-        -- It still reports type() == "string", but any real string operation
-        -- on it from our tainted handler — match/find/gsub/tostring/concat —
-        -- raises "attempt to perform string conversion on a secret string
-        -- value". Secret-ness follows the value, not the execution frame, so
-        -- neither tostring() nor the ChatFrame filter cache launders it; the
-        -- text is simply unreadable by addons until the encounter ends. Skip
-        -- the line instead of erroring. issecretvalue() is safe to call on any
-        -- value (it never throws) and is nil on pre-12.0 clients.
+        -- 12.0 secret values: the CHAT_MSG payload is a secret string in active encounters; any string op throws, so skip the line.
         if _issecret and _issecret(msg) then return end
 
-        -- L2: Follower-XP detection only makes sense for XP events. Previously
-        -- this ran on every chat/faction/currency/money event.
         if event == "CHAT_MSG_COMBAT_XP_GAIN" then
             local name, amount2 = _match(msg, "(.+) has gained ([%d%p%s]*%d)%s+%a+")
-            -- If there's a named subject, treat as follower/pet XP.
             if name and amount2 and not _match(msg, "^You") then
                 if not LootProConfig.showFollowerXP then return end
                 if n.xp then
@@ -1153,7 +867,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
             self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
 
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            -- M2: Use Blizzard's localized format string to parse faction +/-.
             local fac, amt = nil, nil
             if PAT_FACTION_UP then fac, amt = _match(msg, PAT_FACTION_UP) end
             local lossFac, lossAmt = nil, nil
@@ -1180,13 +893,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif event == "CHAT_MSG_MONEY" then
-            -- Parse once (locale-aware); reused for the recap tally and the
-            -- coin-icon display.
             local g  = PAT_GOLD   and _match(msg, PAT_GOLD)
             local s  = PAT_SILVER and _match(msg, PAT_SILVER)
             local co = PAT_COPPER and _match(msg, PAT_COPPER)
 
-            -- Recap: tally looted money regardless of the display toggle.
             if LootProConfig.recapEnabled and self.RecapAddMoney then
                 self:RecapAddMoney(MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co))
             end
@@ -1205,28 +915,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif event == "CHAT_MSG_CURRENCY" then
-            -- Currency display overhaul: match the loot-line format
-            --   +<amt> [icon] <Name> (<total>)
-            -- Currency messages use |Hcurrency:<id>:...|h[Name]|h hyperlinks
-            -- (not item:<id>), so GetIconString — which only recognizes item
-            -- links — cannot produce an icon here. We pull the icon and the
-            -- player's running total directly from C_CurrencyInfo.
+            -- Currency uses |Hcurrency: links (not item:), so GetIconString can't make an icon; pull icon + total from C_CurrencyInfo.
             local currencyName = ExtractItemName(msg)
             local currencyID = _tonumber(_match(msg, "currency:(%d+)"))
-            -- CURRENCY_GAINED_MULTIPLE ends with "x<N>."; single-gain uses
-            -- CURRENCY_GAINED with no suffix → amount = 1.
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
-            -- v2.3.1: currency-vs-currency dedup. Mark/check synchronously
-            -- (before the timer schedules) so a second event arriving in
-            -- the same frame is dropped immediately. If we deferred the
-            -- check until the timer body, both closures would see an
-            -- empty cache and both would display.
-            -- Key falls back to the raw msg when there is no parseable
-            -- |h[Name]|h hyperlink (e.g. delve-completion system payloads
-            -- delivered via CHAT_MSG_CURRENCY).
-            -- This runs ahead of the display-toggle check so the recap
-            -- tally below never double-counts a Blizzard double-fire.
+            -- Mark/check the dedup synchronously (before scheduling): deferring to the timer would let two same-frame events both see an empty cache and both display.
             local dedupKey = currencyName or msg
             if IsRecentCurrency(dedupKey) then return end
             MarkCurrencyShown(dedupKey)
@@ -1241,7 +935,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         iconStr = "|T" .. info.iconFileID .. ":0|t "
                     end
                     total = info.quantity
-                    -- #8: flag the line when this currency has hit its cap.
                     -- maxQuantity/maxWeeklyQuantity are 0 for uncapped currencies.
                     if LootProConfig.currencyCap then
                         local maxq = info.maxQuantity
@@ -1255,14 +948,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            -- Recap: tally currency regardless of the display toggle.
             if LootProConfig.recapEnabled and currencyID and self.RecapAddCurrency then
                 self:RecapAddCurrency(currencyID, amt, currencyName, iconFileID)
             end
 
             if n.currency then
-                -- H-2: rotate to the next slot in the currency pool, populate
-                -- it, and dispatch the pre-bound function (zero closure churn).
                 _curSlot = (_curSlot % POOL_SIZE) + 1
                 local p = _curParams[_curSlot]
                 p.currencyName = currencyName
@@ -1291,25 +981,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         elseif event == "CHAT_MSG_LOOT" then
             local isSelf = IsSelfLoot(msg)
-            -- Party-loot filter: when partyLoot is disabled, drop any
-            -- CHAT_MSG_LOOT line that isn't a self-loot prefix (i.e. another
-            -- group member's loot). Self-loot still flows through.
             if n.partyLoot == false and not isSelf then return end
-            -- v2.2.8: register name for the loot/currency dedup window so
-            -- a paired CHAT_MSG_CURRENCY (vendor purchase) gets suppressed.
             local lname = ExtractItemName(msg)
             MarkLootSeen(lname)
-            -- L-1: capture and convert in one step; itemID is a number
-            -- throughout the rest of this branch.
             local itemID = _tonumber(_match(msg, "item:(%d+)"))
-            -- Full item link; carries bonus IDs that can change the looted
-            -- item's actual quality vs. its base itemID.
             local link = _match(msg, "(|c%x+|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
-            -- Quality, read from the link's own color first: that is the actual
-            -- (bonus-adjusted) quality of THIS drop and needs no item cache, so
-            -- a downscaled green of an epic-base item reads as uncommon rather
-            -- than tripping the rare-drop alert. Fall back to the cached quality
-            -- (link, then base id), then to minQuality, when no color is found.
             local rgbHex = _match(msg, "|c%x%x(%x%x%x%x%x%x)")
             local rawQ = rgbHex and QUALITY_BY_RGB[rgbHex:lower()]
             if not rawQ and link then rawQ = _select(3, _GetItemInfo(link)) end
@@ -1320,35 +996,15 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local q = rawQ or LootProConfig.minQuality
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
-            -- Recap + watchlist act on YOUR loot only (never other group
-            -- members'), independent of the display toggles below.
-            -- new-appearance verdict, resolved once here and appended to the
-            -- visible line below. Cheap no-op when the feature is off, on BCC,
-            -- or for non-gear (the class gate short-circuits inside).
             local isNewApp = false
-            -- notable-item verdict (#2): mounts/pets/toys/tertiary/socket gear.
-            -- Computed only when the option is on; reused by the rare alert
-            -- below and the line coloring further down.
             local isNotable = false
             if isSelf then
-                -- Recap: count everything you picked up, regardless of the
-                -- minimum-quality display filter. Skipped entirely (no
-                -- per-loot accounting at all) when recap is disabled.
                 if LootProConfig.recapEnabled and self.RecapAddItem then
                     self:RecapAddItem(itemID, amt, q, link)
                 end
-                -- Watchlist: prominent alert when a watched item is looted.
-                -- WatchOnLoot is a cheap no-op when the feature is off or
-                -- nothing matches.
                 if self.WatchOnLoot then
                     self:WatchOnLoot(itemID, lname, link)
                 end
-                -- Rare-drop alert (#3 sound + #4 frame flash). Fires when the
-                -- looted item meets the rare threshold, independent of the
-                -- display toggles. Cheap no-op below threshold / when off.
-                -- #2: also flag notable items (mount/pet/toy/tertiary/socket)
-                -- so they alert even below the threshold. Gated on the toggle
-                -- so the GetItemStats lookup never runs unless asked for.
                 local ra = LootProConfig.rareAlert
                 if ra and ra.notable and self.IsNotableItem then
                     isNotable = self:IsNotableItem(itemID, link)
@@ -1356,18 +1012,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if self.RareOnLoot then
                     self:RareOnLoot(q, isNotable)
                 end
-                -- Flag gear carrying an appearance you don't own yet. Gated on
-                -- the toggle so non-collectors pay nothing; IsNewAppearance is
-                -- the BCC/feature-off no-op when the module reported one.
                 if LootProConfig.newAppearance and self.IsNewAppearance then
                     isNewApp = self:IsNewAppearance(link)
                 end
             end
 
-            -- Per-class display filter (#6): hide configured item classes from
-            -- the readout. Recap/watch above already ran, so hidden items are
-            -- still tallied; only the visible line is suppressed. The classID
-            -- lookup is skipped entirely when no class filter is active.
+            -- Hidden items were still tallied above; only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe.
             local hidden = false
             local lfil = LootProConfig.lootFilters
             if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe) then
@@ -1379,27 +1029,19 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
 
             if n.loot and q >= LootProConfig.minQuality and not hidden then
-                -- Rare-drop coloring (#4): render lines at/above the rare
-                -- threshold in their item-quality color instead of the
-                -- configured loot color, so an epic stands out among greens.
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
                 if ra and ra.color and (q >= ra.threshold or isNotable) then
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
-                -- New-appearance marker: "" unless this is uncollected gear.
                 local newMarker = isNewApp and NEW_APPEARANCE_TAG or ""
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
 
                     if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
-                        -- M5: Skip the 100 ms defer when the item is already cached.
-                        -- v2.2.6: GetItemCount frequently returns the pre-loot
-                        -- bag total; we add `amt` so the display reflects the
-                        -- post-loot count. Consistent under-count reads worse
-                        -- than the rare over-count when the bag update lands first.
+                        -- GetItemCount often returns the PRE-loot total, so add amt to reflect the post-loot count.
                         if itemID and _GetItemNameByID and _GetItemNameByID(itemID) then
                             local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
                             local p = _lootSync
@@ -1409,7 +1051,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.marker = newMarker
                             ShowLoot(p, CountSuffix(cnt))
                         else
-                            -- H-2: rotate to next loot-pool slot for the 0.1s defer.
                             _lootSlot = (_lootSlot % POOL_SIZE) + 1
                             local lp = _lootParams[_lootSlot]
                             lp.iconStr = GetIconString(msg)
@@ -1422,7 +1063,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
-                        -- C_Timer doesn't exist in BCC; GetItemCount does, show immediately
                         local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned

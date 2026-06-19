@@ -1,20 +1,7 @@
 local addonName, ns = ...
 
--- About-tab data. Pure data only — the About page itself is built inline in
--- LootPro_UI.lua so it reuses that file's local styling helpers (close button,
--- styled buttons, palette). Keeping the large changelog table out here keeps
--- the UI file readable.
---
--- MAINTENANCE: the changelog below is a condensed mirror of CHANGELOG.md.
--- Addons cannot read files at runtime, so the in-game About tab cannot load
--- CHANGELOG.md — it renders this table instead. Update BOTH every release
--- (fold "update the in-addon changelog table" into the release routine).
--- Newest-first; keep ~10 recent versions, terse bullets. Older versions live
--- on CurseForge (see changelogURL).
-
+-- MAINTENANCE: addons can't read CHANGELOG.md at runtime, so this table mirrors it -- update both every release. Newest-first.
 ns.about = {
-    -- Every link opens a copyable-URL popup (addon:ShowURL) — WoW can't open a
-    -- web browser. Discord keeps its own dedicated invite popup (ShowDiscord).
     links = {
         curseforge = "https://www.curseforge.com/wow/addons/loot-pro",
         github     = "https://github.com/wheelbarrel00/LootPro",
@@ -23,7 +10,6 @@ ns.about = {
 
     changelogURL = "https://www.curseforge.com/wow/addons/loot-pro/files",
 
-    -- Sibling addons by the same author (Loot Pro deliberately omits itself).
     moreAddons = {
         {
             name = "Everything Delves",
@@ -37,10 +23,17 @@ ns.about = {
         },
     },
 
-    -- Beta testers credited in Loot Pro's own development.
     thanks = { "Agaman", "Rhinoplasty" },
 
     changelog = {
+        {
+            version = "2.9.1", date = "2026-06-18",
+            sections = {
+                { head = "Maintenance", items = {
+                    "Code comment cleanup across the addon and a TOC version bump. No functional changes.",
+                } },
+            },
+        },
         {
             version = "2.9.0", date = "2026-06-13",
             sections = {

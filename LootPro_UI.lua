@@ -4,14 +4,6 @@ local U = ns.U
 
 ns.UI = {}
 
--- v2.2.9: Restyled to match the Everything Delves visual style — flat
--- near-black background with a thin red border, custom title and close
--- button, flat ED-style tab row, and red/gold buttons. All widget logic
--- and saved variables are unchanged; this is shell-only chrome.
---
--- BackdropTemplate is required on both retail and BCC (the 2021 client
--- shares the Shadowlands-era SetBackdrop change), so we use the same
--- flat backdrop on every supported client — no template fork.
 local function CreateVersionedMainFrame(name, parent)
     local f = CreateFrame("Frame", name, parent, "BackdropTemplate")
     f:SetBackdrop({
@@ -19,8 +11,8 @@ local function CreateVersionedMainFrame(name, parent)
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    f:SetBackdropColor(0.05, 0.05, 0.05, 0.95)        -- #0D0D0D
-    f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0) -- #6D0501
+    f:SetBackdropColor(0.05, 0.05, 0.05, 0.95)
+    f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -29,7 +21,6 @@ local function CreateVersionedMainFrame(name, parent)
     return f
 end
 
--- ED-style flat close button (top-right "X").
 local function CreateCloseButton(parent)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(20, 20)
@@ -57,9 +48,6 @@ local function CreateCloseButton(parent)
     return b
 end
 
--- ED-style flat red/gold action button. Returns a Button with `.label`
--- font string, plus injected `SetText` / `GetFontString` shims so call
--- sites that used GameMenuButtonTemplate keep working unchanged.
 local function CreateStyledButton(parent, width, height, label)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(width, height)
@@ -68,14 +56,14 @@ local function CreateStyledButton(parent, width, height, label)
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    btn:SetBackdropColor(0.427, 0.020, 0.004, 1.0)        -- #6D0501
+    btn:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
     btn:SetBackdropBorderColor(0.10, 0.00, 0.00, 1.0)
 
     local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetPoint("CENTER")
     text:SetFont(text:GetFont(), 11)
     text:SetText(label or "")
-    text:SetTextColor(0.922, 0.718, 0.024, 1.0)            -- #EBB706
+    text:SetTextColor(0.922, 0.718, 0.024, 1.0)
     btn.label = text
 
     btn:SetScript("OnEnter", function(self)
@@ -91,14 +79,11 @@ local function CreateStyledButton(parent, width, height, label)
 end
 
 function ns.UI:Initialize()
-    -- Widened from 560 to 600 to fit the seventh tab (Vendor) on the row
-    -- without clipping. Pages are centered, so the extra width is just margin.
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
     gui:SetSize(600, 680)
     gui:SetPoint("CENTER")
     gui:Hide()
 
-    -- ED parity: Escape closes the settings window.
     tinsert(UISpecialFrames, "LootProGUI")
 
     CreateCloseButton(gui)
@@ -108,31 +93,21 @@ function ns.UI:Initialize()
     gui.title:SetFont(gui.title:GetFont(), 25, "OUTLINE")
     gui.title:SetText("|cFFFF2222Loot Pro|r")
 
-    -- Version label, top-right next to the close button (ED parity).
-    -- closeBtn is anchored TOPRIGHT (-6,-6) with 20px width, so we place
-    -- the version string just to its left.
     local verLabel = gui:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     verLabel:SetPoint("TOPRIGHT", gui, "TOPRIGHT", -30, -10)
     verLabel:SetFont(verLabel:GetFont(), 11)
     verLabel:SetText("|cFF999999v" .. addon.VERSION .. "|r")
 
-    -- "Join our Discord!" link, top-left -- mirrors the version label on the
-    -- right and flanks the centered title. The Discord logo chip sits before
-    -- the text as a brand accent; text uses the #FF2222 accent (matches the
-    -- title and section headers). Click pops a copyable invite
-    -- (addon:ShowDiscord) -- WoW can't open a web browser.
     local discord = CreateFrame("Button", nil, gui)
     discord:SetFrameStrata("HIGH")
     discord.icon = discord:CreateTexture(nil, "OVERLAY")
     discord.icon:SetSize(16, 16)
     discord.icon:SetPoint("LEFT", 0, 0)
-    -- White 64x64 TGA with alpha at Media\Textures\discord.tga. If the file
-    -- is ever missing, WoW draws a placeholder square -- replace the asset.
     discord.icon:SetTexture("Interface\\AddOns\\LootPro\\Media\\Textures\\discord.tga")
     discord.text = discord:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     discord.text:SetPoint("LEFT", discord.icon, "RIGHT", 5, 0)
     discord.text:SetText("Join our Discord!")
-    discord.text:SetTextColor(1.0, 0.133, 0.133)            -- #FF2222
+    discord.text:SetTextColor(1.0, 0.133, 0.133)
     discord:SetSize(16 + 5 + discord.text:GetStringWidth() + 4, 18)
     discord:SetPoint("TOPLEFT", gui, "TOPLEFT", 14, -12)
     discord:SetScript("OnClick", function() addon:ShowDiscord() end)
@@ -191,18 +166,16 @@ function ns.UI:Initialize()
         ShowPage(activeName)
     end
 
-    -- Hidden font string for measuring tab labels so each tab auto-sizes
-    -- to fit its text with consistent padding (matches ED's tab row).
     local measure = gui:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     measure:Hide()
 
     local TAB_HEIGHT  = 28
     local TAB_Y       = -54
     local TAB_PADDING = 4
-    local TAB_MARGIN  = 10   -- left start / right margin used to auto-size width
+    local TAB_MARGIN  = 10
     local tabIndex    = 0
     local lastTab     = nil
-    local tabRowEnd   = TAB_MARGIN   -- running right edge of the tab row
+    local tabRowEnd   = TAB_MARGIN
 
     local function CreateTab(name, label)
         tabIndex = tabIndex + 1
@@ -264,18 +237,12 @@ function ns.UI:Initialize()
     CreateTab("recap", "Recap")
     CreateTab("watchlist", "Alerts")
     CreateTab("vendor", "Vendor")
-    -- About sits LAST so the existing named tabs keep their order and any
-    -- shortcut that opens a specific tab stays valid.
     CreateTab("about", "About")
 
-    -- Auto-size the window so the full tab row fits with a right margin. Pages
-    -- are centered, so the extra width is just symmetric margin; the divider
-    -- and right-anchored chrome follow automatically.
     if tabRowEnd + TAB_MARGIN > gui:GetWidth() then
         gui:SetWidth(tabRowEnd + TAB_MARGIN)
     end
 
-    -- Thin red accent divider below the tab row.
     local divider = gui:CreateTexture(nil, "ARTWORK")
     divider:SetHeight(1)
     divider:SetPoint("TOPLEFT",  gui, "TOPLEFT",   6, TAB_Y - TAB_HEIGHT - 4)
@@ -368,9 +335,6 @@ function ns.UI:Initialize()
     
     AddColor("money", "Money", function() return "10 Gold 75 Silver 20 Copper" end)
     AddColor("currency", "Currency", function() return "+ 25 Kej" end)
-    -- Use Hearthstone (itemID 6948, icon 134414) -- an evergreen item present
-    -- in every client from classic onwards, so the preview is real on retail
-    -- and BCC alike.
     AddColor("loot", "Loot", function() return "+1 |T134414:0|t Hearthstone (1)" end)
     AddColor("combatEnter", "Combat Start", function() return LootProConfig.combatEnterText end)
     AddColor("combatLeave", "Combat End", function() return LootProConfig.combatLeaveText end)
@@ -422,9 +386,6 @@ function ns.UI:Initialize()
     local cleanDesc = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cleanDesc:SetPoint("TOPLEFT", cleanCheck, "BOTTOMLEFT", 25, 0); cleanDesc:SetTextColor(0.6, 0.6, 0.6); cleanDesc:SetText("(Strips text like 'You receive loot:')")
 
-    -- Display Party Loot: suppresses other group members' loot lines while
-    -- keeping your own. Anchored so it sits between cleanDesc and xpT in the
-    -- left column.
     local partyT = CreateFrame("CheckButton", "LPRO_TGL_partyLoot", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     partyT:SetPoint("TOPLEFT", cleanDesc, "BOTTOMLEFT", -25, -10)
     local partyFs = _G[partyT:GetName().."Text"]; partyFs:SetText("Display Party Loot")
@@ -442,15 +403,10 @@ function ns.UI:Initialize()
 
     local cEndT = AddToggle("combatLeave", "Display Combat END", "combatLeave", cStrT)
 
-    -- Round 3: Show Combat Follower XP sits on the RIGHT (under Combat END);
-    -- Display Experience sits on the LEFT (under the Clean Mode description).
-    -- Both swapped from the Round 2 layout so the column flow reads better.
     local fxpCheck = CreateFrame("CheckButton", "LPRO_FollowerToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     fxpCheck:SetPoint("TOPLEFT", cEndT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
     fxpCheck:SetScript("OnClick", function(self) LootProConfig.showFollowerXP = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
 
-    -- Display Experience: inline (rather than AddToggle) so we can chain
-    -- directly off the Party Loot checkbox in the left column.
     local xpT = CreateFrame("CheckButton", "LPRO_TGL_xp", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     xpT:SetPoint("TOPLEFT", partyT, "BOTTOMLEFT", 0, -5)
     local xpFs = _G[xpT:GetName().."Text"]; xpFs:SetText("Display Experience")
@@ -465,8 +421,6 @@ function ns.UI:Initialize()
     local repGT = AddToggle("repGain", "Display Reputation GAIN", "repGain", honorT)
     local repLT = AddToggle("repLoss", "Display Reputation LOSS", "repLoss", repGT)
 
-    -- H4: Expose minQuality so users can actually filter loot without hand
-    -- editing SavedVariables. Uses quality-color-aware labels.
     local qualityList = {
         {val=0, lbl="Poor+ (All)"},
         {val=1, lbl="Common+"},
@@ -476,7 +430,6 @@ function ns.UI:Initialize()
         {val=5, lbl="Legendary+"},
     }
     local mQual = U.CreateGenericCycler("LPRO_MQ", "Minimum Loot Quality", pages.notifications, qualityList, "minQuality", "root")
-    -- Round 3: center under both columns instead of trailing the right column.
     mQual.label:ClearAllPoints()
     mQual.label:SetPoint("TOP", pages.notifications, "TOP", 0, -285)
     mQual.label:SetJustifyH("CENTER")
@@ -484,8 +437,6 @@ function ns.UI:Initialize()
     mQual:SetPoint("TOP", mQual.label, "BOTTOM", 0, -5)
     mQual:Refresh()
 
-    -- #6: per-class loot-feed filters, below the minimum-quality cycler. These
-    -- hide matching classes from the readout; the recap still tallies them.
     local filterHeader = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     filterHeader:SetPoint("TOP", pages.notifications, "TOP", 0, -350)
     filterHeader:SetText("Hide from loot feed:")
@@ -524,13 +475,7 @@ function ns.UI:Initialize()
         addon:UpdateAllVisuals()
     end)
 
-    -- Fast Loot mirrors the game's Auto Loot setting (the autoLootDefault
-    -- CVar): one click grabs everything instead of opening the loot window.
-    -- That CVar persists across reload/logout on its own, so we just read and
-    -- write it. (The prior build used "enableQuickLoot", which is not a real
-    -- CVar -- SetCVar wrote nothing that survived a reload, which is why the box
-    -- never stayed checked.) C_CVar is the modern API; fall back to the legacy
-    -- globals on older clients (BCC).
+    -- Fast Loot is the game's autoLootDefault CVar (persists on its own). NOTE: "enableQuickLoot" is not a real CVar -- the prior build wrote it and the toggle never stuck.
     local function LP_GetAutoLoot()
         if C_CVar and C_CVar.GetCVarBool then return C_CVar.GetCVarBool("autoLootDefault") end
         if GetCVarBool then return GetCVarBool("autoLootDefault") end
@@ -557,9 +502,6 @@ function ns.UI:Initialize()
     end)
     qlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Speedy AutoLoot (addon-driven; see LootPro_Core). Loots every slot the
-    -- instant loot is available, so the window never even appears. Stored in
-    -- LootProConfig, unlike Fast Loot which is a game CVar.
     local speedyCheck = CreateFrame("CheckButton", "LPRO_SpeedyAutoLoot", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     speedyCheck:SetPoint("TOPLEFT", qlCheck, "BOTTOMLEFT", 0, -5)
     _G[speedyCheck:GetName().."Text"]:SetText("Speedy AutoLoot")
@@ -575,15 +517,11 @@ function ns.UI:Initialize()
     end)
     speedyCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- #8: currency cap warning toggle. Anchored later (on the right side,
-    -- beneath "Keep busy feeds up longer") once fadeScaleCheck exists.
     local capCheck = CreateFrame("CheckButton", "LPRO_CurrencyCap", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     _G[capCheck:GetName().."Text"]:SetText("Warn on currency cap")
     capCheck:SetChecked(LootProConfig.currencyCap)
     capCheck:SetScript("OnClick", function(self) LootProConfig.currencyCap = self:GetChecked() and true or false end)
 
-    -- #12: per-click minimap actions (three cyclers in a row). Sits beneath the
-    -- loot toggles now that "Warn on currency cap" has moved to the right side.
     local mmHeader = pages.customization:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     mmHeader:SetPoint("TOPLEFT", speedyCheck, "BOTTOMLEFT", 4, -14)
     mmHeader:SetText("Minimap Button Clicks:")
@@ -619,11 +557,6 @@ function ns.UI:Initialize()
         pages.customization.lF:Refresh(); pages.customization.lO:Refresh(); addon:UpdateAllVisuals()
     end)
 
-    -- #4: readout fade-behavior toggles. Placed on the right side of the tab,
-    -- each inline (same row) with a left-column checkbox -- "Pause fade" with
-    -- "Show Minimap Icon" and "Keep busy feeds up longer" with "Fast Loot" --
-    -- so the pair sits above the minimap-click cyclers. UpdateAllVisuals
-    -- re-applies the mouse state for hover-pause.
     local fadeScaleCheck = CreateFrame("CheckButton", "LPRO_FadeScale", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     fadeScaleCheck:SetPoint("TOPLEFT", qlCheck, "TOPLEFT", 250, 0)
     _G[fadeScaleCheck:GetName().."Text"]:SetText("Keep busy feeds up longer")
@@ -637,9 +570,6 @@ function ns.UI:Initialize()
     end)
     fadeScaleCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- "Warn on currency cap" now lives directly beneath "Keep busy feeds up
-    -- longer" on the right, so the loot toggles and minimap-click cyclers form
-    -- one clean left-hand column.
     capCheck:SetPoint("TOPLEFT", fadeScaleCheck, "BOTTOMLEFT", 0, -5)
 
     local hoverPauseCheck = CreateFrame("CheckButton", "LPRO_HoverPause", pages.customization, "InterfaceOptionsCheckButtonTemplate")
@@ -658,13 +588,6 @@ function ns.UI:Initialize()
     end)
     hoverPauseCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -------------------------------------------------
-    -- SESSION RECAP TAB
-    -------------------------------------------------
-    -- Live view of the in-memory session tally maintained by LootPro_Recap.
-    -- The header (duration) and body are refreshed on a throttled OnUpdate
-    -- that only fires while this page is the active tab, so there is zero
-    -- background cost when the GUI is closed or another tab is shown.
     do
         local page = pages.recap
 
@@ -673,10 +596,6 @@ function ns.UI:Initialize()
         _G[recapEnable:GetName().."Text"]:SetText("Enable Session Recap")
         recapEnable:SetChecked(LootProConfig.recapEnabled)
 
-        -- Stacked directly beneath the global "Start Test Mode" button, right
-        -- edges aligned, keeping the same vertical gap it had before. testBtn is
-        -- an upvalue from Initialize; cross-parent anchoring is fine and the
-        -- button still hides with the Recap page since it's parented to it.
         local resetSession = CreateStyledButton(page, 140, 24, "Reset Session")
         resetSession:SetPoint("TOPRIGHT", testBtn, "BOTTOMRIGHT", 0, -22)
 
@@ -704,9 +623,6 @@ function ns.UI:Initialize()
         recapHint:SetJustifyH("LEFT")
         recapHint:SetText("Counts reset on login, /reload, or Reset Session. Also available via /lp recap.")
 
-        -- Scratch reused across rebuilds. BuildRecapBody returns a finished
-        -- string, so the arrays can be wiped and refilled instead of
-        -- reallocated each time the body refreshes.
         local _lines, _parts = {}, {}
         local function BuildRecapBody()
             local s = addon:RecapGetSession()
@@ -744,7 +660,6 @@ function ns.UI:Initialize()
             if #s.notable > 0 then
                 lines[#lines + 1] = " "
                 lines[#lines + 1] = "|cFFA335EENotable drops:|r"
-                -- newest first
                 for i = #s.notable, 1, -1 do
                     lines[#lines + 1] = "    " .. s.notable[i]
                 end
@@ -754,8 +669,6 @@ function ns.UI:Initialize()
         end
 
         local function RefreshRecap()
-            -- Invalidate the OnUpdate header cache so the next tick re-syncs
-            -- the duration string after a manual refresh / enable / reset.
             page._lastDur = nil
             if not LootProConfig.recapEnabled then
                 recapHeader:SetText("|cFFFF2222Session:|r |cFF888888disabled|r")
@@ -768,7 +681,6 @@ function ns.UI:Initialize()
 
         recapEnable:SetScript("OnClick", function(self)
             LootProConfig.recapEnabled = self:GetChecked() and true or false
-            -- Fresh session on enable; empties the bounded table on disable.
             addon:RecapReset()
             page._lastVer = -1
             RefreshRecap()
@@ -783,7 +695,7 @@ function ns.UI:Initialize()
         page._lastVer = -1
         page._throttle = 1
         page:SetScript("OnShow", function(self)
-            self._lastVer = -1   -- force a body rebuild on (re)entry
+            self._lastVer = -1
             self._throttle = 1
             recapEnable:SetChecked(LootProConfig.recapEnabled)
             tooltipCheck:SetChecked(LootProConfig.tooltipLoots)
@@ -794,15 +706,11 @@ function ns.UI:Initialize()
             if self._throttle < 0.5 then return end
             self._throttle = 0
             if not LootProConfig.recapEnabled then return end
-            -- Duration ticks twice a second but only changes once a second, so
-            -- skip the concat + SetText when the formatted value is unchanged.
             local dur = addon:RecapFormatDuration(addon:RecapElapsed())
             if self._lastDur ~= dur then
                 self._lastDur = dur
                 recapHeader:SetText("|cFFFF2222Session:|r " .. dur)
             end
-            -- The body is rebuilt only when the session actually changed
-            -- (version guard) to avoid string churn.
             local s = addon:RecapGetSession()
             if self._lastVer ~= s.version then
                 self._lastVer = s.version
@@ -811,12 +719,6 @@ function ns.UI:Initialize()
         end)
     end
 
-    -------------------------------------------------
-    -- ALERTS TAB (watched items + rare-drop alerts)
-    -------------------------------------------------
-    -- Top section manages watched items; bottom section configures rarity-
-    -- based alerts. List rows are pooled and reused across refreshes; the
-    -- scroll child only grows to fit the entries.
     do
         local page = pages.watchlist
 
@@ -853,11 +755,8 @@ function ns.UI:Initialize()
         local addBtn = CreateStyledButton(page, 64, 22, "Add")
         addBtn:SetPoint("LEFT", addBox, "RIGHT", 12, 0)
 
-        -- Scrollable list of current entries.
         local scroll = CreateFrame("ScrollFrame", "LPRO_WatchScroll", page, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 30, -92)
-        -- Height tuned so the two-line hint below sits just above the Rare Drop
-        -- Alerts divider at -296 (small gap, not on the line; list still scrolls).
         scroll:SetSize(430, 162)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(410, 1)
@@ -865,7 +764,7 @@ function ns.UI:Initialize()
 
         local rows = {}
         local ROW_H = 26
-        local RefreshList  -- forward declaration (row remove buttons call it)
+        local RefreshList
 
         RefreshList = function()
             local items = addon:WatchList()
@@ -921,9 +820,6 @@ function ns.UI:Initialize()
         addBox:SetScript("OnEnterPressed", DoAdd)
         addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-        -- Shift-click an item (e.g. from your bags) while the add box is
-        -- focused to drop its link in. hooksecurefunc is post-only and never
-        -- alters the default click behavior.
         if HandleModifiedItemClick then
             hooksecurefunc("HandleModifiedItemClick", function(link)
                 if link and addBox:HasFocus() and IsShiftKeyDown() then
@@ -938,7 +834,6 @@ function ns.UI:Initialize()
         watchHint:SetJustifyH("LEFT")
         watchHint:SetText("Alerts fire when YOU loot a watched item. Name entries match any item containing that text; links and IDs match exactly.")
 
-        -- ---- Rare Drop Alerts section (#3 sound + #4 color/flash) ----
         local rareDivider = page:CreateTexture(nil, "ARTWORK")
         rareDivider:SetHeight(1)
         rareDivider:SetPoint("TOPLEFT", 30, -296)
@@ -970,19 +865,12 @@ function ns.UI:Initialize()
             LootProConfig.rareAlert.sound = self:GetChecked() and true or false
         end)
 
-        -- #2: extend the rare alert to collection-worthy / specially-statted
-        -- loot the quality threshold alone would miss. Triggers whichever of
-        -- the color/flash/sound effects above are enabled. Cross-client (mount/
-        -- pet/socket work on BCC; toys/tertiary are retail, guarded in-engine).
         local notableCheck = CreateFrame("CheckButton", "LPRO_RareNotable", page, "InterfaceOptionsCheckButtonTemplate")
         notableCheck:SetPoint("TOPLEFT", rareSound, "BOTTOMLEFT", 0, -2)
         _G[notableCheck:GetName().."Text"]:SetText("Also alert on notable items")
         notableCheck:SetScript("OnClick", function(self)
             LootProConfig.rareAlert.notable = self:GetChecked() and true or false
         end)
-        -- Detail lives in a hover tooltip rather than an inline hint: the Alerts
-        -- tab is vertically full, and stacked wrapping hints overran the bottom
-        -- "Reset to Defaults" button.
         notableCheck:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Notable items", 1, 1, 1)
@@ -1009,9 +897,6 @@ function ns.UI:Initialize()
             if addon.RareTest then addon:RareTest() end
         end)
 
-        -- ---- New transmog appearance marker ----
-        -- Retail-only: BCC has no transmog system, so the toggle is hidden
-        -- there entirely (the config key still exists but the feature no-ops).
         local newAppCheck
         if addon.IS_RETAIL then
             newAppCheck = CreateFrame("CheckButton", "LPRO_NewAppearance", page, "InterfaceOptionsCheckButtonTemplate")
@@ -1042,14 +927,6 @@ function ns.UI:Initialize()
         end)
     end
 
-    -------------------------------------------------
-    -- VENDOR TAB (auto-sell gray items)
-    -------------------------------------------------
-    -- ElvUI "Vendor Grays" parity. The actual selling lives in
-    -- LootPro_Vendor.lua (MERCHANT_SHOW hook + paced seller); this tab only
-    -- edits the LootProConfig.vendorGrays knobs and offers an on-demand
-    -- "Sell Grays Now" button. Widgets re-sync from OnShow, matching the
-    -- Recap/Alerts tabs.
     do
         local page = pages.vendor
 
@@ -1066,8 +943,6 @@ function ns.UI:Initialize()
         enableDesc:SetJustifyH("LEFT")
         enableDesc:SetText("When you open a merchant, every poor-quality (gray) item in your bags is sold automatically. Quest items and no-value items are never sold.")
 
-        -- Fractional Sell Interval slider (0.1-1.0s). U.CreateSlider rounds to
-        -- integers, so this tab builds a small dedicated slider instead.
         local intervalLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         intervalLabel:SetText("Sell Interval")
         intervalLabel:SetPoint("TOPLEFT", enableDesc, "BOTTOMLEFT", -25, -24)
@@ -1114,8 +989,6 @@ function ns.UI:Initialize()
         sellNowBtn:SetScript("OnClick", function()
             addon:VendorStart(true)
         end)
-        -- Override the default styled-button hover so we can attach a tooltip;
-        -- the backdrop color change is replicated to keep the hover look.
         sellNowBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(0.541, 0.024, 0.004, 1.0)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1131,8 +1004,6 @@ function ns.UI:Initialize()
             GameTooltip:Hide()
         end)
 
-        -- #3: vendor sell price on item tooltips. Lives here (not auto-sell,
-        -- but vendor-value related). The line plumbing is in LootPro_Tooltip.
         local sellTipCheck = CreateFrame("CheckButton", "LPRO_TooltipSell", page, "InterfaceOptionsCheckButtonTemplate")
         sellTipCheck:SetPoint("TOPLEFT", sellNowBtn, "BOTTOMLEFT", -4, -18)
         _G[sellTipCheck:GetName().."Text"]:SetText("Show vendor sell price on item tooltips")
@@ -1161,9 +1032,6 @@ function ns.UI:Initialize()
         end)
     end
 
-    -------------------------------------------------
-    -- FIRST-TIME WELCOME POPUP
-    -------------------------------------------------
     local welcome = CreateVersionedMainFrame("LootProWelcome", UIParent)
     welcome:SetSize(320, 160)
     welcome:SetPoint("CENTER")
@@ -1186,8 +1054,6 @@ function ns.UI:Initialize()
     local openBtn = CreateStyledButton(welcome, 140, 28, "Open Settings")
     openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -10)
     openBtn:SetScript("OnClick", function()
-        -- M6: A user clicking "Open Settings" is clearly onboarding; never nag
-        -- them with this popup again.
         LootProConfig.hideWelcome = true
         welcome:Hide()
         gui:Show()
@@ -1196,14 +1062,10 @@ function ns.UI:Initialize()
     local hideCheck = CreateFrame("CheckButton", "LPRO_HideWelcome", welcome, "InterfaceOptionsCheckButtonTemplate")
     hideCheck:SetPoint("BOTTOMLEFT", 20, 15)
     _G[hideCheck:GetName().."Text"]:SetText("Don't show this again")
-    -- M6: Set initial state at creation so the displayed check reflects the
-    -- saved variable even if the template swallows our OnShow hook.
     hideCheck:SetChecked(LootProConfig.hideWelcome)
     hideCheck:HookScript("OnShow", function(self) self:SetChecked(LootProConfig.hideWelcome) end)
     hideCheck:SetScript("OnClick", function(self) LootProConfig.hideWelcome = self:GetChecked() and true or false end)
     
-    -- M6: Closing via the X button also persists hideWelcome if the user
-    -- checked the box mid-session (defensive; OnClick already writes it).
     welcome:HookScript("OnHide", function()
         if hideCheck:GetChecked() then
             LootProConfig.hideWelcome = true
@@ -1212,9 +1074,6 @@ function ns.UI:Initialize()
     
     ns.UI.welcomeFrame = welcome
 
-    -------------------------------------------------
-    -- ONE-TIME "WHAT'S NEW" POPUP
-    -------------------------------------------------
     local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
     wn:SetSize(480, 360)
     wn:SetPoint("CENTER")
@@ -1249,8 +1108,6 @@ function ns.UI:Initialize()
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
 
-    -- Primary button sits right-of-center so the Discord chip fits beside it
-    -- (screenshot parity with the sibling addons).
     local wnOpen = CreateStyledButton(wn, 150, 26, "Open Settings")
     wnOpen:SetPoint("BOTTOM", wn, "BOTTOM", 75, 18)
     wnOpen:SetScript("OnClick", function()
@@ -1258,34 +1115,15 @@ function ns.UI:Initialize()
         gui:Show()
     end)
 
-    -- "Join our Discord!" to the left of the primary button. Reusable popup
-    -- chip from Widgets so every future popup gets the identical button. Does
-    -- NOT mark the revision seen, so the player can copy the invite and keep
-    -- reading (the auto-show in LootPro_Core marks it on login).
     local wnDiscord = U.CreateDiscordButton(wn)
     wnDiscord:SetPoint("RIGHT", wnOpen, "LEFT", -10, 0)
 
-    -- The revision is marked seen when the popup AUTO-shows on login (see
-    -- LootPro_Core's PLAYER_LOGIN). We deliberately do NOT mark it on hide, so
-    -- a manual /lp whatsnew preview and reload-teardown can't flip the flag.
     ns.UI.whatsNewFrame = wn
 
-    -------------------------------------------------
-    -- ABOUT TAB
-    -------------------------------------------------
-    -- One themed scroll frame rendered top -> bottom. Content is laid out with
-    -- a running Y cursor and a FIXED wrap width (the scroll child's real width
-    -- isn't resolved at build time), measuring GetStringHeight to advance. All
-    -- styling reuses this file's local helpers (CreateStyledButton, the close
-    -- button, the #FF2222 / #EBB706 palette) -- no new look is invented. Every
-    -- external link routes through addon:ShowURL (WoW can't open a browser).
     do
         local page = pages.about
         local data = ns.about or {}
 
-        -- The "Reset to Defaults" button and its caption are parented to gui, so
-        -- they float over every tab. They make no sense on About and overlap the
-        -- changelog, so hide them while About is shown and restore them on exit.
         page:SetScript("OnShow", function()
             resetBtn:Hide()
             stubC:Hide()
@@ -1295,20 +1133,17 @@ function ns.UI:Initialize()
             stubC:Show()
         end)
 
-        local CONTENT_W = 460   -- scroll child width
-        local WRAP      = 440   -- fixed wrap width for body text
+        local CONTENT_W = 460
+        local WRAP      = 440
 
         local scroll = CreateFrame("ScrollFrame", "LPRO_AboutScroll", page, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", page, "TOPLEFT", 4, 0)
-        -- Page is anchored 140px below the gui top and is 550 tall, so it
-        -- extends ~10px past the gui's bottom border; lift the scroll bottom
-        -- to keep the scrollbar inside the red frame edge.
         scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -26, 18)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(CONTENT_W, 10)
         scroll:SetScrollChild(content)
 
-        local y = 4   -- distance below the top edge (placed at -y)
+        local y = 4
 
         local function AddSpacer(h) y = y + (h or 8) end
 
@@ -1351,8 +1186,6 @@ function ns.UI:Initialize()
             y = y + 8
         end
 
-        -- Row of flat red/gold link buttons; wraps to a new line when the row
-        -- would exceed the content width. defs = { {label=, onClick=}, ... }.
         local function AddButtonRow(defs)
             local x, rowH, gap = 0, 24, 8
             for _, d in ipairs(defs) do
@@ -1370,10 +1203,8 @@ function ns.UI:Initialize()
             y = y + rowH + gap
         end
 
-        -- ---- Title block ----
         AddTitle("|cFFFF2222Loot Pro|r")
-        -- Version is read LIVE from the TOC so the About tab never drifts from
-        -- the packaged build (no second hardcoded version string to maintain).
+        -- Read live from the TOC so the About tab never drifts from the packaged build (no second version string to maintain).
         local version = (C_AddOns and C_AddOns.GetAddOnMetadata
             and C_AddOns.GetAddOnMetadata(addonName, "Version")) or addon.VERSION or "?"
         AddBody("|cFFEBB706v" .. version .. "|r  by Wheelbarrel00")
@@ -1381,7 +1212,6 @@ function ns.UI:Initialize()
 
         AddDivider()
 
-        -- ---- Links ----
         local links = data.links or {}
         AddHeader("Links")
         AddButtonRow({
@@ -1394,7 +1224,6 @@ function ns.UI:Initialize()
 
         AddDivider()
 
-        -- ---- Commands (user-facing only; debug commands omitted) ----
         AddHeader("Commands")
         AddBody(table.concat({
             "|cFFEBB706/lp|r  Toggle the Loot Pro window",
@@ -1408,13 +1237,11 @@ function ns.UI:Initialize()
 
         AddDivider()
 
-        -- ---- Tutorials ----
         AddHeader("Tutorials")
         AddBody("|cFF888888Video tutorials coming soon.|r")
 
         AddDivider()
 
-        -- ---- More add-ons by Wheelbarrel00 ----
         AddHeader("More Add-ons by Wheelbarrel00")
         for _, a in ipairs(data.moreAddons or {}) do
             AddBody("|cFFEBB706" .. a.name .. "|r")
@@ -1426,7 +1253,6 @@ function ns.UI:Initialize()
 
         AddDivider()
 
-        -- ---- Thanks ----
         local thanks = data.thanks or {}
         if #thanks > 0 then
             AddHeader("Thanks")
@@ -1434,7 +1260,6 @@ function ns.UI:Initialize()
             AddDivider()
         end
 
-        -- ---- Changelog (rendered from the embedded Lua table) ----
         AddHeader("Changelog")
         for _, entry in ipairs(data.changelog or {}) do
             AddBody("|cFFFF2222v" .. entry.version .. "|r  |cFF888888" .. (entry.date or "") .. "|r")
@@ -1457,7 +1282,6 @@ function ns.UI:Initialize()
         content:SetHeight(y + 10)
     end
 
-    -- /lp about opens the window and jumps straight to the About tab.
     ns.UI.showAbout = function()
         if addon:IsReady() then
             gui:Show()
@@ -1483,19 +1307,11 @@ function ns.UI:Initialize()
 
     ns.UI:RefreshAllWidgets()
     SetActiveTab("layout")
-    -- L7: Slash command is registered at file-load time in LootPro.lua so it
-    -- works during loading screens; this just wires the GUI reference.
     ns.UI.toggleGUI = function() if addon:IsReady() then if gui:IsShown() then gui:Hide() else gui:Show() end end end
 
-    -------------------------------------------------
-    -- BLIZZARD ADDON OPTIONS ENTRY
-    -------------------------------------------------
-    -- A small panel in the game's Options > AddOns list that links to the full
-    -- Loot Pro window. Supports the modern retail Settings API and falls back
-    -- to the legacy InterfaceOptions API on older clients (BCC).
     do
         local panel = CreateFrame("Frame")
-        panel.name = "Loot Pro" -- used by the legacy API; harmless for the new one
+        panel.name = "Loot Pro"
 
         local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         title:SetPoint("TOPLEFT", 16, -16)
@@ -1514,8 +1330,7 @@ function ns.UI:Initialize()
         local openBtn = CreateStyledButton(panel, 220, 26, "Open Loot Pro Options")
         openBtn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -18)
         openBtn:SetScript("OnClick", function()
-            -- Close the options window first so the Loot Pro frame isn't hidden
-            -- behind it (the Settings panel sits at a higher strata).
+            -- Close the options panel first, or it covers the Loot Pro window (higher strata).
             if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then
                 HideUIPanel(SettingsPanel)
             elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() and HideUIPanel then

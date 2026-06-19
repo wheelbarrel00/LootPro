@@ -1,27 +1,6 @@
 local addonName, ns = ...
 local addon = ns.addon
 
--- Loot alerts: watched items, plus rare-drop flash/sound (see the bottom
--- section). Both surface through the "Alerts" tab in the settings window.
---
--- WATCHED ITEMS
--- The user keeps a small list of items they care about (mounts, recipes,
--- BiS pieces, transmog...). When one of those is looted by the player, we
--- fire a prominent center-screen toast plus an alert sound -- the normal
--- loot line still shows underneath.
---
--- Storage lives in LootProConfig.watchlist (SavedVariables, persisted):
---   { enabled = bool, sound = bool, items = { <entry>, ... } }
--- where each entry is one of:
---   { id = <itemID>, label = <name>, icon = <fileID> }   -- exact id match
---   { key = "<lowercased substring>", label = <text> }    -- name substring
--- id-based entries come from a pasted/shift-clicked link or a numeric id and
--- match precisely; text entries match when the looted item's name contains
--- the (case-insensitive) substring.
---
--- The toast frame is created lazily on the first alert, so players who never
--- use the watchlist pay nothing for it.
-
 local _GetItemInfoInstant = GetItemInfoInstant
 local _GetItemInfo = GetItemInfo
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
@@ -30,17 +9,10 @@ local _tonumber = tonumber
 local SOUNDKIT = _G.SOUNDKIT
 local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark
 
--- Notable-item detection (drives the "alert on notable items" rare-alert
--- option). Collectibles only: Miscellaneous(15) holds mounts (subclass 5),
--- companion pets (subclass 2) and toys; Battlepet(17) is a caged pet. Gear is
--- deliberately excluded -- socket/tertiary drops overlap with the quality
--- threshold and just add noise. GetToyInfo is retail-only (nil-guarded).
 local CLASS_MISC, CLASS_BATTLEPET = 15, 17
 local SUBCLASS_PET, SUBCLASS_MOUNT = 2, 5
 local _GetToyInfo = C_ToyBox and C_ToyBox.GetToyInfo
 
--- Upper bound on watched items. The list is user-managed and persisted, so a
--- cap keeps a runaway paste from bloating SavedVariables.
 local WATCH_CAP = 30
 
 local function ResolveName(id)
@@ -55,17 +27,11 @@ local function ResolveName(id)
     return nil
 end
 
-----------------------------------------------------------------------
--- List management (used by the Watchlist tab).
-----------------------------------------------------------------------
-
 function addon:WatchList()
     local wl = LootProConfig and LootProConfig.watchlist
     return (wl and wl.items) or {}
 end
 
--- Add an entry from arbitrary text: an item link, a numeric itemID, or a
--- plain name substring. Returns (true, entry) on success or (false, reason).
 function addon:WatchAdd(text)
     local wl = LootProConfig and LootProConfig.watchlist
     if not wl or not wl.items then return false, "notready" end
@@ -74,7 +40,6 @@ function addon:WatchAdd(text)
     if text == "" then return false, "empty" end
     if #wl.items >= WATCH_CAP then return false, "full" end
 
-    -- An item link embeds |Hitem:<id>:...|h[Name]|h; a bare number is an id.
     local id = _tonumber(text:match("|Hitem:(%d+)"))
     if not id and text:match("^%d+$") then id = _tonumber(text) end
 
@@ -84,8 +49,6 @@ function addon:WatchAdd(text)
             if e.id == id then return false, "dupe" end
         end
         local icon = _GetItemInfoInstant and _select(5, _GetItemInfoInstant(id)) or nil
-        -- Prefer a pasted link's display name; else resolve from the id; else
-        -- a placeholder that the matcher never relies on (id match is exact).
         local name = text:match("|h%[(.-)%]|h") or ResolveName(id) or ("Item #" .. id)
         entry = { id = id, label = name, icon = icon }
     else
@@ -110,18 +73,9 @@ function addon:WatchRemove(index)
     return false
 end
 
-----------------------------------------------------------------------
--- Matching + alerting (called from the loot path in LootPro_Core).
-----------------------------------------------------------------------
-
--- Returns the matching entry for a looted item, or nil. id match is exact;
--- text entries match when `name` contains the stored substring.
 function addon:WatchMatch(itemID, name)
     local wl = LootProConfig and LootProConfig.watchlist
     if not wl or not wl.items then return nil end
-    -- Lowercase the looted name lazily. The common watchlist is all id-based
-    -- entries (mounts, recipes, BiS), which never reach the key branch, so we
-    -- avoid allocating a fresh lowercased string on every self-loot.
     local lname
     for _, e in ipairs(wl.items) do
         if e.id and itemID and e.id == itemID then
@@ -136,8 +90,6 @@ function addon:WatchMatch(itemID, name)
     return nil
 end
 
--- Lazily build the toast frame on first use. Styled to match the ED chrome
--- (near-black fill, brand-red border). Non-interactive; fades itself out.
 local alertFrame
 local function EnsureAlert()
     if alertFrame then return alertFrame end
@@ -153,7 +105,7 @@ local function EnsureAlert()
         edgeSize = 1,
     })
     f:SetBackdropColor(0.05, 0.05, 0.05, 0.92)
-    f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0) -- #6D0501
+    f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
 
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.title:SetPoint("TOP", 0, -12)
@@ -168,8 +120,6 @@ local function EnsureAlert()
     f.name:SetPoint("LEFT", f.icon, "RIGHT", 8, 0)
     f.name:SetFont(f.name:GetFont(), 18, "OUTLINE")
 
-    -- Fade in -> hold -> fade out, then hide. AnimationGroups are supported on
-    -- every client LootPro targets (retail + BCC).
     local ag = f:CreateAnimationGroup()
     local a1 = ag:CreateAnimation("Alpha"); a1:SetFromAlpha(0); a1:SetToAlpha(1); a1:SetDuration(0.20); a1:SetOrder(1)
     local a2 = ag:CreateAnimation("Alpha"); a2:SetFromAlpha(1); a2:SetToAlpha(1); a2:SetDuration(2.50); a2:SetOrder(2)
@@ -190,8 +140,6 @@ function addon:WatchAlert(entry, link, name)
         icon = _select(5, _GetItemInfoInstant(entry.id))
     end
     f.icon:SetTexture(icon or QUESTION_MARK_ICON)
-    -- A link renders colored in a fontstring (not clickable, which is fine for
-    -- a transient toast); fall back to the stored label or looted name.
     f.name:SetText(link or entry.label or name or "Watched item")
 
     f:Show()
@@ -204,8 +152,6 @@ function addon:WatchAlert(entry, link, name)
     end
 end
 
--- Entry point from the loot handler. Cheap no-ops when the feature is off or
--- nothing matches; only does real work on an actual hit.
 function addon:WatchOnLoot(itemID, name, link)
     local wl = LootProConfig and LootProConfig.watchlist
     if not wl or not wl.enabled then return end
@@ -215,14 +161,6 @@ function addon:WatchOnLoot(itemID, name, link)
     end
 end
 
-----------------------------------------------------------------------
--- Rare-drop alerts (#3 sound + #4 frame flash). The per-line coloring half
--- of #4 lives in the loot display path in LootPro_Core; here we own the
--- frame flash and the sound. The flash overlay is created lazily on the loot
--- frame the first time it's needed.
-----------------------------------------------------------------------
-
--- A loot-toast sound if the client has one, else the raid-warning ping.
 local RARE_SOUND = (SOUNDKIT and (SOUNDKIT.UI_EPICLOOT_TOAST or SOUNDKIT.RAID_WARNING)) or nil
 
 local function RareFlash(quality)
@@ -243,7 +181,6 @@ local function RareFlash(quality)
         lf._rareFlash = flash
     end
 
-    -- Tint the pulse by the item's quality color for a richer cue.
     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[quality]
     if qc then
         flash:SetColorTexture(qc.r, qc.g, qc.b, 0.30)
@@ -254,11 +191,6 @@ local function RareFlash(quality)
     flash._ag:Play()
 end
 
--- "Notable" = collection-worthy or specially-statted loot that a flat quality
--- threshold misses: mounts, companion/battle pets, and toys. Cheap by
--- construction -- mount/pet are integer class compares and toys a Misc-only
--- ToyBox lookup, all allocation-free. Gear is intentionally excluded (the
--- quality threshold already covers it). Returns false for everything else.
 function addon:IsNotableItem(itemID, link)
     local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
     if not classID then return false end
@@ -278,9 +210,6 @@ function addon:IsNotableItem(itemID, link)
     return false
 end
 
--- Entry point from the loot handler for a self-looted item of `quality`.
--- `isNotable` (precomputed by the caller, only when the option is on) forces an
--- alert for items below the quality threshold.
 function addon:RareOnLoot(quality, isNotable)
     local ra = LootProConfig and LootProConfig.rareAlert
     if not ra then return end
@@ -289,8 +218,6 @@ function addon:RareOnLoot(quality, isNotable)
     if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end
 
--- Preview for the Alerts tab's test button: flash + sound at the configured
--- threshold quality (so the tint matches what a real drop will look like).
 function addon:RareTest()
     local ra = LootProConfig and LootProConfig.rareAlert
     RareFlash((ra and ra.threshold) or 4)
