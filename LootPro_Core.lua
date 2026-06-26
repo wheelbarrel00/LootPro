@@ -19,6 +19,7 @@ local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
 local _issecret = issecretvalue
 
 local NEW_APPEARANCE_TAG = " |cff66ccff(new look)|r"
+local UPGRADE_TAG = " |cff1eff00(upgrade)|r"
 
 local FADE_SCALE_PER_LINE = 0.6
 local FADE_SCALE_MAX = 30
@@ -998,6 +999,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
             local isNewApp = false
             local isNotable = false
+            local isUpgrade = false
             if isSelf then
                 if LootProConfig.recapEnabled and self.RecapAddItem then
                     self:RecapAddItem(itemID, amt, q, link)
@@ -1014,6 +1016,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
                 if LootProConfig.newAppearance and self.IsNewAppearance then
                     isNewApp = self:IsNewAppearance(link)
+                end
+                if LootProConfig.lootUpgrade and self.IsUpgrade then
+                    isUpgrade = self:IsUpgrade(itemID, link)
                 end
             end
 
@@ -1035,7 +1040,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
-                local newMarker = isNewApp and NEW_APPEARANCE_TAG or ""
+                local marker = (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "")
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
@@ -1048,7 +1053,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.iconStr = GetIconString(msg); p.cleaned = cleaned
                             p.amt = amt; p.noCount = noCount
                             p.cR, p.cG, p.cB = lr, lg, lb
-                            p.marker = newMarker
+                            p.marker = marker
                             ShowLoot(p, CountSuffix(cnt))
                         else
                             _lootSlot = (_lootSlot % POOL_SIZE) + 1
@@ -1059,7 +1064,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.noCount = noCount
                             lp.itemID  = itemID
                             lp.cR, lp.cG, lp.cB = lr, lg, lb
-                            lp.marker  = newMarker
+                            lp.marker  = marker
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
@@ -1068,18 +1073,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
-                        p.marker = newMarker
+                        p.marker = marker
                         ShowLoot(p, CountSuffix(cnt))
                     else
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
-                        p.marker = newMarker
+                        p.marker = marker
                         ShowLoot(p, "")
                     end
                 else
-                    local line = GetIconString(msg) .. msg .. newMarker
+                    local line = GetIconString(msg) .. msg .. marker
                     if not IsDuplicateDisplay(line) then
                         self.lootFrame.display:AddMessage(line, lr, lg, lb)
                     end

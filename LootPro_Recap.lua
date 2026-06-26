@@ -5,6 +5,7 @@ local _GetTime = GetTime
 local _floor = math.floor
 local _format = string.format
 local _tremove = table.remove
+local _GetRealZoneText = GetRealZoneText
 
 local NOTABLE_CAP = 10
 local NOTABLE_QUALITY = 4
@@ -24,9 +25,13 @@ local RARITY_NAMES = {
 local session
 
 local function NewSession()
+    local zone = _GetRealZoneText and _GetRealZoneText()
+    if zone == "" then zone = nil end
     return {
         startTime = _GetTime(),
         copper = 0,
+        vendorCopper = 0,
+        zone = zone,
         itemTotal = 0,
         byRarity = {},
         currencies = {},
@@ -41,6 +46,14 @@ end
 
 session = NewSession()
 
+-- GetRealZoneText() is usually "" at login/reload (PLAYER_ENTERING_WORLD fires before the zone name resolves), so backfill the session zone once it's available.
+local function EnsureZone(s)
+    if s and not s.zone and _GetRealZoneText then
+        local z = _GetRealZoneText()
+        if z and z ~= "" then s.zone = z end
+    end
+end
+
 function addon:RecapReset()
     session = NewSession()
 end
@@ -49,6 +62,8 @@ local function RestoreSession(saved)
     local s = NewSession()
     s.startTime     = tonumber(saved.startTime) or s.startTime
     s.copper        = tonumber(saved.copper) or 0
+    s.vendorCopper  = tonumber(saved.vendorCopper) or 0
+    s.zone          = saved.zone or s.zone
     s.itemTotal     = tonumber(saved.itemTotal) or 0
     s.byRarity      = type(saved.byRarity) == "table" and saved.byRarity or {}
     s.currencies    = type(saved.currencies) == "table" and saved.currencies or {}
@@ -85,6 +100,7 @@ function addon:RecapAttachSession(prev)
 end
 
 function addon:RecapGetSession()
+    EnsureZone(session)
     return session
 end
 
@@ -100,7 +116,16 @@ end
 function addon:RecapAddMoney(copper)
     copper = tonumber(copper)
     if not copper or copper <= 0 then return end
+    EnsureZone(session)
     session.copper = session.copper + copper
+    session.version = session.version + 1
+end
+
+function addon:RecapAddVendorGold(copper)
+    copper = tonumber(copper)
+    if not copper or copper <= 0 then return end
+    EnsureZone(session)
+    session.vendorCopper = session.vendorCopper + copper
     session.version = session.version + 1
 end
 
@@ -108,6 +133,7 @@ function addon:RecapAddItem(itemID, amt, quality, link)
     amt = tonumber(amt) or 1
     if amt <= 0 then return end
     local s = session
+    EnsureZone(s)
     s.itemTotal = s.itemTotal + amt
 
     local q = tonumber(quality) or 0
@@ -139,6 +165,7 @@ function addon:RecapAddCurrency(currencyID, amt, name, icon)
     amt = tonumber(amt) or 1
     if not currencyID or amt <= 0 then return end
     local s = session
+    EnsureZone(s)
     local entry = s.currencies[currencyID]
     if not entry then
         entry = { name = name, icon = icon, amount = 0 }
@@ -208,9 +235,24 @@ function addon:RecapPrint()
         return
     end
     local s = session
-    print(_format("|cFFFF2222[LootPro]|r Session Recap (%s)", self:RecapFormatDuration(self:RecapElapsed())))
+    EnsureZone(s)
+    local elapsed = self:RecapElapsed()
+    print(_format("|cFFFF2222[LootPro]|r Session Recap (%s)", self:RecapFormatDuration(elapsed)))
+
+    if s.zone then
+        print(_format("  |cFFAAAAAAZone:|r %s", s.zone))
+    end
 
     print(_format("  |cFFFFD700Gold:|r +%s", self:RecapFormatMoney(s.copper)))
+
+    if s.vendorCopper and s.vendorCopper > 0 then
+        print(_format("  |cFFFFD700Vendor:|r +%s", self:RecapFormatMoney(s.vendorCopper)))
+    end
+
+    if elapsed >= 60 then
+        local gph = self:RecapFormatMoney(_floor((s.copper + (s.vendorCopper or 0)) / elapsed * 3600))
+        print(_format("  |cFFB0E0E6Per hour:|r %s, %d items", gph, _floor(s.itemTotal / elapsed * 3600)))
+    end
 
     if s.itemTotal > 0 then
         print(_format("  |cFFFFFFFFItems:|r %d looted", s.itemTotal))

@@ -272,8 +272,7 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
     
     local valText = _G[name.."Text"]
     valText:SetFontObject("GameFontNormal")
-    local titlePrefix = title .. ": "
-    local fadeSuffix = (settingKey == "fade") and "s" or ""
+    local valFmt = title .. ": %d" .. ((settingKey == "fade") and "s" or "")
 
     s:SetScript("OnValueChanged", function(_, value)
         if not addon:IsReady() then return end
@@ -285,7 +284,7 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
             LootProConfig[configKey][settingKey] = val
         end
 
-        valText:SetText(titlePrefix .. val .. fadeSuffix)
+        valText:SetText(valFmt:format(val))
 
         if addon.UpdateAllVisuals then
             addon:UpdateAllVisuals()
@@ -325,7 +324,7 @@ function U.CreateEditBox(name, title, parent, settingKey)
     return eb
 end
 
-function U.CreateColorRow(name, parent, colorKey, previewFunc)
+function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
     local f = CreateFrame("Button", name, parent, "BackdropTemplate")
     f:SetSize(400, 28)
     f:SetBackdrop(BACKDROP_COLORROW)
@@ -337,7 +336,7 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc)
     
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall") 
     title:SetPoint("LEFT", tex, "RIGHT", 10, 0) 
-    title:SetText(name:gsub("LPRO_CLR_", ""))
+    title:SetText(label or (name:gsub("LPRO_CLR_", "")))
     
     local preview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     preview:SetPoint("RIGHT", -12, 0)

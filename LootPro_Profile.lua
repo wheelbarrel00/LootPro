@@ -25,6 +25,7 @@ addon.DEFAULTS = {
     watchlist = { enabled = false, sound = true, items = {} },
     rareAlert = { threshold = 5, color = false, flash = false, sound = false, notable = false },
     newAppearance = false,
+    lootUpgrade = false,
     vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
     loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 },
     combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 },

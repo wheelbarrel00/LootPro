@@ -327,7 +327,7 @@ function ns.UI:Initialize()
 
     local colorRows = {}
     local function AddColor(key, title, func)
-        local row = U.CreateColorRow("LPRO_CLR_"..title, pages.colors, key, func)
+        local row = U.CreateColorRow("LPRO_CLR_"..title, pages.colors, key, func, title)
         if #colorRows == 0 then row:SetPoint("TOP", 0, 0) else row:SetPoint("TOP", colorRows[#colorRows], "BOTTOM", 0, -3) end
         table.insert(colorRows, row) 
         row:Refresh()
@@ -354,7 +354,7 @@ function ns.UI:Initialize()
     local function AddToggle(key, title, colorKey, parentAnchor)
         local cb = CreateFrame("CheckButton", "LPRO_TGL_"..key, pages.notifications, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("TOPLEFT", parentAnchor, "BOTTOMLEFT", 0, -5)
-        local fs = _G[cb:GetName().."Text"]; fs:SetText(title)
+        local fs = _G[cb:GetName().."Text"]; fs:SetText(title); cb._labelText = fs
         if colorKey and LootProConfig.colors[colorKey] then local c = LootProConfig.colors[colorKey]; fs:SetTextColor(c.r, c.g, c.b) end
         cb:SetChecked(LootProConfig.notifications[key])
         cb:SetScript("OnClick", function(self) LootProConfig.notifications[key] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
@@ -362,8 +362,8 @@ function ns.UI:Initialize()
     end
 
     local moneyT = CreateFrame("CheckButton", "LPRO_TGL_money", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    moneyT:SetPoint("TOPLEFT", 40, 0); _G[moneyT:GetName().."Text"]:SetText("Display Money")
-    local cM = LootProConfig.colors["money"] or {r=1, g=1, b=1}; _G[moneyT:GetName().."Text"]:SetTextColor(cM.r, cM.g, cM.b)
+    moneyT:SetPoint("TOPLEFT", 40, 0); moneyT._labelText = _G[moneyT:GetName().."Text"]; moneyT._labelText:SetText("Display Money")
+    local cM = LootProConfig.colors["money"] or {r=1, g=1, b=1}; moneyT._labelText:SetTextColor(cM.r, cM.g, cM.b)
     moneyT:SetChecked(LootProConfig.notifications["money"])
     moneyT:SetScript("OnClick", function(self) LootProConfig.notifications["money"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
     toggles["money"] = moneyT
@@ -603,23 +603,39 @@ function ns.UI:Initialize()
         recapHeader:SetPoint("TOPLEFT", 30, -40)
         recapHeader:SetText("|cFFFF2222Session:|r 0s")
 
-        local recapBody = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        recapBody:SetPoint("TOPLEFT", 30, -68)
-        recapBody:SetWidth(440)
+        local recapScroll = CreateFrame("ScrollFrame", "LPRO_RecapScroll", page, "UIPanelScrollFrameTemplate")
+        recapScroll:SetPoint("TOPLEFT", 30, -68)
+        recapScroll:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 80)
+        recapScroll:SetWidth(266)
+        local recapChild = CreateFrame("Frame", nil, recapScroll)
+        recapChild:SetSize(240, 1)
+        recapScroll:SetScrollChild(recapChild)
+
+        local recapBody = recapChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        recapBody:SetPoint("TOPLEFT", 0, 0)
+        recapBody:SetWidth(240)
         recapBody:SetJustifyH("LEFT")
         recapBody:SetJustifyV("TOP")
         recapBody:SetSpacing(3)
+        local function SetRecapBody(text)
+            recapBody:SetText(text)
+            recapChild:SetHeight(math.max(1, recapBody:GetStringHeight() + 4))
+        end
 
         local tooltipCheck = CreateFrame("CheckButton", "LPRO_TooltipLoots", page, "InterfaceOptionsCheckButtonTemplate")
-        tooltipCheck:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 26, 134)
-        _G[tooltipCheck:GetName().."Text"]:SetText("Show \"looted this session\" on item tooltips")
+        tooltipCheck:SetPoint("TOPLEFT", page, "TOPLEFT", 320, -235)
+        local tooltipCheckText = _G[tooltipCheck:GetName().."Text"]
+        tooltipCheckText:SetText("Show \"looted this session\" on item tooltips")
+        tooltipCheckText:SetWidth(150)
+        tooltipCheckText:SetWordWrap(true)
+        tooltipCheckText:SetJustifyH("LEFT")
         tooltipCheck:SetScript("OnClick", function(self)
             LootProConfig.tooltipLoots = self:GetChecked() and true or false
         end)
 
         local recapHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        recapHint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 110)
-        recapHint:SetWidth(440)
+        recapHint:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 4, -14)
+        recapHint:SetWidth(172)
         recapHint:SetJustifyH("LEFT")
         recapHint:SetText("Counts reset on login, /reload, or Reset Session. Also available via /lp recap.")
 
@@ -628,7 +644,18 @@ function ns.UI:Initialize()
             local s = addon:RecapGetSession()
             local lines = _lines
             wipe(lines)
+            if s.zone then
+                lines[#lines + 1] = "|cFFAAAAAAZone:|r  " .. s.zone
+            end
             lines[#lines + 1] = "|cFFFFD700Gold gained:|r  +" .. addon:RecapFormatMoney(s.copper)
+            if s.vendorCopper and s.vendorCopper > 0 then
+                lines[#lines + 1] = "|cFFFFD700Vendor income:|r  +" .. addon:RecapFormatMoney(s.vendorCopper)
+            end
+            local elapsed = addon:RecapElapsed()
+            if elapsed >= 60 then
+                local gph = addon:RecapFormatMoney(math.floor((s.copper + (s.vendorCopper or 0)) / elapsed * 3600))
+                lines[#lines + 1] = "|cFFB0E0E6Per hour:|r  +" .. gph .. ", " .. math.floor(s.itemTotal / elapsed * 3600) .. " items"
+            end
 
             if s.itemTotal > 0 then
                 lines[#lines + 1] = "|cFFFFFFFFItems looted:|r  " .. s.itemTotal
@@ -672,11 +699,11 @@ function ns.UI:Initialize()
             page._lastDur = nil
             if not LootProConfig.recapEnabled then
                 recapHeader:SetText("|cFFFF2222Session:|r |cFF888888disabled|r")
-                recapBody:SetText("|cFF888888Session recap is turned off. Enable it above to start tracking gold, items, currency, and notable drops.|r")
+                SetRecapBody("|cFF888888Session recap is turned off. Enable it above to start tracking gold, items, currency, and notable drops.|r")
                 return
             end
             recapHeader:SetText("|cFFFF2222Session:|r " .. addon:RecapFormatDuration(addon:RecapElapsed()))
-            recapBody:SetText(BuildRecapBody())
+            SetRecapBody(BuildRecapBody())
         end
 
         recapEnable:SetScript("OnClick", function(self)
@@ -700,6 +727,7 @@ function ns.UI:Initialize()
             recapEnable:SetChecked(LootProConfig.recapEnabled)
             tooltipCheck:SetChecked(LootProConfig.tooltipLoots)
             RefreshRecap()
+            recapScroll:SetVerticalScroll(0)
         end)
         page:SetScript("OnUpdate", function(self, dt)
             self._throttle = self._throttle + dt
@@ -714,7 +742,7 @@ function ns.UI:Initialize()
             local s = addon:RecapGetSession()
             if self._lastVer ~= s.version then
                 self._lastVer = s.version
-                recapBody:SetText(BuildRecapBody())
+                SetRecapBody(BuildRecapBody())
             end
         end)
     end
@@ -898,6 +926,7 @@ function ns.UI:Initialize()
         end)
 
         local newAppCheck
+        local upgradeCheck
         if addon.IS_RETAIL then
             newAppCheck = CreateFrame("CheckButton", "LPRO_NewAppearance", page, "InterfaceOptionsCheckButtonTemplate")
             newAppCheck:SetPoint("TOPLEFT", notableCheck, "BOTTOMLEFT", 0, -2)
@@ -912,6 +941,20 @@ function ns.UI:Initialize()
                 GameTooltip:Show()
             end)
             newAppCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+            upgradeCheck = CreateFrame("CheckButton", "LPRO_LootUpgrade", page, "InterfaceOptionsCheckButtonTemplate")
+            upgradeCheck:SetPoint("TOPLEFT", newAppCheck, "BOTTOMLEFT", 0, -2)
+            _G[upgradeCheck:GetName().."Text"]:SetText("Mark gear upgrades")
+            upgradeCheck:SetScript("OnClick", function(self)
+                LootProConfig.lootUpgrade = self:GetChecked() and true or false
+            end)
+            upgradeCheck:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Gear upgrades", 1, 1, 1)
+                GameTooltip:AddLine("Adds an (upgrade) tag in the loot feed when you loot weapon or armor with a higher item level than what you have equipped in that slot (same armor or weapon type).", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            upgradeCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
         end
 
         page:SetScript("OnShow", function()
@@ -922,6 +965,7 @@ function ns.UI:Initialize()
             rareSound:SetChecked(LootProConfig.rareAlert.sound)
             notableCheck:SetChecked(LootProConfig.rareAlert.notable)
             if newAppCheck then newAppCheck:SetChecked(LootProConfig.newAppearance) end
+            if upgradeCheck then upgradeCheck:SetChecked(LootProConfig.lootUpgrade) end
             rareThresh:Refresh()
             RefreshList()
         end)
@@ -1095,15 +1139,13 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.9.0:|r",
+        "|cFFEBB706What's new in 2.10.0:|r",
         " ",
-        "|cFFEBB706About tab|r  A new tab with version info, links (Discord, CurseForge, bug reports), the command list, and the full changelog. Open it with /lp about.",
+        "|cFFEBB706Gear upgrade marker|r  Loot a weapon or armor piece above the item level you have equipped and its feed line gets a green (upgrade) tag. Off by default; enable it on the Alerts tab (retail only).",
         " ",
-        "|cFFEBB706Fast Loot & Speedy AutoLoot|r  Two looting options on the Customization tab -- the game's one-click auto-loot, plus instant looting that skips the loot window entirely.",
+        "|cFFEBB706Richer Session Recap|r  The recap now tracks vendor income from everything you sell, your gold and items per hour, and the zone where the session started.",
         " ",
-        "|cFFEBB706Session Recap survives reloads|r  Your session tally no longer resets on /reload; only a logout or Reset Session clears it now.",
-        " ",
-        "|cFFEBB706Loot feed fix|r  Mousing over a feed no longer brings back loot or combat lines that already faded.",
+        "|cFFEBB706Vendor gold fix|r  Sell totals and gray values no longer read low right after logging in, before item prices finish loading.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1261,11 +1303,12 @@ function ns.UI:Initialize()
         end
 
         AddHeader("Changelog")
+        local bullets = {}
         for _, entry in ipairs(data.changelog or {}) do
             AddBody("|cFFFF2222v" .. entry.version .. "|r  |cFF888888" .. (entry.date or "") .. "|r")
             for _, sec in ipairs(entry.sections or {}) do
                 AddBody("|cFFEBB706" .. sec.head .. "|r")
-                local bullets = {}
+                wipe(bullets)
                 for _, item in ipairs(sec.items or {}) do
                     bullets[#bullets + 1] = "- " .. item
                 end
@@ -1301,8 +1344,14 @@ function ns.UI:Initialize()
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         for _, row in ipairs(colorRows) do row:Refresh() end
-        for key, cb in pairs(toggles) do cb:SetChecked(LootProConfig.notifications[key]) end
-        for key, cb in pairs(toggles) do if LootProConfig.colors[key] then local c = LootProConfig.colors[key]; _G[cb:GetName().."Text"]:SetTextColor(c.r, c.g, c.b) end end
+        for key, cb in pairs(toggles) do
+            cb:SetChecked(LootProConfig.notifications[key])
+            local c = LootProConfig.colors[key]
+            if c then
+                local fs = cb._labelText or _G[cb:GetName().."Text"]
+                if fs then fs:SetTextColor(c.r, c.g, c.b) end
+            end
+        end
     end
 
     ns.UI:RefreshAllWidgets()

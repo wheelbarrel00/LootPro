@@ -5,6 +5,8 @@ local _format = string.format
 local _select = select
 local _GetItemInfo = GetItemInfo
 local _GetItemInfoInstant = GetItemInfoInstant
+local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
+local _GetMoney = GetMoney
 local _After = C_Timer and C_Timer.After
 -- 12.0 "secret value" probe (nil pre-12.0). Container links can be secret inside active instances; guard before any string op.
 local _issecret = issecretvalue
@@ -44,7 +46,12 @@ local function BuildGrayList(collect)
                 local classID = itemID and _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
                 if classID ~= CLASS_QUEST then
                     stackCount = stackCount or 1
-                    local sellPrice = _select(11, _GetItemInfo(link)) or 0
+                    -- GetItemInfo's sell price is nil until the item is cached (first vendor visit after login); warm it so the next scan reports the real value.
+                    local sellPrice = _select(11, _GetItemInfo(link))
+                    if not sellPrice then
+                        if itemID and _RequestItemData then _RequestItemData(itemID) end
+                        sellPrice = 0
+                    end
                     local stackPrice = sellPrice * stackCount
                     count = count + 1
                     value = value + stackPrice
@@ -150,15 +157,18 @@ sellFrame:SetScript("OnUpdate", function(_, elapsed)
     -- Re-read the slot and only sell if it still holds the exact gray we listed; a different/moved/locked item is skipped, never sold.
     local link, _, _, locked = ReadSlot(e.bag, e.slot)
     if not (_issecret and _issecret(link)) and link == e.link and not locked then
+        -- Re-read the price at sell time: the cache is reliably warm by now, so this corrects any 0 from the snapshot scan.
+        local unit = _select(11, _GetItemInfo(e.link))
+        local gained = (unit and unit * (e.count or 1)) or (e.price or 0)
         if LootProConfig.vendorGrays and LootProConfig.vendorGrays.details then
             print(_format("|cFF00DDDD[LootPro]|r Sold %s x%d (%s)",
-                e.link, e.count or 1, addon:RecapFormatMoney(e.price or 0)))
+                e.link, e.count or 1, addon:RecapFormatMoney(gained)))
         end
         _UseContainer(e.bag, e.slot)
         info.sold = info.sold + 1
-        info.gold = info.gold + (e.price or 0)
+        info.gold = info.gold + gained
         bar:SetValue(info.sold)
-        bar.text:SetText(info.sold .. " / " .. info.count)
+        bar.text:SetText(_format("%d / %d", info.sold, info.count))
     end
 end)
 
@@ -198,13 +208,26 @@ local function OnMerchantShow()
     addon:VendorStart(false)
 end
 
+-- Money gained while a merchant is open is vendor income (sales raise it; buying/repairing lowers it and is ignored). Listen for PLAYER_MONEY only while the window is open. Captures manual sales and the gray auto-seller alike.
+local lastMoney = 0
+
 local evf = CreateFrame("Frame", "LootProVendorEvents")
 evf:RegisterEvent("MERCHANT_SHOW")
 evf:RegisterEvent("MERCHANT_CLOSED")
 evf:SetScript("OnEvent", function(_, event)
     if event == "MERCHANT_SHOW" then
+        lastMoney = _GetMoney()
+        evf:RegisterEvent("PLAYER_MONEY")
         if _After then _After(0.3, OnMerchantShow) else OnMerchantShow() end
+    elseif event == "PLAYER_MONEY" then
+        local now = _GetMoney()
+        local delta = now - lastMoney
+        lastMoney = now
+        if delta > 0 and LootProConfig.recapEnabled and addon.RecapAddVendorGold then
+            addon:RecapAddVendorGold(delta)
+        end
     elseif event == "MERCHANT_CLOSED" then
+        evf:UnregisterEvent("PLAYER_MONEY")
         sellFrame:Hide()
         ResetRun()
     end

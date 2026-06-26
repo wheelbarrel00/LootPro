@@ -27,6 +27,22 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.10.0", date = "2026-06-25",
+            sections = {
+                { head = "New Features", items = {
+                    "Gear upgrade marker: looted weapons and armor above your equipped item level get a green (upgrade) tag in the feed (Alerts tab, off by default, retail only).",
+                    "Session Recap now tracks vendor income from all vendor sales, gold and items per hour, and the zone where the session started.",
+                } },
+                { head = "Bug Fixes", items = {
+                    "Vendor sell totals and gray values no longer under-report right after login, before item prices are cached.",
+                } },
+                { head = "Improvements", items = {
+                    "Recap tab scrolls so long sessions no longer overflow the window; the tooltip toggle moved alongside it.",
+                    "Minor memory and code cleanup in the settings window.",
+                } },
+            },
+        },
+        {
             version = "2.9.1", date = "2026-06-18",
             sections = {
                 { head = "Maintenance", items = {

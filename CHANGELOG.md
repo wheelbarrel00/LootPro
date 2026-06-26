@@ -5,6 +5,19 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-06-25
+
+### New Features
+- **Gear upgrade marker** — when you loot a weapon or armor piece with a higher item level than what you have equipped in that slot (same armor or weapon type), its loot line is tagged with a green **(upgrade)** so you can spot an upgrade at a glance. Off by default; enable it on the Alerts tab. Retail only.
+- **Richer Session Recap** — the recap now tracks **vendor income** from everything you sell at a merchant (not just auto-sold grays), **gold and items per hour**, and the **zone** where the session started. All three show on the Recap tab and in `/lp recap`.
+
+### Bug Fixes
+- **Vendor sell totals could read low right after login** — the sold-gold total and the gray-value preview relied on item prices that aren't cached until the client has seen an item, so the first vendor visit after logging in could under-report. Prices are now warmed on a cache miss and re-read at sell time, so the totals are accurate.
+
+### Improvements
+- **Recap tab scrolls** — a long session (many currencies and notable drops) no longer overflows the window; the body scrolls and the "looted this session" tooltip toggle moved to the right.
+- Minor memory and code cleanup across the settings window.
+
 ## [2.9.1] - 2026-06-18
 
 ### Maintenance
