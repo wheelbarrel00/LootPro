@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.1] - 2026-06-27
+
+### Bug Fixes
+- **Session Recap now resets when you log out** — it decided whether a load was a `/reload` from a game flag that misfires on a normal login on 12.0, so a session could survive logging out, switching characters, and even restarting, and keep counting for days until you used Reset Session. A `/reload` still preserves the current session; logging out, switching characters, or restarting now starts a fresh one.
+
+### Improvements
+- New minimap, broker, and AddOns-list icon.
+
 ## [2.10.0] - 2026-06-25
 
 ### New Features

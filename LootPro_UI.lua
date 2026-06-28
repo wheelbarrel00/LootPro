@@ -637,7 +637,7 @@ function ns.UI:Initialize()
         recapHint:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 4, -14)
         recapHint:SetWidth(172)
         recapHint:SetJustifyH("LEFT")
-        recapHint:SetText("Counts reset on login, /reload, or Reset Session. Also available via /lp recap.")
+        recapHint:SetText("Counts reset on logout or Reset Session; a /reload keeps them. Also available via /lp recap.")
 
         local _lines, _parts = {}, {}
         local function BuildRecapBody()

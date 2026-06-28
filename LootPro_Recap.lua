@@ -46,6 +46,16 @@ end
 
 session = NewSession()
 
+-- isReloadingUi misfires on a true login (12.0); detect a /reload directly so only a real reload restores the session.
+local recapLoaded = false
+local reloadIntent = false
+if type(_G.ReloadUI) == "function" then
+    hooksecurefunc("ReloadUI", function() reloadIntent = true end)
+end
+if _G.C_UI and _G.C_UI.Reload then
+    hooksecurefunc(_G.C_UI, "Reload", function() reloadIntent = true end)
+end
+
 -- GetRealZoneText() is usually "" at login/reload (PLAYER_ENTERING_WORLD fires before the zone name resolves), so backfill the session zone once it's available.
 local function EnsureZone(s)
     if s and not s.zone and _GetRealZoneText then
@@ -76,9 +86,12 @@ local function RestoreSession(saved)
     return s
 end
 
-function addon:RecapLoad(isReload)
-    if isReload and type(_G.LootProSession) == "table" then
-        session = RestoreSession(_G.LootProSession)
+function addon:RecapLoad()
+    if recapLoaded then return end
+    recapLoaded = true
+    local saved = _G.LootProSession
+    if type(saved) == "table" and saved.__reload then
+        session = RestoreSession(saved)
     else
         session = NewSession()
     end
@@ -86,6 +99,7 @@ function addon:RecapLoad(isReload)
 end
 
 function addon:RecapPersist()
+    session.__reload = reloadIntent or nil
     _G.LootProSession = session
 end
 

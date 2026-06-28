@@ -27,6 +27,17 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.10.1", date = "2026-06-27",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "Session Recap now resets when you log out. It read a reload flag that misfires on a normal login, so the session could survive logouts, character switches, and restarts, persisting until you used Reset Session. A /reload still keeps the session; logging out starts a fresh one.",
+                } },
+                { head = "Improvements", items = {
+                    "New minimap, broker, and AddOns-list icon.",
+                } },
+            },
+        },
+        {
             version = "2.10.0", date = "2026-06-25",
             sections = {
                 { head = "New Features", items = {

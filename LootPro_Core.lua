@@ -810,11 +810,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if _After then _After(1.5, ShowLoginPopup) else ShowLoginPopup() end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Recap survives /reload but not logout: restore only on a UI reload; a cold login starts fresh.
-        local isInitialLogin, isReloadingUi = ...
-        if self.RecapLoad and (isInitialLogin or isReloadingUi) then
-            self:RecapLoad(isReloadingUi)
-        end
+        if self.RecapLoad then self:RecapLoad() end
         return
 
     elseif event == "PLAYER_LOGOUT" then
