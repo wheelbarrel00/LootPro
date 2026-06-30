@@ -11,7 +11,9 @@
 <p align="center">
   <a href="https://github.com/wheelbarrel00/LootPro/releases"><img src="https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=FF2222&label=Version" alt="Version" /></a>
   <img src="https://img.shields.io/badge/WoW-Midnight%2012.0-8B0000?style=flat-square" alt="WoW Midnight" />
+  <img src="https://img.shields.io/badge/WoW-Classic%20Era%201.15.8-8B0000?style=flat-square" alt="WoW Classic Era" />
   <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.5-8B0000?style=flat-square" alt="WoW BCC" />
+  <img src="https://img.shields.io/badge/WoW-MoP%20Classic%205.5.4-8B0000?style=flat-square" alt="WoW MoP Classic" />
   <img src="https://img.shields.io/badge/Interface-120005-333333?style=flat-square" alt="Interface" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/Memory-~350KB-333333?style=flat-square" alt="Memory" />
@@ -21,7 +23,7 @@
 
 ## Overview
 
-Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports both WoW Retail (Midnight 12.0) and BCC Anniversary (2.5.5).
+Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports WoW Retail (Midnight 12.0) along with Classic Era (1.15.8), BCC Anniversary (2.5.5), and Mists of Pandaria Classic (5.5.4).
 
 Open with **`/lp`** or the minimap button.
 
@@ -87,7 +89,7 @@ A LibDBIcon minimap button provides one-click access to the settings panel. Comp
 
 ### New-Appearance Marker
 
-When you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)**, so a fresh appearance is never vendored or disenchanted by mistake. Off by default; enable it on the Alerts tab. Retail only, since BCC Anniversary has no transmog system.
+When you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)**, so a fresh appearance is never vendored or disenchanted by mistake. Off by default; enable it on the Alerts tab. Retail only, since the Classic flavors have no transmog appearance collection.
 
 ### Notable-Item Alerts
 
@@ -117,7 +119,7 @@ Two optional behaviors on the Customization tab: pause fading while your cursor 
    ```
    World of Warcraft/_retail_/Interface/AddOns/
    ```
-   For BCC Anniversary, use `_classic_era_` instead of `_retail_`.
+   For Classic, use the matching folder instead of `_retail_`: `_classic_era_` (Classic Era), `_anniversary_` (BCC Anniversary), or `_classic_` (Mists of Pandaria Classic).
 3. Restart WoW or type `/reload` if already in-game
 4. Enable **Loot Pro** at the character select screen
 
@@ -167,5 +169,5 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <sub>Built by Wheelbarrel00 for the Midnight expansion and BCC Anniversary</sub>
+  <sub>Built by Wheelbarrel00 for the Midnight expansion and WoW Classic (Era, BCC, MoP)</sub>
 </p>
