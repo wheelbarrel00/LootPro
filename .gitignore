@@ -1,10 +1,6 @@
 # VS Code
 .vscode/
 
-# Claude Code
-claude.md
-.claude/
-
 # Packager output
 *.zip
 .release/
