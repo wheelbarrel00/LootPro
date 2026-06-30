@@ -1,4 +1,4 @@
-## Interface: 120001, 120005, 120007
+## Interface: 50504
 ## Title: Loot Pro
 ## Notes: Custom Loot and Combat Text.
 ## Version: 2.11.0

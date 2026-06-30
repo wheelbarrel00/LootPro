@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-06-29
+
+### New Features
+- **WoW Classic support** — Loot Pro now runs on Classic Era, Burning Crusade Classic, and Mists of Pandaria Classic alongside Retail. The loot feed, combat text, auto-vendor, item tooltips, looted-count totals, item-quality coloring, and currency tracking all work on each version where the game supports them. Transmog "new look" and gear-upgrade markers remain Retail only.
+
+### Bug Fixes
+- **First-run welcome popup on Classic** — the "Open Settings" button could overlap the message text when it wrapped to two lines; the button now anchors below the text on every game version.
+
 ## [2.10.1] - 2026-06-27
 
 ### Bug Fixes

@@ -924,7 +924,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
             local iconStr, total, iconFileID = "", nil, nil
             local capStr = ""
-            if currencyID and addon.IS_RETAIL and _GetCurrencyInfo then
+            if currencyID and _GetCurrencyInfo then
                 local info = _GetCurrencyInfo(currencyID)
                 if info then
                     iconFileID = info.iconFileID
@@ -987,7 +987,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local rawQ = rgbHex and QUALITY_BY_RGB[rgbHex:lower()]
             if not rawQ and link then rawQ = _select(3, _GetItemInfo(link)) end
             if not rawQ and itemID then
-                rawQ = (addon.IS_RETAIL and _GetItemQualityByID and _GetItemQualityByID(itemID))
+                rawQ = (_GetItemQualityByID and _GetItemQualityByID(itemID))
                        or _select(3, _GetItemInfo(itemID))
             end
             local q = rawQ or LootProConfig.minQuality
@@ -1041,7 +1041,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
 
-                    if itemID and LootProConfig.showLootCounts and addon.IS_RETAIL then
+                    if itemID and LootProConfig.showLootCounts and _GetItemNameByID then
                         -- GetItemCount often returns the PRE-loot total, so add amt to reflect the post-loot count.
                         if itemID and _GetItemNameByID and _GetItemNameByID(itemID) then
                             local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
@@ -1063,14 +1063,6 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.marker  = marker
                             _After(0.1, _lootFns[_lootSlot])
                         end
-                    elseif itemID and LootProConfig.showLootCounts and addon.IS_BCC then
-                        local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
-                        local p = _lootSync
-                        p.iconStr = GetIconString(msg); p.cleaned = cleaned
-                        p.amt = amt; p.noCount = noCount
-                        p.cR, p.cG, p.cB = lr, lg, lb
-                        p.marker = marker
-                        ShowLoot(p, CountSuffix(cnt))
                     else
                         local p = _lootSync
                         p.iconStr = GetIconString(msg); p.cleaned = cleaned

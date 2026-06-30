@@ -27,6 +27,17 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.11.0", date = "2026-06-29",
+            sections = {
+                { head = "New Features", items = {
+                    "WoW Classic support: Loot Pro now runs on Classic Era, Burning Crusade Classic, and Mists of Pandaria Classic alongside Retail. Loot feed, combat text, auto-vendor, tooltips, looted counts, quality coloring, and currency tracking work where each version supports them. Transmog and upgrade markers stay retail-only.",
+                } },
+                { head = "Bug Fixes", items = {
+                    "First-run welcome popup: the Open Settings button could overlap the text on Classic when it wrapped; it now sits below the text on every version.",
+                } },
+            },
+        },
+        {
             version = "2.10.1", date = "2026-06-27",
             sections = {
                 { head = "Bug Fixes", items = {

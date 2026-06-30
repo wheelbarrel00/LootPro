@@ -1077,7 +1077,7 @@ function ns.UI:Initialize()
     end
 
     local welcome = CreateVersionedMainFrame("LootProWelcome", UIParent)
-    welcome:SetSize(320, 160)
+    welcome:SetSize(320, 180)
     welcome:SetPoint("CENTER")
     welcome:SetFrameStrata("HIGH")
     welcome:Hide()
@@ -1096,7 +1096,7 @@ function ns.UI:Initialize()
     msg:SetText("Configure settings for first time use of Loot Pro")
 
     local openBtn = CreateStyledButton(welcome, 140, 28, "Open Settings")
-    openBtn:SetPoint("CENTER", welcome, "CENTER", 0, -10)
+    openBtn:SetPoint("TOP", msg, "BOTTOM", 0, -14)
     openBtn:SetScript("OnClick", function()
         LootProConfig.hideWelcome = true
         welcome:Hide()
@@ -1250,7 +1250,7 @@ function ns.UI:Initialize()
         local version = (C_AddOns and C_AddOns.GetAddOnMetadata
             and C_AddOns.GetAddOnMetadata(addonName, "Version")) or addon.VERSION or "?"
         AddBody("|cFFEBB706v" .. version .. "|r  by Wheelbarrel00")
-        AddBody("|cFF999999for WoW Midnight (12.0.x) and The Burning Crusade Classic (2.5.5)|r")
+        AddBody("|cFF999999for WoW Midnight (12.0.x) and Classic (Era, TBC, Mists of Pandaria)|r")
 
         AddDivider()
 
