@@ -131,6 +131,7 @@ function ns.UI:Initialize()
         customization = CreateFrame("Frame", nil, gui),
         recap = CreateFrame("Frame", nil, gui),
         watchlist = CreateFrame("Frame", nil, gui),
+        blocklist = CreateFrame("Frame", nil, gui),
         vendor = CreateFrame("Frame", nil, gui),
         about = CreateFrame("Frame", nil, gui)
     }
@@ -236,6 +237,7 @@ function ns.UI:Initialize()
     CreateTab("customization", "Custom")
     CreateTab("recap", "Recap")
     CreateTab("watchlist", "Alerts")
+    CreateTab("blocklist", "Block")
     CreateTab("vendor", "Vendor")
     CreateTab("about", "About")
 
@@ -429,13 +431,25 @@ function ns.UI:Initialize()
         {val=4, lbl="Epic+"},
         {val=5, lbl="Legendary+"},
     }
-    local mQual = U.CreateGenericCycler("LPRO_MQ", "Minimum Loot Quality", pages.notifications, qualityList, "minQuality", "root")
-    mQual.label:ClearAllPoints()
-    mQual.label:SetPoint("TOP", pages.notifications, "TOP", 0, -285)
-    mQual.label:SetJustifyH("CENTER")
-    mQual:ClearAllPoints()
-    mQual:SetPoint("TOP", mQual.label, "BOTTOM", 0, -5)
-    mQual:Refresh()
+    local mqHeader = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    mqHeader:SetPoint("TOP", pages.notifications, "TOP", 0, -268)
+    mqHeader:SetText("Minimum Loot Quality")
+
+    local mQualOwn = U.CreateGenericCycler("LPRO_MQOwn", "Your Loot", pages.notifications, qualityList, "minQualityOwn", "root")
+    mQualOwn.label:ClearAllPoints()
+    mQualOwn.label:SetPoint("TOP", pages.notifications, "TOP", -85, -286)
+    mQualOwn.label:SetJustifyH("CENTER")
+    mQualOwn:ClearAllPoints()
+    mQualOwn:SetPoint("TOP", mQualOwn.label, "BOTTOM", 0, -5)
+    mQualOwn:Refresh()
+
+    local mQualOther = U.CreateGenericCycler("LPRO_MQOther", "Others' Loot", pages.notifications, qualityList, "minQualityOther", "root")
+    mQualOther.label:ClearAllPoints()
+    mQualOther.label:SetPoint("TOP", pages.notifications, "TOP", 85, -286)
+    mQualOther.label:SetJustifyH("CENTER")
+    mQualOther:ClearAllPoints()
+    mQualOther:SetPoint("TOP", mQualOther.label, "BOTTOM", 0, -5)
+    mQualOther:Refresh()
 
     local filterHeader = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     filterHeader:SetPoint("TOP", pages.notifications, "TOP", 0, -350)
@@ -449,10 +463,15 @@ function ns.UI:Initialize()
         cb:SetScript("OnClick", function(self) LootProConfig.lootFilters[key] = self:GetChecked() and true or false end)
         return cb
     end
-    local fTrade  = AddFilter("hideTradeGoods", "Trade Goods", 95, -372)
-    local fConsum = AddFilter("hideConsumable", "Consumables", 95, -397)
-    local fQuest  = AddFilter("hideQuest",      "Quest Items", 280, -372)
-    local fRecipe = AddFilter("hideRecipe",     "Recipes",     280, -397)
+    local fTrade  = AddFilter("hideTradeGoods",  "Trade Goods",  40,  -372)
+    local fConsum = AddFilter("hideConsumable",  "Consumables",  190, -372)
+    local fQuest  = AddFilter("hideQuest",       "Quest Items",  340, -372)
+    local fRecipe = AddFilter("hideRecipe",      "Recipes",      40,  -397)
+    local fGear   = AddFilter("hideGear",        "Gear",         190, -397)
+    local fGem    = AddFilter("hideGem",         "Gems",         340, -397)
+    local fEnh    = AddFilter("hideEnhancement", "Enhancements", 40,  -422)
+    local fMisc   = AddFilter("hideMisc",        "Misc",         190, -422)
+    local fGlyph  = AddFilter("hideGlyph",       "Glyphs",       340, -422)
 
     local cFont = U.CreateFontDropdown("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
@@ -972,6 +991,99 @@ function ns.UI:Initialize()
     end
 
     do
+        local page = pages.blocklist
+
+        local header = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        header:SetPoint("TOPLEFT", 30, -12)
+        header:SetText("|cFFFF2222Loot Feed Block List|r")
+
+        local desc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        desc:SetPoint("TOPLEFT", 30, -34)
+        desc:SetWidth(430)
+        desc:SetJustifyH("LEFT")
+        desc:SetText("Items whose name contains any word below are hidden from the loot feed. Matching is case-insensitive and by partial name. Blocked items are still counted in the session recap.")
+
+        local addLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        addLabel:SetPoint("TOPLEFT", 30, -92)
+        addLabel:SetText("Add word or name (or shift-click an item into the box):")
+
+        local addBox = CreateFrame("EditBox", "LPRO_BlockAdd", page, "InputBoxTemplate")
+        addBox:SetSize(300, 22)
+        addBox:SetPoint("TOPLEFT", 34, -110)
+        addBox:SetAutoFocus(false)
+        addBox:SetMaxLetters(200)
+
+        local addBtn = CreateStyledButton(page, 64, 22, "Add")
+        addBtn:SetPoint("LEFT", addBox, "RIGHT", 12, 0)
+
+        local scroll = CreateFrame("ScrollFrame", "LPRO_BlockScroll", page, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 30, -144)
+        scroll:SetSize(430, 290)
+        local content = CreateFrame("Frame", nil, scroll)
+        content:SetSize(410, 1)
+        scroll:SetScrollChild(content)
+
+        local rows = {}
+        local ROW_H = 26
+        local RefreshBlockList
+
+        RefreshBlockList = function()
+            local items = addon:BlockList()
+            for i, e in ipairs(items) do
+                local row = rows[i]
+                if not row then
+                    row = CreateFrame("Frame", nil, content)
+                    row:SetSize(400, ROW_H)
+                    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                    row.label:SetPoint("LEFT", 4, 0)
+                    row.label:SetWidth(310)
+                    row.label:SetJustifyH("LEFT")
+                    row.remove = CreateStyledButton(row, 64, 18, "Remove")
+                    row.remove:SetPoint("RIGHT", 0, 0)
+                    row.remove:SetScript("OnClick", function()
+                        addon:BlockRemove(row._index)
+                        RefreshBlockList()
+                    end)
+                    rows[i] = row
+                end
+                row._index = i
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -((i - 1) * ROW_H))
+                row.label:SetText(e.label or e.key or "?")
+                row:Show()
+            end
+            for i = #items + 1, #rows do rows[i]:Hide() end
+            content:SetHeight(math.max(1, #items * ROW_H))
+        end
+
+        local function DoAdd()
+            local ok, reason = addon:BlockAdd(addBox:GetText())
+            if ok then
+                addBox:SetText("")
+                addBox:ClearFocus()
+                RefreshBlockList()
+            elseif reason == "dupe" then
+                print("|cFFFF6060[LootPro]|r That word is already on the block list.")
+            elseif reason == "full" then
+                print("|cFFFF6060[LootPro]|r Block list is full (max 50 entries).")
+            end
+        end
+        addBtn:SetScript("OnClick", DoAdd)
+        addBox:SetScript("OnEnterPressed", DoAdd)
+        addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        if HandleModifiedItemClick then
+            hooksecurefunc("HandleModifiedItemClick", function(link)
+                if link and addBox:HasFocus() and IsShiftKeyDown() then
+                    addBox:SetText(link)
+                end
+            end)
+        end
+
+        page:SetScript("OnShow", RefreshBlockList)
+    end
+
+    do
         local page = pages.vendor
 
         local enableCheck = CreateFrame("CheckButton", "LPRO_VendorEnable", page, "InterfaceOptionsCheckButtonTemplate")
@@ -1139,13 +1251,13 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.10.0:|r",
+        "|cFFEBB706What's new in 2.12.0:|r",
         " ",
-        "|cFFEBB706Gear upgrade marker|r  Loot a weapon or armor piece above the item level you have equipped and its feed line gets a green (upgrade) tag. Off by default; enable it on the Alerts tab (retail only).",
+        "|cFFEBB706Own vs. others' loot quality|r  Set a separate minimum rarity for your own loot and for other players' loot on the Notifications tab - show all of your drops but only Rare+ from the group, for example. Your existing setting carries over to both.",
         " ",
-        "|cFFEBB706Richer Session Recap|r  The recap now tracks vendor income from everything you sell, your gold and items per hour, and the zone where the session started.",
+        "|cFFEBB706More categories to hide|r  The loot-feed filters now include Gear, Gems, Enhancements, Miscellaneous, and Glyphs alongside the existing categories.",
         " ",
-        "|cFFEBB706Vendor gold fix|r  Sell totals and gray values no longer read low right after logging in, before item prices finish loading.",
+        "|cFFEBB706Name block list|r  A new Block tab hides items from the feed by name or keyword - type a word or shift-click an item. Blocked items still count in the recap.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1337,12 +1449,13 @@ function ns.UI:Initialize()
         lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
         cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
         mmLeft:Refresh(); mmRight:Refresh(); mmMid:Refresh(); capCheck:SetChecked(LootProConfig.currencyCap)
-        mQual:Refresh()
+        mQualOwn:Refresh(); mQualOther:Refresh()
         cEntEB:SetText(LootProConfig.combatEnterText); cLveEB:SetText(LootProConfig.combatLeaveText)
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
+        fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)
         for _, row in ipairs(colorRows) do row:Refresh() end
         for key, cb in pairs(toggles) do
             cb:SetChecked(LootProConfig.notifications[key])

@@ -27,6 +27,16 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.12.0", date = "2026-07-01",
+            sections = {
+                { head = "New Features", items = {
+                    "Separate minimum loot quality for your own loot vs. other players' loot, on the Notifications tab. Your existing setting carries over to both.",
+                    "More loot categories to hide: Gear, Gems, Enhancements, Miscellaneous, and Glyphs, alongside the existing Trade Goods, Consumables, Quest Items, and Recipes.",
+                    "Name block list: a new Block tab hides items from the loot feed by name or keyword (type a word or shift-click an item). Blocked items are still counted in the session recap.",
+                } },
+            },
+        },
+        {
             version = "2.11.0", date = "2026-06-29",
             sections = {
                 { head = "New Features", items = {

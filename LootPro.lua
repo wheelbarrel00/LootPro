@@ -1,9 +1,9 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.11.0"
+ns.addon.VERSION = "2.12.0"
 -- Bump on each new What's New popup; shown once per revision (LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 6
+ns.addon.WHATS_NEW = 7
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC

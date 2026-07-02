@@ -90,6 +90,53 @@ function addon:WatchMatch(itemID, name)
     return nil
 end
 
+local BLOCK_CAP = 50
+
+function addon:BlockList()
+    local bl = LootProConfig and LootProConfig.lootBlacklist
+    return (bl and bl.items) or {}
+end
+
+function addon:BlockAdd(text)
+    local bl = LootProConfig and LootProConfig.lootBlacklist
+    if not bl or not bl.items then return false, "notready" end
+
+    text = text and text:gsub("^%s+", ""):gsub("%s+$", "") or ""
+    local name = text:match("|h%[(.-)%]|h") or text
+    if name == "" then return false, "empty" end
+    if #bl.items >= BLOCK_CAP then return false, "full" end
+
+    local key = name:lower()
+    for _, e in ipairs(bl.items) do
+        if e.key == key then return false, "dupe" end
+    end
+    local entry = { key = key, label = name }
+    bl.items[#bl.items + 1] = entry
+    return true, entry
+end
+
+function addon:BlockRemove(index)
+    local bl = LootProConfig and LootProConfig.lootBlacklist
+    if not bl or not bl.items then return false end
+    if index and bl.items[index] then
+        table.remove(bl.items, index)
+        return true
+    end
+    return false
+end
+
+function addon:BlockMatch(name)
+    local bl = LootProConfig and LootProConfig.lootBlacklist
+    if not bl or not bl.items or not name then return false end
+    local lname = name:lower()
+    for _, e in ipairs(bl.items) do
+        if e.key and lname:find(e.key, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
 local alertFrame
 local function EnsureAlert()
     if alertFrame then return alertFrame end

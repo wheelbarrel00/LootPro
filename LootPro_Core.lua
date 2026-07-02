@@ -621,9 +621,13 @@ function addon:RunRegressionTest()
         showLootCounts = LootProConfig.showLootCounts,
         showLootIcons = LootProConfig.showLootIcons,
         showMoneyIcons = LootProConfig.showMoneyIcons,
-        minQuality = LootProConfig.minQuality,
+        minQualityOwn = LootProConfig.minQualityOwn,
+        minQualityOther = LootProConfig.minQualityOther,
+        lootFilters = {},
     }
     for k, v in pairs(n) do snapshot.notifications[k] = v end
+    for k, v in pairs(LootProConfig.lootFilters) do snapshot.lootFilters[k] = v end
+    local blSnapshot = LootProConfig.lootBlacklist
 
     for k in pairs(n) do n[k] = true end
     LootProConfig.cleanMode = true
@@ -631,7 +635,10 @@ function addon:RunRegressionTest()
     LootProConfig.showLootCounts = false
     LootProConfig.showLootIcons = true
     LootProConfig.showMoneyIcons = true
-    LootProConfig.minQuality = 0
+    LootProConfig.minQualityOwn = 0
+    LootProConfig.minQualityOther = 0
+    for k in pairs(LootProConfig.lootFilters) do LootProConfig.lootFilters[k] = false end
+    LootProConfig.lootBlacklist = { items = {} }
 
     local recapPrev = self.RecapDetachSession and self:RecapDetachSession()
 
@@ -689,7 +696,10 @@ function addon:RunRegressionTest()
     LootProConfig.showLootCounts = snapshot.showLootCounts
     LootProConfig.showLootIcons = snapshot.showLootIcons
     LootProConfig.showMoneyIcons = snapshot.showMoneyIcons
-    LootProConfig.minQuality = snapshot.minQuality
+    LootProConfig.minQualityOwn = snapshot.minQualityOwn
+    LootProConfig.minQualityOther = snapshot.minQualityOther
+    for k, v in pairs(snapshot.lootFilters) do LootProConfig.lootFilters[k] = v end
+    LootProConfig.lootBlacklist = blSnapshot
 
     print(_format("|cFFAAAAFF[LootPro]|r Result: |cFF00FF00%d passed|r, |cFFFF4040%d failed|r (of %d).",
         pass, fail, #cases))
@@ -990,7 +1000,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 rawQ = (_GetItemQualityByID and _GetItemQualityByID(itemID))
                        or _select(3, _GetItemInfo(itemID))
             end
-            local q = rawQ or LootProConfig.minQuality
+            local threshold = isSelf and LootProConfig.minQualityOwn or LootProConfig.minQualityOther
+            local q = rawQ or threshold
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
             local isNewApp = false
@@ -1018,18 +1029,27 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            -- Hidden items were still tallied above; only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe.
+            -- Hidden items were still tallied above; only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
             local hidden = false
             local lfil = LootProConfig.lootFilters
-            if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe) then
+            if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe
+                or lfil.hideGear or lfil.hideGem or lfil.hideEnhancement or lfil.hideMisc or lfil.hideGlyph) then
                 local classID = _select(6, _GetItemInfoInstant(itemID))
                 if classID == 7 then hidden = lfil.hideTradeGoods
                 elseif classID == 0 then hidden = lfil.hideConsumable
                 elseif classID == 12 then hidden = lfil.hideQuest
-                elseif classID == 9 then hidden = lfil.hideRecipe end
+                elseif classID == 9 then hidden = lfil.hideRecipe
+                elseif classID == 2 or classID == 4 then hidden = lfil.hideGear
+                elseif classID == 3 then hidden = lfil.hideGem
+                elseif classID == 8 then hidden = lfil.hideEnhancement
+                elseif classID == 15 then hidden = lfil.hideMisc
+                elseif classID == 16 then hidden = lfil.hideGlyph end
+            end
+            if not hidden and lname and addon.BlockMatch and addon:BlockMatch(lname) then
+                hidden = true
             end
 
-            if n.loot and q >= LootProConfig.minQuality and not hidden then
+            if n.loot and q >= threshold and not hidden then
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
                 if ra and ra.color and (q >= ra.threshold or isNotable) then

@@ -5,6 +5,13 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-07-01
+
+### New Features
+- **Separate loot-quality thresholds for your own vs. other players' loot** — the single minimum-quality setting is now two, one for items you loot and one for items other players loot, on the Notifications tab. Show all of your own drops but only Rare+ from the group, for example. Your existing setting carries over to both.
+- **More loot categories to hide** — the "Hide from loot feed" filters now include Gear (weapons and armor), Gems, Enhancements, Miscellaneous, and Glyphs alongside Trade Goods, Consumables, Quest Items, and Recipes.
+- **Name block list** — a new Block tab lets you hide items from the loot feed by name or keyword. Type a word or shift-click an item into the box; any looted item whose name contains a listed word is suppressed. Blocked items are still counted in the session recap.
+
 ## [2.11.0] - 2026-06-29
 
 ### New Features

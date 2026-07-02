@@ -4,7 +4,8 @@ local addon = ns.addon
 addon.DEFAULTS = {
     locked = true,
     cleanMode = true, 
-    minQuality = 0, 
+    minQualityOwn = 0,
+    minQualityOther = 0,
     showFollowerXP = false,
     showLootIcons = true,
     showMoneyIcons = true,
@@ -16,7 +17,8 @@ addon.DEFAULTS = {
     hoverPause = false,
     fadeScale = false,
     speedyAutoLoot = false,
-    lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false },
+    lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false, hideGear = false, hideGem = false, hideEnhancement = false, hideMisc = false, hideGlyph = false },
+    lootBlacklist = { items = {} },
     combatEnterText = "Combat Start",
     combatLeaveText = "Combat End",
     hideWelcome = false,
@@ -89,6 +91,10 @@ function addon:InitSettings()
         LootProConfig.whatsNewSeen = addon.WHATS_NEW
 
     else
+        if LootProConfig.minQuality ~= nil and LootProConfig.minQualityOwn == nil and LootProConfig.minQualityOther == nil then
+            LootProConfig.minQualityOwn = LootProConfig.minQuality
+            LootProConfig.minQualityOther = LootProConfig.minQuality
+        end
         validate(addon.DEFAULTS, LootProConfig)
         prune(addon.DEFAULTS, LootProConfig)
     end
