@@ -7,7 +7,7 @@ local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 
 local function SafeSetFont(region, path, size, flags)
     if addon._SafeSetFont then return addon._SafeSetFont(region, path, size, flags) end
-    pcall(function() region:SetFont(path, size, flags) end)
+    pcall(region.SetFont, region, path, size, flags)
 end
 
 local _fontCache
@@ -179,6 +179,9 @@ function U.CreateFontDropdown(name, title, parent, configKey)
         if self._closer then self._closer:Hide() end
     end)
 
+    -- popup is parented to UIParent, so hide it explicitly when the owning page hides.
+    parent:HookScript("OnHide", function() popup:Hide() end)
+
     c.Refresh = Update
     c.label = l
     return c
@@ -273,10 +276,13 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
     local valText = _G[name.."Text"]
     valText:SetFontObject("GameFontNormal")
     local valFmt = title .. ": %d" .. ((settingKey == "fade") and "s" or "")
+    local lastVal
 
     s:SetScript("OnValueChanged", function(_, value)
         if not addon:IsReady() then return end
         local val = math.floor(value + 0.5)
+        if val == lastVal then return end
+        lastVal = val
 
         if configKey == "root" then
             LootProConfig[settingKey] = val

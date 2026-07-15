@@ -5,6 +5,25 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-07-14
+
+### New Features
+- **Options window scale** — a slider on the Customization tab resizes the Loot Pro settings window from 75% to 125%, so you can shrink or enlarge it to suit your screen. It changes only this settings window, not the loot feed, combat text, or anything shown in the world.
+- **Item level on gear** — loot lines for weapons and armor can now show the item level, as **[485]**. Off by default; turn on "Show item level on gear" on the Alerts tab. It applies to your own drops and the group's.
+- **Vendor session totals** — the Vendor tab now shows a running "This Session" tally of the gray items auto-sold and the gold earned, cleared alongside the session recap.
+
+### Bug Fixes
+- **What's New popup could overflow** — a long update could spill over the buttons at the bottom of the popup; it now grows to fit its text.
+- **Settings tabs could overlap the Reset button** — on the Alerts and Vendor tabs the lower options could collide with "Reset to Defaults"; the window is now taller so each tab fits.
+- **Overlapping labels on the Notifications tab** — "Use Coin Icons" no longer runs into the right-hand combat options.
+- **Reset to Defaults now asks first** — the button clears every setting, including your watch list and block list, so it now shows a confirmation prompt.
+- **Font list could stay on screen** — the font-picker dropdown no longer lingers after you close the settings window.
+- **Session recap could survive a crash** — a recap could wrongly carry over after a game crash instead of starting fresh; only a real /reload now keeps the session going.
+
+### Improvements
+- **Recap tab tidied** — the Enable Session Recap and tooltip options now stack cleanly at the top of the tab.
+- **Lower memory use** — trimmed allocations on the loot path and in the settings window for less garbage collection during play.
+
 ## [2.12.0] - 2026-07-01
 
 ### New Features

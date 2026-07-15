@@ -17,6 +17,7 @@ addon.DEFAULTS = {
     hoverPause = false,
     fadeScale = false,
     speedyAutoLoot = false,
+    uiScale = 1.0,
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false, hideGear = false, hideGem = false, hideEnhancement = false, hideMisc = false, hideGlyph = false },
     lootBlacklist = { items = {} },
     combatEnterText = "Combat Start",
@@ -28,6 +29,7 @@ addon.DEFAULTS = {
     rareAlert = { threshold = 5, color = false, flash = false, sound = false, notable = false },
     newAppearance = false,
     lootUpgrade = false,
+    lootIlvl = false,
     vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
     loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 },
     combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 },
@@ -65,7 +67,7 @@ end
 local function validate(src, dst)
     for k, v in pairs(src) do
         if type(v) == "table" then
-            if not dst[k] then dst[k] = {} end
+            if type(dst[k]) ~= "table" then dst[k] = {} end
             validate(v, dst[k])
         else
             if dst[k] == nil then dst[k] = v end

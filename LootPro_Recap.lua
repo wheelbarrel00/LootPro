@@ -6,10 +6,13 @@ local _floor = math.floor
 local _format = string.format
 local _tremove = table.remove
 local _GetRealZoneText = GetRealZoneText
+local _time = time
 
 local NOTABLE_CAP = 10
 local NOTABLE_QUALITY = 4
 local PER_ITEM_CAP = 500
+-- Only honor the reload flag if stamped within this window. A crash after a /reload leaves a stale flagged blob, and a relaunch always takes far longer than a real /reload.
+local RELOAD_MAX_GAP = 120
 
 local RARITY_NAMES = {
     [0] = "Poor",
@@ -31,6 +34,8 @@ local function NewSession()
         startTime = _GetTime(),
         copper = 0,
         vendorCopper = 0,
+        graySold = 0,
+        grayCopper = 0,
         zone = zone,
         itemTotal = 0,
         byRarity = {},
@@ -66,6 +71,7 @@ end
 
 function addon:RecapReset()
     session = NewSession()
+    if addon.VendorRefreshSession then addon:VendorRefreshSession() end
 end
 
 local function RestoreSession(saved)
@@ -73,6 +79,8 @@ local function RestoreSession(saved)
     s.startTime     = tonumber(saved.startTime) or s.startTime
     s.copper        = tonumber(saved.copper) or 0
     s.vendorCopper  = tonumber(saved.vendorCopper) or 0
+    s.graySold      = tonumber(saved.graySold) or 0
+    s.grayCopper    = tonumber(saved.grayCopper) or 0
     s.zone          = saved.zone or s.zone
     s.itemTotal     = tonumber(saved.itemTotal) or 0
     s.byRarity      = type(saved.byRarity) == "table" and saved.byRarity or {}
@@ -90,7 +98,8 @@ function addon:RecapLoad()
     if recapLoaded then return end
     recapLoaded = true
     local saved = _G.LootProSession
-    if type(saved) == "table" and saved.__reload then
+    if type(saved) == "table" and saved.__reload
+       and saved.__stamp and (_time() - saved.__stamp) < RELOAD_MAX_GAP then
         session = RestoreSession(saved)
     else
         session = NewSession()
@@ -100,6 +109,7 @@ end
 
 function addon:RecapPersist()
     session.__reload = reloadIntent or nil
+    session.__stamp = reloadIntent and _time() or nil
     _G.LootProSession = session
 end
 
@@ -141,6 +151,14 @@ function addon:RecapAddVendorGold(copper)
     EnsureZone(session)
     session.vendorCopper = session.vendorCopper + copper
     session.version = session.version + 1
+end
+
+-- Vendor-tab tally only. grayCopper is a subset of vendorCopper, so it must not feed the recap totals or bump version.
+function addon:RecapAddGraySale(count, copper)
+    count = tonumber(count)
+    if not count or count <= 0 then return end
+    session.graySold = (session.graySold or 0) + count
+    session.grayCopper = (session.grayCopper or 0) + (tonumber(copper) or 0)
 end
 
 function addon:RecapAddItem(itemID, amt, quality, link)

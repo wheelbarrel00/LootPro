@@ -128,6 +128,7 @@ end
 function addon:BlockMatch(name)
     local bl = LootProConfig and LootProConfig.lootBlacklist
     if not bl or not bl.items or not name then return false end
+    if #bl.items == 0 then return false end
     local lname = name:lower()
     for _, e in ipairs(bl.items) do
         if e.key and lname:find(e.key, 1, true) then
@@ -260,13 +261,13 @@ end
 function addon:RareOnLoot(quality, isNotable)
     local ra = LootProConfig and LootProConfig.rareAlert
     if not ra then return end
-    if not ((quality and quality >= (ra.threshold or 4)) or isNotable) then return end
+    if not ((quality and quality >= (ra.threshold or 5)) or isNotable) then return end
     if ra.flash then RareFlash(quality or 0) end
     if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end
 
 function addon:RareTest()
     local ra = LootProConfig and LootProConfig.rareAlert
-    RareFlash((ra and ra.threshold) or 4)
+    RareFlash((ra and ra.threshold) or 5)
     if ra and ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end

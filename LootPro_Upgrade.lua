@@ -6,6 +6,7 @@ local _GetDetailedItemLevelInfo = (C_Item and C_Item.GetDetailedItemLevelInfo) o
 local _GetInventoryItemLink = GetInventoryItemLink
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _select = select
+local _format = string.format
 
 local CLASS_WEAPON, CLASS_ARMOR = 2, 4
 
@@ -33,6 +34,38 @@ local SLOTS = {
     INVTYPE_RANGED          = { INVSLOT_MAINHAND },
     INVTYPE_RANGEDRIGHT     = { INVSLOT_MAINHAND },
 }
+
+-- Gated on the API rather than IS_RETAIL, since item level is meaningful on Classic too (unlike IsUpgrade below).
+if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
+    local ILVL_TAG_CAP = 128
+    local ilvlTags = {}
+    local ilvlTagCount = 0
+
+    function addon:LootItemLevel(itemID, link)
+        if not link then return nil end
+
+        local _, _, _, _, _, classID = _GetItemInfoInstant(link)
+        if classID ~= CLASS_WEAPON and classID ~= CLASS_ARMOR then return nil end
+
+        local ilvl = _GetDetailedItemLevelInfo(link)
+        if not ilvl or ilvl == 0 then
+            if itemID and _RequestItemData then _RequestItemData(itemID) end
+            return nil
+        end
+
+        local tag = ilvlTags[ilvl]
+        if not tag then
+            if ilvlTagCount >= ILVL_TAG_CAP then
+                wipe(ilvlTags)
+                ilvlTagCount = 0
+            end
+            tag = _format(" |cffffd100[%d]|r", ilvl)
+            ilvlTags[ilvl] = tag
+            ilvlTagCount = ilvlTagCount + 1
+        end
+        return tag
+    end
+end
 
 if not (addon.IS_RETAIL and _GetDetailedItemLevelInfo and _GetItemInfoInstant and _GetInventoryItemLink) then
     function addon:IsUpgrade() return false end

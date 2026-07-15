@@ -6,6 +6,7 @@ local _match = string.match
 local _select = select
 local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local _GetContainerItemInfo = C_Container and C_Container.GetContainerItemInfo
+local _issecret = issecretvalue
 
 local function GetTipItemLink(tooltip)
     if tooltip and tooltip.GetItem then
@@ -26,7 +27,7 @@ local function AddInfo(tooltip)
     if not (wantLoot or wantSell) then return end
 
     local link = GetTipItemLink(tooltip)
-    if not link then return end
+    if not link or (_issecret and _issecret(link)) then return end
     local itemID = _tonumber(_match(link, "item:(%d+)"))
     if not itemID then return end
 

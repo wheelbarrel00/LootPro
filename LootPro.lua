@@ -1,9 +1,9 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.12.0"
+ns.addon.VERSION = "2.13.0"
 -- Bump on each new What's New popup; shown once per revision (LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 7
+ns.addon.WHATS_NEW = 8
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
@@ -86,6 +86,18 @@ function ns.addon:ShowURL(url)
     self._urlToCopy = url or ""
     StaticPopup_Show("LOOTPRO_URL")
 end
+
+StaticPopupDialogs["LOOTPRO_RESET"] = {
+    text = "Reset all Loot Pro settings to defaults?\n\nThis clears your watch list, block list, colors, window layout, and every toggle. It cannot be undone.",
+    button1 = "Reset",
+    button2 = "Cancel",
+    OnAccept = function() ns.addon:ResetDefaults() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    showAlert = true,
+    preferredIndex = 3,
+}
 
 -- Registered at load time so /lp works during the loading screen, not only after PLAYER_LOGIN.
 SLASH_LOOTPRO1 = "/lp"

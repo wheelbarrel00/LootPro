@@ -28,14 +28,14 @@ addon._badFonts = addon._badFonts or {}
 local _badFontCount = 0
 local _BAD_FONT_LIMIT = 50
 local function SafeSetFont(region, path, size, flags)
-    local ok = pcall(function() region:SetFont(path, size, flags) end)
+    local ok = pcall(region.SetFont, region, path, size, flags)
     if ok then return true end
     if not addon._badFonts[path or "?"] and _badFontCount < _BAD_FONT_LIMIT then
         addon._badFonts[path or "?"] = true
         _badFontCount = _badFontCount + 1
         print("|cFFFF6060[LootPro]|r Failed to load font '".._tostring(path).."', falling back to default.")
     end
-    pcall(function() region:SetFont(DEFAULT_FONT, size, flags) end)
+    pcall(region.SetFont, region, DEFAULT_FONT, size, flags)
     return false
 end
 addon._SafeSetFont = SafeSetFont
@@ -143,6 +143,12 @@ local function GetIconString(msg)
     return ""
 end
 
+local function TrailerRepl(m)
+    if m == "" then return m end
+    if _find(m, "x%d") or _find(m, "%.") then return "" end
+    return m
+end
+
 local function CleanMessage(msg, event)
     if not msg or type(msg) ~= "string" then return msg end
     
@@ -170,11 +176,7 @@ local function CleanMessage(msg, event)
         -- Retail loot messages embed their own |T..|t icon; strip it since GetIconString prepends ours (else double icons).
         cleaned = _gsub(cleaned, "|T[^|]-|t%s*", "")
         cleaned = _gsub(cleaned, "[%[%]]", "")
-        cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", function(m)
-            if m == "" then return m end
-            if _find(m, "x%d") or _find(m, "%.") then return "" end
-            return m
-        end)
+        cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", TrailerRepl)
         return cleaned
     end
     
@@ -1056,7 +1058,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
-                local marker = (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "")
+                local ilvlTag = ""
+                if LootProConfig.lootIlvl and self.LootItemLevel then
+                    ilvlTag = self:LootItemLevel(itemID, link) or ""
+                end
+                local marker = ilvlTag .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "")
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)

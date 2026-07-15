@@ -27,6 +27,28 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.13.0", date = "2026-07-14",
+            sections = {
+                { head = "New Features", items = {
+                    "Options window scale: a slider on the Customization tab resizes the settings window from 75% to 125%. It changes only this window, not the loot feed, combat text, or anything shown in the world.",
+                    "Item level on gear: loot lines for weapons and armor can show the item level as [485]. Off by default; enable it on the Alerts tab. Applies to your own drops and the group's.",
+                    "Vendor session totals: the Vendor tab shows a running tally of the gray items auto-sold and the gold earned this session.",
+                } },
+                { head = "Bug Fixes", items = {
+                    "What's New popup now grows to fit long entries instead of overflowing its buttons.",
+                    "Alerts and Vendor tabs no longer overlap the Reset to Defaults button; the window is taller.",
+                    "Notifications tab: the Use Coin Icons label no longer runs into the right-hand options.",
+                    "Reset to Defaults now asks for confirmation before clearing every setting.",
+                    "The font-picker dropdown no longer lingers on screen after you close the settings window.",
+                    "The session recap no longer wrongly carries over after a game crash; only a /reload keeps it going.",
+                } },
+                { head = "Improvements", items = {
+                    "Recap tab tidied: Enable Session Recap and the tooltip option stack at the top.",
+                    "Lower memory use on the loot path and in the settings window.",
+                } },
+            },
+        },
+        {
             version = "2.12.0", date = "2026-07-01",
             sections = {
                 { head = "New Features", items = {

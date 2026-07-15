@@ -129,11 +129,25 @@ end
 
 local function FinishRun()
     sellFrame:Hide()
-    if info.sold > 0 and LootProConfig.vendorGrays and LootProConfig.vendorGrays.details then
-        print(_format("|cFF00FF00[LootPro]|r Sold %d gray item%s for %s.",
-            info.sold, info.sold == 1 and "" or "s", addon:RecapFormatMoney(info.gold)))
+    if info.sold > 0 then
+        if addon.RecapAddGraySale then
+            addon:RecapAddGraySale(info.sold, info.gold)
+        end
+        if LootProConfig.vendorGrays and LootProConfig.vendorGrays.details then
+            print(_format("|cFF00FF00[LootPro]|r Sold %d gray item%s for %s.",
+                info.sold, info.sold == 1 and "" or "s", addon:RecapFormatMoney(info.gold)))
+        end
+        if addon.VendorRefreshSession then
+            addon:VendorRefreshSession()
+        end
     end
     ResetRun()
+end
+
+function addon:VendorSessionTotals()
+    local s = self.RecapGetSession and self:RecapGetSession()
+    if not s then return 0, 0 end
+    return s.graySold or 0, s.grayCopper or 0
 end
 
 sellFrame:SetScript("OnUpdate", function(_, elapsed)
@@ -228,7 +242,7 @@ evf:SetScript("OnEvent", function(_, event)
         end
     elseif event == "MERCHANT_CLOSED" then
         evf:UnregisterEvent("PLAYER_MONEY")
-        sellFrame:Hide()
-        ResetRun()
+        -- Use FinishRun, not a bare reset, so closing the merchant mid-run still records the partial tally.
+        FinishRun()
     end
 end)

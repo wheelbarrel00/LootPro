@@ -80,8 +80,9 @@ end
 
 function ns.UI:Initialize()
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
-    gui:SetSize(600, 680)
+    gui:SetSize(600, 740)
     gui:SetPoint("CENTER")
+    gui:SetScale((LootProConfig and LootProConfig.uiScale) or 1)
     gui:Hide()
 
     tinsert(UISpecialFrames, "LootProGUI")
@@ -137,7 +138,7 @@ function ns.UI:Initialize()
     }
 
     for _, p in pairs(pages) do 
-        p:SetSize(500, 550) 
+        p:SetSize(500, 610)
         p:SetPoint("TOP", 0, -140) 
         p:Hide() 
     end
@@ -349,7 +350,7 @@ function ns.UI:Initialize()
 
     local resetBtn = CreateStyledButton(gui, 160, 28, "Reset to Defaults")
     resetBtn:SetPoint("BOTTOM", gui, "BOTTOM", 0, 35)
-    resetBtn:SetScript("OnClick", function() addon:ResetDefaults() end)
+    resetBtn:SetScript("OnClick", function() StaticPopup_Show("LOOTPRO_RESET") end)
     local stubC = gui:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"); stubC:SetPoint("TOP", resetBtn, "BOTTOM", 0, -3); stubC:SetText("Clears all colors, layout, and toggles.")
 
     local toggles = {}
@@ -397,7 +398,7 @@ function ns.UI:Initialize()
     toggles["partyLoot"] = partyT
 
     local cStrT = CreateFrame("CheckButton", "LPRO_TGL_combatEnter", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
-    cStrT:SetPoint("TOPLEFT", 285, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
+    cStrT:SetPoint("TOPLEFT", 305, 0); _G[cStrT:GetName().."Text"]:SetText("Display Combat START")
     local cCE = LootProConfig.colors["combatEnter"] or {r=1, g=1, b=1}; _G[cStrT:GetName().."Text"]:SetTextColor(cCE.r, cCE.g, cCE.b)
     cStrT:SetChecked(LootProConfig.notifications["combatEnter"])
     cStrT:SetScript("OnClick", function(self) LootProConfig.notifications["combatEnter"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
@@ -563,6 +564,39 @@ function ns.UI:Initialize()
     mmMid.label:ClearAllPoints(); mmMid.label:SetPoint("LEFT", mmRight.label, "LEFT", 150, 0)
     mmMid:ClearAllPoints(); mmMid:SetPoint("TOPLEFT", mmMid.label, "BOTTOMLEFT", 0, -4)
 
+    local scaleSlider = CreateFrame("Slider", "LPRO_UIScale", pages.customization, "OptionsSliderTemplate")
+    scaleSlider:SetPoint("TOPLEFT", mmLeft, "BOTTOMLEFT", 5, -34)
+    scaleSlider:SetWidth(220)
+    scaleSlider:SetMinMaxValues(0.75, 1.25)
+    scaleSlider:SetValueStep(0.05)
+    scaleSlider:SetObeyStepOnDrag(true)
+    local scaleValText = _G["LPRO_UIScaleText"]
+    scaleValText:SetFontObject("GameFontNormal")
+    _G["LPRO_UIScaleLow"]:SetText("75%")
+    _G["LPRO_UIScaleHigh"]:SetText("125%")
+    local function SetScaleText(v)
+        scaleValText:SetText(string.format("Options Window Scale: %d%%", math.floor(v * 100 + 0.5)))
+    end
+    -- The slider sits inside the window it scales, so applying SetScale live during a drag fights the drag and snaps to the ends. Preview the percent live and apply the scale on release.
+    scaleSlider:SetScript("OnValueChanged", function(_, value)
+        SetScaleText(math.floor(value * 20 + 0.5) / 20)
+    end)
+    scaleSlider:SetScript("OnMouseUp", function(self)
+        if not addon:IsReady() then return end
+        local val = math.floor(self:GetValue() * 20 + 0.5) / 20
+        LootProConfig.uiScale = val
+        gui:SetScale(val)
+    end)
+    scaleSlider:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Options Window Scale", 1, 1, 1)
+        GameTooltip:AddLine("Resizes this settings window only. It does not change the loot or combat feeds, or anything the addon shows in the world.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    scaleSlider:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    scaleSlider:SetValue(LootProConfig.uiScale or 1)
+    SetScaleText(LootProConfig.uiScale or 1)
+
     local lFont = U.CreateFontDropdown("LPRO_LF", "Loot Font", pages.customization, "loot")
     lFont.label:SetPoint("TOPRIGHT", -50, 0); lFont:SetPoint("TOPRIGHT", lFont.label, "BOTTOMRIGHT", 0, -5); pages.customization.lF = lFont
 
@@ -618,12 +652,27 @@ function ns.UI:Initialize()
         local resetSession = CreateStyledButton(page, 140, 24, "Reset Session")
         resetSession:SetPoint("TOPRIGHT", testBtn, "BOTTOMRIGHT", 0, -22)
 
+        local tooltipCheck = CreateFrame("CheckButton", "LPRO_TooltipLoots", page, "InterfaceOptionsCheckButtonTemplate")
+        tooltipCheck:SetPoint("TOPLEFT", recapEnable, "BOTTOMLEFT", 0, -2)
+        local tooltipCheckText = _G[tooltipCheck:GetName().."Text"]
+        tooltipCheckText:SetText("Show \"looted this session\" on item tooltips")
+        tooltipCheckText:SetJustifyH("LEFT")
+        tooltipCheck:SetScript("OnClick", function(self)
+            LootProConfig.tooltipLoots = self:GetChecked() and true or false
+        end)
+
+        local recapHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        recapHint:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 29, -2)
+        recapHint:SetWidth(430)
+        recapHint:SetJustifyH("LEFT")
+        recapHint:SetText("Counts reset on logout or Reset Session; a /reload keeps them. Also available via /lp recap.")
+
         local recapHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        recapHeader:SetPoint("TOPLEFT", 30, -40)
+        recapHeader:SetPoint("TOPLEFT", recapHint, "BOTTOMLEFT", -25, -16)
         recapHeader:SetText("|cFFFF2222Session:|r 0s")
 
         local recapScroll = CreateFrame("ScrollFrame", "LPRO_RecapScroll", page, "UIPanelScrollFrameTemplate")
-        recapScroll:SetPoint("TOPLEFT", 30, -68)
+        recapScroll:SetPoint("TOPLEFT", recapHeader, "BOTTOMLEFT", 0, -10)
         recapScroll:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 80)
         recapScroll:SetWidth(266)
         local recapChild = CreateFrame("Frame", nil, recapScroll)
@@ -640,23 +689,6 @@ function ns.UI:Initialize()
             recapBody:SetText(text)
             recapChild:SetHeight(math.max(1, recapBody:GetStringHeight() + 4))
         end
-
-        local tooltipCheck = CreateFrame("CheckButton", "LPRO_TooltipLoots", page, "InterfaceOptionsCheckButtonTemplate")
-        tooltipCheck:SetPoint("TOPLEFT", page, "TOPLEFT", 320, -235)
-        local tooltipCheckText = _G[tooltipCheck:GetName().."Text"]
-        tooltipCheckText:SetText("Show \"looted this session\" on item tooltips")
-        tooltipCheckText:SetWidth(150)
-        tooltipCheckText:SetWordWrap(true)
-        tooltipCheckText:SetJustifyH("LEFT")
-        tooltipCheck:SetScript("OnClick", function(self)
-            LootProConfig.tooltipLoots = self:GetChecked() and true or false
-        end)
-
-        local recapHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        recapHint:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 4, -14)
-        recapHint:SetWidth(172)
-        recapHint:SetJustifyH("LEFT")
-        recapHint:SetText("Counts reset on logout or Reset Session; a /reload keeps them. Also available via /lp recap.")
 
         local _lines, _parts = {}, {}
         local function BuildRecapBody()
@@ -750,7 +782,7 @@ function ns.UI:Initialize()
         end)
         page:SetScript("OnUpdate", function(self, dt)
             self._throttle = self._throttle + dt
-            if self._throttle < 0.5 then return end
+            if self._throttle < 1.0 then return end
             self._throttle = 0
             if not LootProConfig.recapEnabled then return end
             local dur = addon:RecapFormatDuration(addon:RecapElapsed())
@@ -976,6 +1008,23 @@ function ns.UI:Initialize()
             upgradeCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
         end
 
+        local ilvlCheck
+        if addon.LootItemLevel then
+            ilvlCheck = CreateFrame("CheckButton", "LPRO_LootIlvl", page, "InterfaceOptionsCheckButtonTemplate")
+            ilvlCheck:SetPoint("TOPLEFT", upgradeCheck or notableCheck, "BOTTOMLEFT", 0, -2)
+            _G[ilvlCheck:GetName().."Text"]:SetText("Show item level on gear")
+            ilvlCheck:SetScript("OnClick", function(self)
+                LootProConfig.lootIlvl = self:GetChecked() and true or false
+            end)
+            ilvlCheck:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Item level on gear", 1, 1, 1)
+                GameTooltip:AddLine("Adds the item level in the loot feed, as [485], to every weapon or armor piece looted. Applies to your own drops and the group's.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            ilvlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+
         page:SetScript("OnShow", function()
             enableCheck:SetChecked(LootProConfig.watchlist.enabled)
             soundCheck:SetChecked(LootProConfig.watchlist.sound)
@@ -985,6 +1034,7 @@ function ns.UI:Initialize()
             notableCheck:SetChecked(LootProConfig.rareAlert.notable)
             if newAppCheck then newAppCheck:SetChecked(LootProConfig.newAppearance) end
             if upgradeCheck then upgradeCheck:SetChecked(LootProConfig.lootUpgrade) end
+            if ilvlCheck then ilvlCheck:SetChecked(LootProConfig.lootIlvl) end
             rareThresh:Refresh()
             RefreshList()
         end)
@@ -1109,15 +1159,19 @@ function ns.UI:Initialize()
         interval:SetMinMaxValues(0.1, 1.0)
         interval:SetValueStep(0.1)
         interval:SetObeyStepOnDrag(true)
-        _G["LPRO_VendorIntervalText"]:SetFontObject("GameFontNormal")
+        local intervalText = _G["LPRO_VendorIntervalText"]
+        intervalText:SetFontObject("GameFontNormal")
         _G["LPRO_VendorIntervalLow"]:SetText("0.1s")
         _G["LPRO_VendorIntervalHigh"]:SetText("1.0s")
-        interval:SetScript("OnValueChanged", function(self, value)
+        local lastInterval
+        interval:SetScript("OnValueChanged", function(_, value)
             if not addon:IsReady() then return end
             -- Snap to the nearest 0.1 (float steps can land on 0.30000004).
             local val = math.floor(value * 10 + 0.5) / 10
+            if val == lastInterval then return end
+            lastInterval = val
             LootProConfig.vendorGrays.interval = val
-            _G[self:GetName().."Text"]:SetText(string.format("Sell Interval: %.1fs", val))
+            intervalText:SetText(string.format("Sell Interval: %.1fs", val))
         end)
 
         local intervalDesc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1173,11 +1227,37 @@ function ns.UI:Initialize()
         sellTipDesc:SetJustifyH("LEFT")
         sellTipDesc:SetText("Adds the sell price to item tooltips, plus the full stack value when you hover a stack in your bags.")
 
+        local sessionLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        sessionLabel:SetPoint("TOPLEFT", sellTipDesc, "BOTTOMLEFT", -25, -20)
+        sessionLabel:SetText("This Session")
+
+        local sessionText = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        sessionText:SetPoint("TOPLEFT", sessionLabel, "BOTTOMLEFT", 0, -6)
+        sessionText:SetWidth(430)
+        sessionText:SetJustifyH("LEFT")
+
+        local function RefreshVendorSession()
+            local sold, gold = 0, 0
+            if addon.VendorSessionTotals then
+                sold, gold = addon:VendorSessionTotals()
+            end
+            if sold > 0 then
+                sessionText:SetText(string.format("Sold %d gray item%s for %s.",
+                    sold, sold == 1 and "" or "s", addon:RecapFormatMoney(gold)))
+            else
+                sessionText:SetText("No gray items sold yet this session.")
+            end
+        end
+
+        function addon:VendorRefreshSession()
+            if page:IsShown() then RefreshVendorSession() end
+        end
+
         local vendorHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         vendorHint:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 30, 110)
         vendorHint:SetWidth(430)
         vendorHint:SetJustifyH("LEFT")
-        vendorHint:SetText("The merchant's own \"Sell All Junk\" button sells everything at once. This adds automatic, paced selling with an optional on-screen progress bar.")
+        vendorHint:SetText("The merchant's own \"Sell All Junk\" button sells everything at once. This adds automatic, paced selling with an optional on-screen progress bar. The session total covers auto-sold and manually-triggered gray sales, and clears when the session recap does.")
 
         page:SetScript("OnShow", function()
             enableCheck:SetChecked(LootProConfig.vendorGrays.enabled)
@@ -1185,6 +1265,7 @@ function ns.UI:Initialize()
             detailsCheck:SetChecked(LootProConfig.vendorGrays.details)
             sellTipCheck:SetChecked(LootProConfig.tooltipSell)
             interval:SetValue(LootProConfig.vendorGrays.interval or 0.2)
+            RefreshVendorSession()
         end)
     end
 
@@ -1230,8 +1311,11 @@ function ns.UI:Initialize()
     
     ns.UI.welcomeFrame = welcome
 
+    local WN_WIDTH, WN_MIN_HEIGHT = 480, 360
+    local WN_TOP, WN_BOTTOM = 54, 62
+
     local wn = CreateVersionedMainFrame("LootProWhatsNew", UIParent)
-    wn:SetSize(480, 360)
+    wn:SetSize(WN_WIDTH, WN_MIN_HEIGHT)
     wn:SetPoint("CENTER")
     wn:SetFrameStrata("HIGH")
     wn:Hide()
@@ -1245,21 +1329,21 @@ function ns.UI:Initialize()
     wn.title:SetText("|cFFFF2222What's New in Loot Pro|r")
 
     local wnBody = wn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    wnBody:SetPoint("TOPLEFT", wn, "TOPLEFT", 24, -54)
-    wnBody:SetPoint("TOPRIGHT", wn, "TOPRIGHT", -24, -54)
+    wnBody:SetPoint("TOPLEFT", wn, "TOPLEFT", 24, -WN_TOP)
+    wnBody:SetWidth(WN_WIDTH - 48)
     wnBody:SetJustifyH("LEFT")
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.12.0:|r",
+        "|cFFEBB706What's new in 2.13.0:|r",
         " ",
-        "|cFFEBB706Own vs. others' loot quality|r  Set a separate minimum rarity for your own loot and for other players' loot on the Notifications tab - show all of your drops but only Rare+ from the group, for example. Your existing setting carries over to both.",
+        "|cFFEBB706Resize the settings window|r  A new scale slider on the Customization tab shrinks or enlarges the Loot Pro options window to fit your screen. It changes only this window, not the loot feed.",
         " ",
-        "|cFFEBB706More categories to hide|r  The loot-feed filters now include Gear, Gems, Enhancements, Miscellaneous, and Glyphs alongside the existing categories.",
+        "|cFFEBB706Item level on gear|r  Loot lines for weapons and armor can show their item level. Turn it on under the Alerts tab.",
         " ",
-        "|cFFEBB706Name block list|r  A new Block tab hides items from the feed by name or keyword - type a word or shift-click an item. Blocked items still count in the recap.",
+        "|cFFEBB706Vendor session totals|r  The Vendor tab now tracks the grays you auto-sell and the gold earned this session.",
         " ",
-        "Got an idea or found a bug? Join our Discord below!",
+        "Plus layout fixes and lower memory use. Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
 
     local wnOpen = CreateStyledButton(wn, 150, 26, "Open Settings")
@@ -1271,6 +1355,16 @@ function ns.UI:Initialize()
 
     local wnDiscord = U.CreateDiscordButton(wn)
     wnDiscord:SetPoint("RIGHT", wnOpen, "LEFT", -10, 0)
+
+    -- Size the frame to the wrapped body so a long entry cannot overrun the buttons. GetStringHeight reads 0 before the first layout pass, so re-measure on show.
+    local function SizeWhatsNew()
+        local h = wnBody:GetStringHeight()
+        if h and h > 0 then
+            wn:SetHeight(math.max(WN_MIN_HEIGHT, WN_TOP + h + WN_BOTTOM))
+        end
+    end
+    SizeWhatsNew()
+    wn:SetScript("OnShow", SizeWhatsNew)
 
     ns.UI.whatsNewFrame = wn
 
@@ -1449,6 +1543,7 @@ function ns.UI:Initialize()
         lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
         cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
         mmLeft:Refresh(); mmRight:Refresh(); mmMid:Refresh(); capCheck:SetChecked(LootProConfig.currencyCap)
+        scaleSlider:SetValue(LootProConfig.uiScale or 1); gui:SetScale(LootProConfig.uiScale or 1)
         mQualOwn:Refresh(); mQualOther:Refresh()
         cEntEB:SetText(LootProConfig.combatEnterText); cLveEB:SetText(LootProConfig.combatLeaveText)
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
