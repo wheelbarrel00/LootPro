@@ -52,11 +52,12 @@ function addon:WatchAdd(text)
         local name = text:match("|h%[(.-)%]|h") or ResolveName(id) or ("Item #" .. id)
         entry = { id = id, label = name, icon = icon }
     else
-        local key = text:lower()
+        local name = text:match("|h%[(.-)%]|h") or text
+        local key = name:lower()
         for _, e in ipairs(wl.items) do
             if e.key == key then return false, "dupe" end
         end
-        entry = { key = key, label = text }
+        entry = { key = key, label = name }
     end
 
     wl.items[#wl.items + 1] = entry
@@ -240,6 +241,7 @@ local function RareFlash(quality)
 end
 
 function addon:IsNotableItem(itemID, link)
+    if not _GetItemInfoInstant or (not itemID and not link) then return false end
     local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
     if not classID then return false end
 

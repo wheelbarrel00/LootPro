@@ -27,6 +27,28 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.13.1", date = "2026-07-20",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "Warband (account-wide) reputation gains and losses appear in the combat feed again, after patch 11.0 changed the wording for account-wide reputation.",
+                    "Reputation lines show even if you have turned off the Reputation category in your chat windows.",
+                    "Looting a brand-new item for the first time no longer shows a doubled count.",
+                    "Currencies that fire both a loot and a currency message no longer show the line twice.",
+                    "Looting a caged battle pet no longer triggers a Lua error that could cut off the loot feed.",
+                    "The Discord and link copy popups no longer interfere with other addons' text-entry dialogs.",
+                    "The bag tooltip's Stack of N sell-price line is no longer clipped.",
+                    "The busy-feed and hover-pause checkboxes update immediately after Reset to Defaults.",
+                    "Watch-list entries added by pasting a non-item link now match and alert correctly.",
+                    "Combat and loot sliders no longer show a blank label when their value is at the minimum.",
+                    "Layout sliders on the Customization tab render at a consistent width.",
+                    "Classic: loot icons show for items not yet seen this session.",
+                } },
+                { head = "Improvements", items = {
+                    "Item lookups use the modern C_Item API path consistently, guarding against future removal of the legacy global functions.",
+                } },
+            },
+        },
+        {
             version = "2.13.0", date = "2026-07-14",
             sections = {
                 { head = "New Features", items = {

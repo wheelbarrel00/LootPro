@@ -296,8 +296,12 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
             addon:UpdateAllVisuals()
         end
     end)
-    
-    s.label = l 
+
+    s:HookScript("OnShow", function(self)
+        valText:SetText(valFmt:format(math.floor(self:GetValue() + 0.5)))
+    end)
+
+    s.label = l
     return s
 end
 

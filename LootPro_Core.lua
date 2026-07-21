@@ -10,8 +10,8 @@ local _GetTime = GetTime
 local _After = C_Timer and C_Timer.After
 local _NewTicker = C_Timer and C_Timer.NewTicker
 local _GetItemCount = (C_Item and C_Item.GetItemCount) or GetItemCount
-local _GetItemInfo = GetItemInfo
-local _GetItemInfoInstant = GetItemInfoInstant
+local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
@@ -50,6 +50,9 @@ end
 
 local PAT_FACTION_UP   = ToPattern(_G.FACTION_STANDING_INCREASED or "Reputation with %s increased by %d.")
 local PAT_FACTION_DOWN = ToPattern(_G.FACTION_STANDING_DECREASED or "Reputation with %s decreased by %d.")
+-- 11.0+ account-wide (Warband) reputations use a differently-worded line ("Your Warband's reputation with...") that the base patterns cannot match. The globals are absent on Classic, so ToPattern returns nil there.
+local PAT_FACTION_UP_AW   = ToPattern(_G.FACTION_STANDING_INCREASED_ACCOUNT_WIDE)
+local PAT_FACTION_DOWN_AW = ToPattern(_G.FACTION_STANDING_DECREASED_ACCOUNT_WIDE)
 
 local function LeadIn(fmt)
     if not fmt then return nil end
@@ -130,7 +133,7 @@ local function GetIconString(msg)
     local itemID = _match(msg, "item:(%d+)")
     if itemID and LootProConfig.showLootIcons then
         local icon
-        if addon.IS_RETAIL and _GetItemInfoInstant then
+        if _GetItemInfoInstant then
             local _, _, _, _, _icon = _GetItemInfoInstant(itemID)
             icon = _icon
         else
@@ -202,6 +205,8 @@ local recentLoot = {}
 local recentCurrency = {}
 local DEDUP_WINDOW = 0.25
 local CURRENCY_DEDUP_WINDOW = 0.5
+-- Loot marks must outlive the currency deferral (which waits DEDUP_WINDOW) or a same-frame loot+currency pair reads the mark as just-expired and the line shows twice.
+local LOOT_MARK_TTL = DEDUP_WINDOW * 2
 local function ExtractItemName(s)
     if not s then return nil end
     return _match(s, "|h%[(.-)%]|h")
@@ -213,7 +218,7 @@ local function IsRecentLoot(name)
     if not name then return false end
     local t = recentLoot[name]
     if not t then return false end
-    if _GetTime() - t > DEDUP_WINDOW then
+    if _GetTime() - t > LOOT_MARK_TTL then
         recentLoot[name] = nil
         return false
     end
@@ -254,7 +259,7 @@ end
 local function _SweepDedup()
     local now = _GetTime()
     for name, t in pairs(recentLoot) do
-        if now - t > DEDUP_WINDOW then
+        if now - t > LOOT_MARK_TTL then
             recentLoot[name] = nil
         end
     end
@@ -310,7 +315,9 @@ local function ShowLoot(p, countStr)
 end
 
 local function PostDeferredLoot(p)
-    local cnt = ((_GetItemCount and _GetItemCount(p.itemID, true)) or 0) + p.amt
+    -- At +0.1s BAG_UPDATE has landed so GetItemCount is already post-loot. Take the larger of it and the pre-loot snapshot plus amt so we neither double-count nor under-count.
+    local live = (_GetItemCount and _GetItemCount(p.itemID, true)) or 0
+    local cnt = math.max((p.preCount or 0) + p.amt, live)
     ShowLoot(p, CountSuffix(cnt))
 end
 
@@ -600,8 +607,6 @@ function addon:PostTestMessages()
     self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
 end
 
-local cleanChatMsg = {}
-
 -- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string); verify that in-game in an active Mythic+/boss encounter.
 function addon:RunRegressionTest()
     if not self:IsReady() then
@@ -674,9 +679,6 @@ function addon:RunRegressionTest()
     for _, tc in ipairs(cases) do
         -- Clear first: maxLines caps GetNumMessages(), so without it later cases read before==after and report false FAILs.
         tc.target:Clear()
-        if tc.event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = tc.arg
-        end
         local before = tc.target:GetNumMessages()
         local ok, err = pcall(handler, self, tc.event, tc.arg)
         local after = tc.target:GetNumMessages()
@@ -787,14 +789,6 @@ for _, v in ipairs(evts) do
 end
 evts = nil
 
--- Taint launder: CHAT_MSG_COMBAT_FACTION_CHANGE can taint our event frame via Blizzard's secure faction path, so for that one event we read the text from a ChatFrame_AddMessageEventFilter cache (the filter runs in an untainted frame). Other events read arg1 directly -- the filter has no guaranteed dispatch order, so it can return stale data for time-sensitive loot. Not a secret-value bypass: the filter gets the same secret arg1, so OnEvent still guards every payload.
-if _G.ChatFrame_AddMessageEventFilter then
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_COMBAT_FACTION_CHANGE", function(_, _, msg)
-        cleanChatMsg["CHAT_MSG_COMBAT_FACTION_CHANGE"] = msg
-        return false
-    end)
-end
-
 addon:SetScript("OnEvent", function(self, event, ...)
     local arg1 = ...
     
@@ -848,14 +842,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        local msg
-        if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            msg = cleanChatMsg[event]
-            cleanChatMsg[event] = nil
-            if not msg then return end
-        else
-            msg = arg1
-        end
+        local msg = arg1
 
         -- 12.0 secret values: the CHAT_MSG payload is a secret string in active encounters; any string op throws, so skip the line.
         if _issecret and _issecret(msg) then return end
@@ -878,8 +865,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             local fac, amt = nil, nil
             if PAT_FACTION_UP then fac, amt = _match(msg, PAT_FACTION_UP) end
+            if not amt and PAT_FACTION_UP_AW then fac, amt = _match(msg, PAT_FACTION_UP_AW) end
             local lossFac, lossAmt = nil, nil
             if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN) end
+            if not amt and not lossAmt and PAT_FACTION_DOWN_AW then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN_AW) end
             if amt and n.repGain then
                 self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
             elseif lossAmt and n.repLoss then
@@ -1036,7 +1025,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local lfil = LootProConfig.lootFilters
             if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe
                 or lfil.hideGear or lfil.hideGem or lfil.hideEnhancement or lfil.hideMisc or lfil.hideGlyph) then
-                local classID = _select(6, _GetItemInfoInstant(itemID))
+                local classID = _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
                 if classID == 7 then hidden = lfil.hideTradeGoods
                 elseif classID == 0 then hidden = lfil.hideConsumable
                 elseif classID == 12 then hidden = lfil.hideQuest
@@ -1085,6 +1074,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.amt     = amt
                             lp.noCount = noCount
                             lp.itemID  = itemID
+                            lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
                             lp.cR, lp.cG, lp.cB = lr, lg, lb
                             lp.marker  = marker
                             _After(0.1, _lootFns[_lootSlot])

@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.13.0"
+ns.addon.VERSION = "2.13.1"
 -- Bump on each new What's New popup; shown once per revision (LootProConfig.whatsNewSeen).
 ns.addon.WHATS_NEW = 8
 ns.addon.isTesting = false
@@ -29,14 +29,15 @@ StaticPopupDialogs["LOOTPRO_DISCORD"] = {
     button1 = "Close",
     hasEditBox = true,
     editBoxWidth = 220,
+    -- Use the per-dialog fields, not SetScript on the shared editbox, which would leak these handlers onto later popups.
+    EditBoxOnEscapePressed = DiscordBox_OnEscape,
+    EditBoxOnTextChanged = DiscordBox_OnTextChanged,
     OnShow = function(self)
         local eb = self.editBox or (self.EditBox)
         if eb then
             eb:SetText(ns.addon.DISCORD_URL)
             eb:HighlightText()
             eb:SetFocus()
-            eb:SetScript("OnEscapePressed", DiscordBox_OnEscape)
-            eb:SetScript("OnTextChanged", DiscordBox_OnTextChanged)
         end
     end,
     timeout = 0,
@@ -66,14 +67,14 @@ StaticPopupDialogs["LOOTPRO_URL"] = {
     button1 = "Close",
     hasEditBox = true,
     editBoxWidth = 320,
+    EditBoxOnEscapePressed = URLBox_OnEscape,
+    EditBoxOnTextChanged = URLBox_OnTextChanged,
     OnShow = function(self)
         local eb = self.editBox or (self.EditBox)
         if eb then
             eb:SetText(ns.addon._urlToCopy)
             eb:HighlightText()
             eb:SetFocus()
-            eb:SetScript("OnEscapePressed", URLBox_OnEscape)
-            eb:SetScript("OnTextChanged", URLBox_OnTextChanged)
         end
     end,
     timeout = 0,

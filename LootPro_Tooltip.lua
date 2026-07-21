@@ -71,6 +71,7 @@ if _GetContainerItemInfo and _G.GameTooltip and _G.GameTooltip.SetBagItem then
         if sell and sell > 0 then
             self:AddLine("|cFFFF2222LootPro|r  Stack of " .. info.stackCount .. ": "
                 .. addon:RecapFormatMoney(sell * info.stackCount), 1, 1, 1)
+            self:Show()
         end
     end)
 end

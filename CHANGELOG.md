@@ -5,6 +5,25 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-07-20
+
+### Bug Fixes
+- Warband (account-wide) reputation gains and losses appear in the combat feed again. They stopped showing when patch 11.0 changed the wording for account-wide reputation.
+- Reputation lines now show even if you have turned off the Reputation category in your chat windows.
+- Looting a brand-new item for the first time no longer shows a doubled count (a single drop showed as "(2)").
+- Currencies that fire both a loot and a currency message no longer display the line twice.
+- Looting a caged battle pet no longer triggers a Lua error that could cut off the loot feed.
+- The Discord and link copy popups no longer interfere with other addons' text-entry dialogs.
+- The bag tooltip's "Stack of N" sell-price line is no longer clipped.
+- The busy-feed and hover-pause checkboxes update immediately after Reset to Defaults.
+- Watch-list entries added by pasting a non-item link (such as a caged pet) now match and alert correctly.
+- Combat and loot sliders no longer show a blank label when their value sits at the minimum.
+- Layout sliders on the Customization tab render at a consistent width.
+- Classic: loot icons now show for items not yet seen this session.
+
+### Improvements
+- Item lookups use the modern C_Item API path consistently, guarding against future removal of the legacy global functions.
+
 ## [2.13.0] - 2026-07-14
 
 ### New Features
