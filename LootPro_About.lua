@@ -27,6 +27,14 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.14.2", date = "2026-07-22",
+            sections = {
+                { head = "Improvements", items = {
+                    "Updated for Classic Era patch 1.15.9.",
+                } },
+            },
+        },
+        {
             version = "2.14.1", date = "2026-07-22",
             sections = {
                 { head = "Improvements", items = {
