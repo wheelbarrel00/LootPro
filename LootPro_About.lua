@@ -27,6 +27,14 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.14.1", date = "2026-07-22",
+            sections = {
+                { head = "Improvements", items = {
+                    "Updated for Burning Crusade Classic patch 2.5.6.",
+                } },
+            },
+        },
+        {
             version = "2.14.0", date = "2026-07-21",
             sections = {
                 { head = "New Features", items = {

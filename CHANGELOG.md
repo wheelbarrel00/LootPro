@@ -5,6 +5,11 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.1] - 2026-07-22
+
+### Improvements
+- Updated for Burning Crusade Classic patch 2.5.6.
+
 ## [2.14.0] - 2026-07-21
 
 ### New Features
