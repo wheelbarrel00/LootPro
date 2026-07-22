@@ -5,6 +5,13 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.0] - 2026-07-21
+
+### New Features
+- Framed loot and combat feeds. On the Customization tab, turn on "Framed loot rows" and "Framed combat rows" to draw each line as its own bordered row instead of a plain text line. Loot rows show the item icon, name, running count, and category, with the border and name colored by item quality. Combat, skill, and reputation lines get a matching bordered row with the border in that line's color. Everything you already set carries over: font, outline, size, colors, fade timing, "keep busy feeds up longer", and hover-to-pause.
+- Shift-click a framed loot row to link the item in chat. It opens a chat box for you if one is not already open. Control-click opens the dressing room, hovering shows the item tooltip, and while the feed is unlocked you can drag any row to move it.
+- Masque support for the framed loot icons. With Masque installed, a "Loot Pro" group appears in its settings so you can skin the icons. Without Masque, the icons keep a clean built-in border.
+
 ## [2.13.1] - 2026-07-20
 
 ### Bug Fixes

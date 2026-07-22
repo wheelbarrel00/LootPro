@@ -27,6 +27,16 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.14.0", date = "2026-07-21",
+            sections = {
+                { head = "New Features", items = {
+                    "Framed loot and combat feeds. On the Customization tab, turn on Framed loot rows and Framed combat rows to draw each line as its own bordered row. Loot rows show the item icon, name, running count, and category, colored by item quality. Combat, skill, and reputation lines get a matching bordered row colored by that line. Font, outline, size, colors, fade, and hover-to-pause all carry over.",
+                    "Shift-click a framed loot row to link the item in chat. It opens a chat box for you if one is not already open. Control-click opens the dressing room, hovering shows the item tooltip, and while the feed is unlocked you can drag any row to move it.",
+                    "Masque support for the framed loot icons. With Masque installed, a Loot Pro group appears in its settings so you can skin the icons. Without Masque, the icons keep a clean built-in border.",
+                } },
+            },
+        },
+        {
             version = "2.13.1", date = "2026-07-20",
             sections = {
                 { head = "Bug Fixes", items = {

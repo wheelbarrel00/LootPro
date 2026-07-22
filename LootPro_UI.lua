@@ -269,11 +269,12 @@ function ns.UI:Initialize()
             addon.combatFrame.display:SetFading(false) 
             addon.lootFrame.display:SetFading(false) 
             addon:PostTestMessages()
-        else 
-            testBtn:SetText("Start Test Mode") 
-            addon:UpdateAllVisuals() 
-            addon.combatFrame.display:Clear() 
-            addon.lootFrame.display:Clear() 
+        else
+            testBtn:SetText("Start Test Mode")
+            addon:UpdateAllVisuals()
+            addon.combatFrame.display:Clear()
+            addon.lootFrame.display:Clear()
+            addon:ClearFramedRows()
         end
     end)
 
@@ -289,6 +290,7 @@ function ns.UI:Initialize()
             addon:UpdateAllVisuals()
             addon.combatFrame.display:Clear()
             addon.lootFrame.display:Clear()
+            addon:ClearFramedRows()
         end
     end)
 
@@ -484,10 +486,37 @@ function ns.UI:Initialize()
     cEntEB.label:SetPoint("TOPLEFT", cOut, "BOTTOMLEFT", 0, -20); cEntEB:SetPoint("TOPLEFT", cEntEB.label, "BOTTOMLEFT", 5, -5)
 
     local cLveEB = U.CreateEditBox("LPRO_CL", "Combat End Text (Enter to Save)", pages.customization, "combatLeaveText")
-    cLveEB.label:SetPoint("TOPLEFT", cEntEB, "BOTTOMLEFT", -5, -15); cLveEB:SetPoint("TOPLEFT", cLveEB.label, "BOTTOMLEFT", 5, -5)
+    cLveEB.label:SetPoint("TOPLEFT", cEntEB.label, "TOPLEFT", 245, 0); cLveEB:SetPoint("TOPLEFT", cLveEB.label, "BOTTOMLEFT", 5, -5)
+
+    local function AddFramedToggle(name, label, key, tooltip)
+        local cb = CreateFrame("CheckButton", name, pages.customization, "InterfaceOptionsCheckButtonTemplate")
+        _G[cb:GetName().."Text"]:SetText(label)
+        cb:SetChecked(LootProConfig[key])
+        cb:SetScript("OnClick", function(self)
+            LootProConfig[key] = self:GetChecked() and true or false
+            addon:UpdateAllVisuals()
+            if addon.isTesting then addon:PostTestMessages() end
+        end)
+        cb:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(label, 1, 1, 1)
+            GameTooltip:AddLine(tooltip, 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        return cb
+    end
+
+    local framedLootCheck = AddFramedToggle("LPRO_FramedLoot", "Framed loot rows", "framedLoot",
+        "Draws each loot line as its own bordered row with the item icon, like XLoot. The border is colored by item quality.")
+    framedLootCheck:SetPoint("TOPLEFT", cEntEB, "BOTTOMLEFT", -5, -14)
+
+    local framedCombatCheck = AddFramedToggle("LPRO_FramedCombat", "Framed combat rows", "framedCombat",
+        "Draws each combat, skill, and reputation line as its own bordered row. The border is colored to match that line's color.")
+    framedCombatCheck:SetPoint("LEFT", framedLootCheck, "LEFT", 245, 0)
 
     local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
-    mmCheck:SetPoint("TOPLEFT", cLveEB, "BOTTOMLEFT", -5, -20)
+    mmCheck:SetPoint("TOPLEFT", framedLootCheck, "BOTTOMLEFT", 0, -8)
     _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
     mmCheck:SetChecked(not LootProConfig.minimap.hide)
     mmCheck:SetScript("OnClick", function(self)
@@ -1335,15 +1364,15 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.13.0:|r",
+        "|cFFEBB706What's new in 2.14.0:|r",
         " ",
-        "|cFFEBB706Resize the settings window|r  A new scale slider on the Customization tab shrinks or enlarges the Loot Pro options window to fit your screen. It changes only this window, not the loot feed.",
+        "|cFFEBB706Framed loot and combat feeds|r  Turn on Framed loot rows and Framed combat rows on the Customization tab to draw each line as its own bordered row. Loot rows show the icon, name, count, and category, colored by item quality. Combat lines match their own color.",
         " ",
-        "|cFFEBB706Item level on gear|r  Loot lines for weapons and armor can show their item level. Turn it on under the Alerts tab.",
+        "|cFFEBB706Shift-click to link|r  Shift-click a framed loot row to link the item in chat. Control-click opens the dressing room, and hovering shows the tooltip.",
         " ",
-        "|cFFEBB706Vendor session totals|r  The Vendor tab now tracks the grays you auto-sell and the gold earned this session.",
+        "|cFFEBB706Masque support|r  Skin the framed loot icons with Masque if you have it. Without it, the icons keep a clean built-in border.",
         " ",
-        "Plus layout fixes and lower memory use. Got an idea or found a bug? Join our Discord below!",
+        "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
 
     local wnOpen = CreateStyledButton(wn, 150, 26, "Open Settings")
@@ -1549,6 +1578,7 @@ function ns.UI:Initialize()
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
         fadeScaleCheck:SetChecked(LootProConfig.fadeScale); hoverPauseCheck:SetChecked(LootProConfig.hoverPause)
+        framedLootCheck:SetChecked(LootProConfig.framedLoot); framedCombatCheck:SetChecked(LootProConfig.framedCombat)
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)

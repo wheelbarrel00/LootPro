@@ -16,6 +16,8 @@ addon.DEFAULTS = {
     currencyCap = true,
     hoverPause = false,
     fadeScale = false,
+    framedLoot = false,
+    framedCombat = false,
     speedyAutoLoot = false,
     uiScale = 1.0,
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false, hideGear = false, hideGem = false, hideEnhancement = false, hideMisc = false, hideGlyph = false },

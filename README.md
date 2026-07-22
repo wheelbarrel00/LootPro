@@ -51,6 +51,10 @@ All 11 message categories have independent color pickers: Money, Currency, Loot,
 
 Each display frame (Combat and Loot) has its own text size, fade duration, frame width, frame height, and max visible lines. A sync button copies one frame's layout to the other. Font selection supports LibSharedMedia-3.0, unlocking dozens of additional fonts when installed. Outline modes include Thin, Thick, and None (with drop shadow).
 
+### Framed Loot and Combat Feeds
+
+An optional display style that draws each feed line as its own bordered row instead of scrolling text. Turn on **Framed loot rows** and **Framed combat rows** independently on the Customization tab. Loot rows show the item icon, name, running count, and category, with the border and name colored by item quality — combat, skill, and reputation lines get a matching bordered row colored to match that line. Shift-click a loot row to link the item in chat (a chat box opens for you if one is not already open), control-click for the dressing room, and hover for the item tooltip. While the feeds are unlocked you can drag any row to move them. Every per-frame setting you already use — font, outline, size, colors, fade timing, hover-to-pause, and keep-busy-feeds-longer — carries over, and if you have Masque installed the loot icons take your chosen Masque skin. Off by default.
+
 ### Notification Toggles
 
 Every message type can be individually enabled or disabled. Additional toggles control loot count injection, coin icon display, Clean Mode, and combat follower XP visibility.
@@ -144,6 +148,7 @@ The config UI has seven tabs: Layout, Colors, Notifs, Custom, Recap, Alerts, and
 
 **Optional:**
 - [LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0) — unlocks dozens of additional fonts from within the Loot Pro settings panel
+- [Masque](https://www.curseforge.com/wow/addons/masque) — skins the icons on the framed loot rows when that option is enabled
 
 LibStub, LibDataBroker-1.1, CallbackHandler-1.0, and LibDBIcon-1.0 are bundled with the addon.
 

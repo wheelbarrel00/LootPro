@@ -271,6 +271,427 @@ local function _SweepDedup()
 end
 local _dedupTicker = _NewTicker and _NewTicker(60, _SweepDedup) or nil
 
+-- Optional per-feed framed-row renderer (toggled by framedLoot/framedCombat): a separate path from the text feed using a fixed, self-fading row pool.
+local ROW_GAP, ROW_FADE = 2, 1
+local _GetItemQualityColor = C_Item and C_Item.GetItemQualityColor
+
+local function QualityRGB(q)
+    if q and _GetItemQualityColor then
+        local r, g, b = _GetItemQualityColor(q)
+        if r then return r, g, b end
+    end
+    local qc = _G.ITEM_QUALITY_COLORS and q and _G.ITEM_QUALITY_COLORS[q]
+    if qc then return qc.r, qc.g, qc.b end
+    return 1, 1, 1
+end
+
+local function LootCategory(link, itemID)
+    local src = link or itemID
+    if not src then return "" end
+    local _, _, _, _, _, _, subType, _, equipLoc = _GetItemInfo(src)
+    if not subType then return "" end
+    -- Non-equippable items map equipLoc to an empty-string global, and "" is truthy in Lua, so guard it or the slot prefix becomes a bare ", ".
+    local slot = equipLoc and equipLoc ~= "" and _G[equipLoc]
+    if slot and slot ~= "" then
+        return slot .. ", " .. subType
+    end
+    return subType
+end
+
+local ROW_BACKDROP = {
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 14,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+local ICON_BACKDROP = { edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10 }
+
+-- Forward declares: the row mouse handlers (defined before BuildRow) pause/resume fades (defined after).
+local PauseRowFades, ResumeRowFades
+
+-- Masque is optional and never vendored. Resolve lazily since it may load after us, and fall back to our own icon border when absent.
+local masqueGroup
+local function GetMasqueGroup()
+    if masqueGroup == nil then
+        local Masque = LibStub and LibStub("Masque", true)
+        masqueGroup = (Masque and Masque:Group("Loot Pro", "Loot Icons")) or false
+    end
+    return masqueGroup or nil
+end
+
+local function LayoutRows(f)
+    local host = f.rowHost
+    for i, row in ipairs(f.rowActive) do
+        row:ClearAllPoints()
+        if i == 1 then
+            row:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+            row:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        else
+            local prev = f.rowActive[i - 1]
+            row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -ROW_GAP)
+            row:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -ROW_GAP)
+        end
+    end
+end
+
+local function RowFade_OnFinished(ag)
+    local row = ag.row
+    local f = row._owner
+    row:Hide()
+    row._free = true
+    if f and f.rowActive then
+        for i = #f.rowActive, 1, -1 do
+            if f.rowActive[i] == row then table.remove(f.rowActive, i) break end
+        end
+        LayoutRows(f)
+    end
+end
+
+local function StartRowFade(f, row)
+    local ag = row.fadeAG
+    ag:Stop()
+    row:SetAlpha(1)
+    if addon.isTesting then return end
+    -- Hover-pause holds rows at full alpha. OnLeave restarts the countdown.
+    if LootProConfig.hoverPause and f.IsMouseOver and f:IsMouseOver() then return end
+    local s = LootProConfig[f.configKey]
+    local base = (s and s.fade) or 6
+    if LootProConfig.fadeScale then
+        base = base + (#f.rowActive - 1) * FADE_SCALE_PER_LINE
+        if base > FADE_SCALE_MAX then base = FADE_SCALE_MAX end
+    end
+    row.fadeAnim:SetStartDelay(base)
+    ag:Play()
+end
+
+local function Row_OnEnter(row)
+    local f = row._owner
+    if LootProConfig.hoverPause and not addon.isTesting then PauseRowFades(f) end
+    if row.itemLink then
+        GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        pcall(GameTooltip.SetHyperlink, GameTooltip, row.itemLink)
+        GameTooltip:Show()
+    end
+end
+
+local function Row_OnLeave(row)
+    GameTooltip:Hide()
+    local f = row._owner
+    -- Guard resume with IsMouseOver so moving between rows does not restart the fade. Resume only once the cursor leaves the feed.
+    if LootProConfig.hoverPause and not addon.isTesting and not f:IsMouseOver() then
+        ResumeRowFades(f)
+    end
+end
+
+local function Row_OnClick(row)
+    local link = row.itemLink
+    if not link then return end
+    -- HandleModifiedItemClick inserts the link only when a chat box is already open. On a declined shift-click, open one pre-filled with the link so it always works.
+    if not HandleModifiedItemClick(link) and IsModifiedClick("CHATLINK") then
+        ChatFrame_OpenChat(link)
+    end
+end
+
+-- Unlocked, dragging a row moves the whole readout. Locked, drags are ignored so clicks link items instead.
+local function Row_OnDragStart(row)
+    if not LootProConfig.locked then row._owner:StartMoving() end
+end
+
+local function Row_OnDragStop(row)
+    if LootProConfig.locked then return end
+    local h = row._owner:GetScript("OnDragStop")
+    if h then h(row._owner) end
+end
+
+local function BuildRow(f)
+    local row = CreateFrame("Button", nil, f.rowHost, "BackdropTemplate")
+    row:EnableMouse(true)
+    row:RegisterForClicks("AnyUp")
+    row:RegisterForDrag("LeftButton")
+    row:SetScript("OnEnter", Row_OnEnter)
+    row:SetScript("OnLeave", Row_OnLeave)
+    row:SetScript("OnClick", Row_OnClick)
+    row:SetScript("OnDragStart", Row_OnDragStart)
+    row:SetScript("OnDragStop", Row_OnDragStop)
+    row:SetBackdrop(ROW_BACKDROP)
+    row:SetBackdropColor(0, 0, 0, 0.85)
+
+    -- Icon is a mouse-disabled Button (Masque skins Buttons cleanly) so clicks and hover still fall through to the row.
+    local iconFrame = CreateFrame("Button", nil, row, "BackdropTemplate")
+    iconFrame:EnableMouse(false)
+    iconFrame:SetPoint("LEFT", 4, 0)
+    iconFrame:SetSize(32, 32)
+    local icon = iconFrame:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("TOPLEFT", 2, -2)
+    icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    row.iconFrame, row.icon = iconFrame, icon
+
+    local qty = iconFrame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+    qty:SetPoint("BOTTOMRIGHT", -1, 1)
+    row.qty = qty
+
+    -- Masque skins the icon when installed, otherwise draw our own tintable border.
+    local mg = GetMasqueGroup()
+    if mg and pcall(mg.AddButton, mg, iconFrame, { Icon = icon, Count = qty }) then
+        row._masque = true
+    else
+        iconFrame:SetBackdrop(ICON_BACKDROP)
+    end
+
+    -- Seed a font object at creation: ApplyRowFont only re-fonts row.cat for two-line item rows, so a text row's first SetText on row.cat would otherwise throw "Font not set".
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    row.cat = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+
+    local ag = row:CreateAnimationGroup()
+    local anim = ag:CreateAnimation("Alpha")
+    anim:SetFromAlpha(1)
+    anim:SetToAlpha(0)
+    anim:SetDuration(ROW_FADE)
+    anim:SetSmoothing("OUT")
+    ag.row = row
+    ag:SetScript("OnFinished", RowFade_OnFinished)
+    row.fadeAG, row.fadeAnim = ag, anim
+
+    row._owner = f
+    row._free = true
+    return row
+end
+
+local function EnsureRows(f)
+    if f.rowHost then return end
+    local host = CreateFrame("Frame", nil, f)
+    host:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -8)
+    host:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
+    host:Hide()
+    f.rowHost, f.rowPool, f.rowActive = host, {}, {}
+end
+
+local function AcquireRow(f)
+    for _, row in ipairs(f.rowPool) do
+        if row._free then row._free = false return row end
+    end
+    local row = BuildRow(f)
+    row._free = false
+    f.rowPool[#f.rowPool + 1] = row
+    return row
+end
+
+local function ClearRows(f)
+    if not f.rowActive then return end
+    for i = #f.rowActive, 1, -1 do
+        local row = f.rowActive[i]
+        row.fadeAG:Stop()
+        row:Hide()
+        row._free = true
+        f.rowActive[i] = nil
+    end
+end
+
+function addon:ClearFramedRows()
+    if self.combatFrame then ClearRows(self.combatFrame) end
+    if self.lootFrame then ClearRows(self.lootFrame) end
+end
+
+local function TakeRow(f)
+    local maxLines = (LootProConfig[f.configKey] and LootProConfig[f.configKey].maxLines) or 4
+    if maxLines < 1 then maxLines = 1 end
+    local row
+    if #f.rowActive >= maxLines then
+        row = table.remove(f.rowActive)
+        row.fadeAG:Stop()
+    else
+        row = AcquireRow(f)
+    end
+    table.insert(f.rowActive, 1, row)
+    return row
+end
+
+local function ApplyRowFont(f, row, twoLine)
+    local s = LootProConfig[f.configKey]
+    local fontPath = (LSM and LSM:Fetch("font", s.font)) or DEFAULT_FONT
+    local flags = (s.outline == "NONE") and "" or (s.outline or "OUTLINE")
+    SafeSetFont(row.name, fontPath, s.size, flags)
+    if twoLine then
+        SafeSetFont(row.cat, fontPath, math.max(9, math.floor(s.size * 0.55)), flags)
+    end
+    if flags == "" then
+        row.name:SetShadowColor(0, 0, 0, 0.6); row.name:SetShadowOffset(1, -1)
+    else
+        row.name:SetShadowColor(0, 0, 0, 0); row.name:SetShadowOffset(0, 0)
+    end
+    return s
+end
+
+-- Size the row to its wrapped name plus category so a long name grows the row instead of overflowing. Name width is explicit so GetStringHeight returns the real wrapped height.
+local function LayoutItemRow(f, row)
+    local s = LootProConfig[f.configKey]
+    local catSize = math.max(9, math.floor(s.size * 0.55))
+    local baseH = s.size + catSize + 12
+    local rowWidth = (s.width or 200) - 16
+    local nameLeft
+    if row._hasIcon then
+        local iconSize = baseH - 6
+        row.iconFrame:SetSize(iconSize, iconSize)
+        -- Masque skins at the button's size, so re-skin only when the size changes, not on every loot.
+        if row._masque and row.iconFrame._skinnedSize ~= iconSize then
+            row.iconFrame._skinnedSize = iconSize
+            local mg = GetMasqueGroup()
+            if mg then pcall(mg.ReSkin, mg, row.iconFrame) end
+        end
+        nameLeft = 4 + iconSize + 6
+    else
+        nameLeft = 8
+    end
+    local nameWidth = math.max(20, rowWidth - nameLeft - 6)
+
+    row.name:ClearAllPoints()
+    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", nameLeft, -5)
+    row.name:SetWidth(nameWidth)
+    row.cat:ClearAllPoints()
+    row.cat:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+    row.cat:SetWidth(nameWidth)
+
+    local nameH = row.name:GetStringHeight()
+    local catH = row.cat:IsShown() and row.cat:GetStringHeight() or 0
+    local textH = nameH + (catH > 0 and catH + 2 or 0) + 12
+    row:SetHeight(math.max(baseH, textH))
+end
+
+-- Border is quality-tinted, or the passed color for currency and money.
+local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link)
+    EnsureRows(f)
+    local row = TakeRow(f)
+    row._isText = false
+    row._hasIcon = icon and true or false
+    row.itemLink = link
+    ApplyRowFont(f, row, true)
+
+    local br, bg, bb
+    if quality then br, bg, bb = QualityRGB(quality) else br, bg, bb = r or 1, g or 1, b or 1 end
+    row:SetBackdropBorderColor(br, bg, bb, 1)
+
+    if icon then
+        if not row._masque then row.iconFrame:SetBackdropBorderColor(br, bg, bb, 1) end
+        row.icon:SetTexture(icon)
+        row.iconFrame:Show()
+        if amt and amt > 1 then row.qty:SetText(amt) else row.qty:SetText("") end
+    else
+        row.iconFrame:Hide()
+        row.qty:SetText("")
+    end
+
+    row.name:SetWordWrap(true)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetJustifyV("TOP")
+    local nameText = name or ""
+    if count then nameText = nameText .. " (" .. count .. ")" end
+    row.name:SetText(nameText)
+    row.name:SetTextColor(br, bg, bb)
+
+    row.cat:SetJustifyH("LEFT")
+    if category and category ~= "" then
+        row.cat:SetText(category)
+        row.cat:SetTextColor(0.7, 0.7, 0.7)
+        row.cat:Show()
+    else
+        row.cat:SetText("")
+        row.cat:Hide()
+    end
+
+    LayoutItemRow(f, row)
+    row:Show()
+    LayoutRows(f)
+    StartRowFade(f, row)
+    -- A recycled row can swap items under a resting cursor without firing OnEnter, so refresh its tooltip.
+    if row:IsMouseOver() then Row_OnEnter(row) end
+end
+
+local function RowText(f, text, r, g, b)
+    EnsureRows(f)
+    local row = TakeRow(f)
+    row._isText = true
+    row._hasIcon = false
+    row.itemLink = nil
+    local s = ApplyRowFont(f, row, false)
+    row:SetHeight(s.size + 12)
+    row:SetBackdropBorderColor(r or 1, g or 1, b or 1, 1)
+    row.iconFrame:Hide()
+    row.qty:SetText("")
+    row.cat:SetText(""); row.cat:Hide()
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", row, "LEFT", 6, 0)
+    row.name:SetWidth((s.width or 200) - 28)
+    row.name:SetWordWrap(false)
+    row.name:SetJustifyH("CENTER")
+    row.name:SetJustifyV("MIDDLE")
+    row.name:SetText(text or "")
+    row.name:SetTextColor(r or 1, g or 1, b or 1)
+    row:Show()
+    LayoutRows(f)
+    StartRowFade(f, row)
+    -- A recycled row now holds a non-item line, so drop any item tooltip left open over it.
+    if row:IsMouseOver() then GameTooltip:Hide() end
+end
+
+-- Re-apply font and size to a rendered row so the size slider updates framed rows live, re-measuring wrapped height for item rows.
+local function RestyleRow(f, row)
+    local s = ApplyRowFont(f, row, not row._isText)
+    if row._isText then
+        row:SetHeight(s.size + 12)
+        row.name:SetWidth((s.width or 200) - 28)
+    else
+        LayoutItemRow(f, row)
+    end
+end
+
+local function RestyleRows(f)
+    if not f.rowActive then return end
+    -- Trim to the current maxLines so lowering the slider drops excess rows at once, matching the text feed.
+    local maxLines = (LootProConfig[f.configKey] and LootProConfig[f.configKey].maxLines) or 4
+    if maxLines < 1 then maxLines = 1 end
+    while #f.rowActive > maxLines do
+        local row = table.remove(f.rowActive)
+        row.fadeAG:Stop()
+        row:Hide()
+        row._free = true
+    end
+    for _, row in ipairs(f.rowActive) do RestyleRow(f, row) end
+    LayoutRows(f)
+end
+
+function PauseRowFades(f)
+    if not f.rowActive then return end
+    for _, row in ipairs(f.rowActive) do
+        row.fadeAG:Stop()
+        row:SetAlpha(1)
+    end
+end
+
+function ResumeRowFades(f)
+    if not f.rowActive then return end
+    for _, row in ipairs(f.rowActive) do
+        StartRowFade(f, row)
+    end
+end
+
+local function FramedFor(configKey)
+    return (configKey == "loot" and LootProConfig.framedLoot)
+        or (configKey == "combat" and LootProConfig.framedCombat)
+end
+
+local function CombatEmit(text, r, g, b)
+    local f = addon.combatFrame
+    if LootProConfig.framedCombat then RowText(f, text, r, g, b)
+    else f.display:AddMessage(text, r, g, b) end
+end
+
+local function LootTextEmit(text, r, g, b)
+    local f = addon.lootFrame
+    if LootProConfig.framedLoot then RowText(f, text, r, g, b)
+    else f.display:AddMessage(text, r, g, b) end
+end
+
 -- Pooled param tables + pre-bound timer fns (rotated per event) so the hot loot path allocates zero closures; a slot is reused only after POOL_SIZE events.
 local POOL_SIZE = 16
 local _curParams = {}
@@ -298,11 +719,18 @@ local function PostCurrency(p)
         line = p.iconStr .. p.text .. CountSuffix(p.total) .. cap
     end
     if IsDuplicateDisplay(line) then return end
-    display:AddMessage(line, p.cR, p.cG, p.cB)
+    if LootProConfig.framedLoot then
+        -- Mirror text mode: no-count currencies (e.g. Companion XP) hide the amount and running total.
+        local cAmt = not p.noCount and p.amt or nil
+        local cTot = not p.noCount and p.total or nil
+        RowItem(addon.lootFrame, p.iconTex, nil, p.cName or p.text, cap ~= "" and cap or nil, cAmt, cTot, p.cR, p.cG, p.cB, nil)
+    else
+        display:AddMessage(line, p.cR, p.cG, p.cB)
+    end
 end
 
 local function ShowLoot(p, countStr)
-    local display = addon.lootFrame.display
+    local f = addon.lootFrame
     local marker = p.marker or ""
     local line
     if p.noCount then
@@ -311,13 +739,18 @@ local function ShowLoot(p, countStr)
         line = "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr .. marker
     end
     if IsDuplicateDisplay(line) then return end
-    display:AddMessage(line, p.cR, p.cG, p.cB)
+    if LootProConfig.framedLoot then
+        RowItem(f, p.fIcon, p.fQuality, p.fName or p.cleaned, p.fCategory, p.amt, p.fCount, p.cR, p.cG, p.cB, p.fLink)
+    else
+        f.display:AddMessage(line, p.cR, p.cG, p.cB)
+    end
 end
 
 local function PostDeferredLoot(p)
     -- At +0.1s BAG_UPDATE has landed so GetItemCount is already post-loot. Take the larger of it and the pre-loot snapshot plus amt so we neither double-count nor under-count.
     local live = (_GetItemCount and _GetItemCount(p.itemID, true)) or 0
     local cnt = math.max((p.preCount or 0) + p.amt, live)
+    p.fCount = cnt
     ShowLoot(p, CountSuffix(cnt))
 end
 
@@ -400,6 +833,10 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
 
     f:SetScript("OnEnter", function(self)
         if not (LootProConfig and LootProConfig.hoverPause) or addon.isTesting then return end
+        if FramedFor(self.configKey) then
+            PauseRowFades(self)
+            return
+        end
         local disp = self.display
         if _GetTime() - (disp._lastAdd or 0) >= LineLife(disp, self.configKey) then
             disp:Clear()
@@ -409,6 +846,10 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     end)
     f:SetScript("OnLeave", function(self)
         if not (LootProConfig and LootProConfig.hoverPause) then return end
+        if FramedFor(self.configKey) then
+            if not addon.isTesting and not self:IsMouseOver() then ResumeRowFades(self) end
+            return
+        end
         self.display:SetFading(not addon.isTesting)
         if not addon.isTesting then ScheduleSweep(self) end
     end)
@@ -575,9 +1016,28 @@ function addon:UpdateAllVisuals()
             f.display._fontKey = fontKey
         end
         f.display:SetTimeVisible(s.fade or 6)
-        
-        if not self.isTesting then 
-            f.display:SetFading(true) 
+
+        if not self.isTesting then
+            f.display:SetFading(true)
+        end
+
+        -- Framed mode swaps the text feed for the pooled row host, clearing the other buffer on a mode change so nothing stale lingers.
+        if FramedFor(f.configKey) then
+            EnsureRows(f)
+            if not f._framedOn then
+                f.display:Clear()
+                f._framedOn = true
+            end
+            f.display:Hide()
+            f.rowHost:Show()
+            RestyleRows(f)
+        else
+            if f._framedOn then
+                ClearRows(f)
+                f._framedOn = false
+            end
+            if f.rowHost then f.rowHost:Hide() end
+            f.display:Show()
         end
     end
 end
@@ -585,26 +1045,36 @@ end
 function addon:PostTestMessages()
     self.combatFrame.display:Clear()
     self.lootFrame.display:Clear()
-    
+    ClearRows(self.combatFrame)
+    ClearRows(self.lootFrame)
+
     local cc = LootProConfig.colors
-    
-    self.combatFrame.display:AddMessage(LootProConfig.combatEnterText, cc.combatEnter.r, cc.combatEnter.g, cc.combatEnter.b)
-    self.combatFrame.display:AddMessage("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
-    self.combatFrame.display:AddMessage(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
-    
+
+    CombatEmit(LootProConfig.combatEnterText, cc.combatEnter.r, cc.combatEnter.g, cc.combatEnter.b)
+    CombatEmit("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
+    CombatEmit(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
+
     local money = "204 |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "
         .. "5 |TInterface\\MoneyFrame\\UI-SilverIcon:0|t "
         .. "32 |TInterface\\MoneyFrame\\UI-CopperIcon:0|t "
-    self.lootFrame.display:AddMessage("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
+    LootTextEmit("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
 
-    local function TestLootIcon(itemID, fallback)
-        if not LootProConfig.showLootIcons then return "" end
-        local instant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
-        local tex = instant and select(5, instant(itemID))
-        return "|T" .. (tex or fallback) .. ":0|t "
+    local function TestTex(itemID, fallback)
+        if not LootProConfig.showLootIcons then return nil end
+        local tex = _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID))
+        return tex or fallback
     end
-    self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
-    self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
+    if LootProConfig.framedLoot then
+        RowItem(self.lootFrame, TestTex(241308, 134414), 3, "Light's Potential", "Consumable", 10, 20, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(241308)))
+        RowItem(self.lootFrame, TestTex(259085, 134414), 4, "Void-Touched Augment Rune", "Consumable", 5, 10, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(259085)))
+    else
+        local function TestLootIcon(itemID, fallback)
+            local tex = TestTex(itemID, fallback)
+            return tex and ("|T" .. tex .. ":0|t ") or ""
+        end
+        self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
+        self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
+    end
 end
 
 -- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string); verify that in-game in an active Mythic+/boss encounter.
@@ -630,6 +1100,8 @@ function addon:RunRegressionTest()
         showMoneyIcons = LootProConfig.showMoneyIcons,
         minQualityOwn = LootProConfig.minQualityOwn,
         minQualityOther = LootProConfig.minQualityOther,
+        framedLoot = LootProConfig.framedLoot,
+        framedCombat = LootProConfig.framedCombat,
         lootFilters = {},
     }
     for k, v in pairs(n) do snapshot.notifications[k] = v end
@@ -637,6 +1109,9 @@ function addon:RunRegressionTest()
     local blSnapshot = LootProConfig.lootBlacklist
 
     for k in pairs(n) do n[k] = true end
+    -- The pass/fail check counts ScrollingMessageFrame messages, so run the text path regardless of the user's framed setting.
+    LootProConfig.framedLoot = false
+    LootProConfig.framedCombat = false
     LootProConfig.cleanMode = true
     LootProConfig.showFollowerXP = true
     LootProConfig.showLootCounts = false
@@ -702,6 +1177,8 @@ function addon:RunRegressionTest()
     LootProConfig.showMoneyIcons = snapshot.showMoneyIcons
     LootProConfig.minQualityOwn = snapshot.minQualityOwn
     LootProConfig.minQualityOther = snapshot.minQualityOther
+    LootProConfig.framedLoot = snapshot.framedLoot
+    LootProConfig.framedCombat = snapshot.framedCombat
     for k, v in pairs(snapshot.lootFilters) do LootProConfig.lootFilters[k] = v end
     LootProConfig.lootBlacklist = blSnapshot
 
@@ -802,6 +1279,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if not self:IsReady() then self:InitSettings() end
         if ns.UI then ns.UI:Initialize() end
         self:UpdateAllVisuals()
+        -- Register the Masque group now (not lazily on first loot) so "Loot Pro" appears in Masque's config right away.
+        GetMasqueGroup()
 
         -- Show at most one login popup (what's-new for upgraders, else welcome), stamped at SHOW time so a /lp whatsnew preview or reload-teardown can't flip the flag. Deferred past the PLAYER_LOGIN burst, which won't render a popup reliably.
         local function ShowLoginPopup()
@@ -828,16 +1307,16 @@ addon:SetScript("OnEvent", function(self, event, ...)
         local n = LootProConfig.notifications
         
         if event == "PLAYER_REGEN_DISABLED" then
-            if n.combatEnter then 
-                self.combatFrame.display:AddMessage(LootProConfig.combatEnterText, c.combatEnter.r, c.combatEnter.g, c.combatEnter.b)
+            if n.combatEnter then
+                CombatEmit(LootProConfig.combatEnterText, c.combatEnter.r, c.combatEnter.g, c.combatEnter.b)
             end
             return
-            
+
         elseif event == "PLAYER_REGEN_ENABLED" then
-            if n.combatLeave then 
-                self.combatFrame.display:AddMessage(LootProConfig.combatLeaveText, c.combatLeave.r, c.combatLeave.g, c.combatLeave.b)
+            if n.combatLeave then
+                CombatEmit(LootProConfig.combatLeaveText, c.combatLeave.r, c.combatLeave.g, c.combatLeave.b)
             end
-            return 
+            return
         end
 
         if not arg1 or type(arg1) ~= "string" then return end
@@ -853,14 +1332,14 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if not LootProConfig.showFollowerXP then return end
                 if n.xp then
                     name = _gsub(_gsub(name, "|c%x+", ""), "|r", "")
-                    self.combatFrame.display:AddMessage("+ " .. amount2 .. " XP (" .. name .. ")", c.xp.r, c.xp.g, c.xp.b)
+                    CombatEmit("+ " .. amount2 .. " XP (" .. name .. ")", c.xp.r, c.xp.g, c.xp.b)
                 end
                 return
             end
         end
 
         if event == "CHAT_MSG_COMBAT_XP_GAIN" and n.xp then
-            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
+            CombatEmit(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
 
         elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
             local fac, amt = nil, nil
@@ -870,23 +1349,23 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN) end
             if not amt and not lossAmt and PAT_FACTION_DOWN_AW then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN_AW) end
             if amt and n.repGain then
-                self.combatFrame.display:AddMessage("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
+                CombatEmit("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
             elseif lossAmt and n.repLoss then
-                self.combatFrame.display:AddMessage("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b)
+                CombatEmit("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b)
             end
 
         elseif event == "CHAT_MSG_SKILL" and n.skill then
-            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
+            CombatEmit(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
 
         elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" and n.honor then
-            self.combatFrame.display:AddMessage(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
+            CombatEmit(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
 
         elseif event == "CHAT_MSG_SYSTEM" and n.delver then
             if _find(msg, "Companion XP") then
                 local amt = _match(msg, "gains ([%d,]+) Companion")
                 if amt then
                     local cD = c.delver or {r=1, g=0.7, b=0.2}
-                    self.combatFrame.display:AddMessage("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
+                    CombatEmit("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
                 end
             end
 
@@ -906,9 +1385,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
                     if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
 
-                    self.lootFrame.display:AddMessage("+ " .. st, c.money.r, c.money.g, c.money.b)
+                    LootTextEmit("+ " .. st, c.money.r, c.money.g, c.money.b)
                 else
-                    self.lootFrame.display:AddMessage(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
+                    LootTextEmit(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
                 end
             end
 
@@ -955,6 +1434,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 local p = _curParams[_curSlot]
                 p.currencyName = currencyName
                 p.iconStr = iconStr
+                p.iconTex = LootProConfig.showLootIcons and iconFileID or nil
+                p.cName   = currencyName
                 p.amt     = amt
                 p.total   = total
                 p.capStr  = capStr
@@ -1052,6 +1533,13 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     ilvlTag = self:LootItemLevel(itemID, link) or ""
                 end
                 local marker = ilvlTag .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "")
+                -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
+                local fIcon, fCat, fName
+                if LootProConfig.framedLoot then
+                    fIcon = LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID or link)) or nil
+                    fCat = LootCategory(link, itemID)
+                    fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
+                end
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
@@ -1065,6 +1553,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.amt = amt; p.noCount = noCount
                             p.cR, p.cG, p.cB = lr, lg, lb
                             p.marker = marker
+                            p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link
+                            p.fCount = (not noCount) and cnt or nil
                             ShowLoot(p, CountSuffix(cnt))
                         else
                             _lootSlot = (_lootSlot % POOL_SIZE) + 1
@@ -1077,6 +1567,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
                             lp.cR, lp.cG, lp.cB = lr, lg, lb
                             lp.marker  = marker
+                            lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     else
@@ -1085,12 +1576,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
                         p.marker = marker
+                        p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil
                         ShowLoot(p, "")
                     end
                 else
                     local line = GetIconString(msg) .. msg .. marker
                     if not IsDuplicateDisplay(line) then
-                        self.lootFrame.display:AddMessage(line, lr, lg, lb)
+                        if LootProConfig.framedLoot then
+                            local nm = fName or lname or CleanMessage(msg, event)
+                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link)
+                        else
+                            self.lootFrame.display:AddMessage(line, lr, lg, lb)
+                        end
                     end
                 end
             end
