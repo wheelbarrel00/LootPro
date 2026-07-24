@@ -12,6 +12,11 @@ local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark
 local CLASS_MISC, CLASS_BATTLEPET = 15, 17
 local SUBCLASS_PET, SUBCLASS_MOUNT = 2, 5
 local _GetToyInfo = C_ToyBox and C_ToyBox.GetToyInfo
+local _PlayerHasToy = _G.PlayerHasToy
+local _GetMountFromItem = C_MountJournal and C_MountJournal.GetMountFromItem
+local _GetMountInfoByID = C_MountJournal and C_MountJournal.GetMountInfoByID
+local _GetPetInfoByItemID = C_PetJournal and C_PetJournal.GetPetInfoByItemID
+local _GetNumCollectedInfo = C_PetJournal and C_PetJournal.GetNumCollectedInfo
 
 local WATCH_CAP = 30
 
@@ -240,30 +245,55 @@ local function RareFlash(quality)
     flash._ag:Play()
 end
 
-function addon:IsNotableItem(itemID, link)
-    if not _GetItemInfoInstant or (not itemID and not link) then return false end
-    local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
-    if not classID then return false end
-
-    if classID == CLASS_MISC then
-        if subclassID == SUBCLASS_MOUNT or subclassID == SUBCLASS_PET then
-            return true
-        end
-        -- Toys live in Miscellaneous; the toy box returns nil for non-toys.
-        if _GetToyInfo and itemID and _GetToyInfo(itemID) ~= nil then
-            return true
-        end
-        return false
-    elseif classID == CLASS_BATTLEPET then
-        return true
-    end
-    return false
+local function MountOwned(itemID)
+    if not (_GetMountFromItem and _GetMountInfoByID and itemID) then return nil end
+    local mountID = _GetMountFromItem(itemID)
+    if not mountID then return nil end
+    return _select(11, _GetMountInfoByID(mountID)) and true or false
 end
 
-function addon:RareOnLoot(quality, isNotable)
+local function PetOwned(itemID, link)
+    if not _GetNumCollectedInfo then return nil end
+    local speciesID = link and _tonumber(link:match("battlepet:(%d+)"))
+    if not speciesID and _GetPetInfoByItemID and itemID then
+        speciesID = _GetPetInfoByItemID(itemID)
+    end
+    if not speciesID then return nil end
+    local num = _GetNumCollectedInfo(speciesID)
+    if num == nil then return nil end
+    return num > 0
+end
+
+local function ToyOwned(itemID)
+    if not (_PlayerHasToy and itemID) then return nil end
+    return _PlayerHasToy(itemID) and true or false
+end
+
+-- owned is true/false, or nil when unknown (no journal API). kind is nil for a non-collectible.
+function addon:CollectibleOwned(itemID, link)
+    if not _GetItemInfoInstant or (not itemID and not link) then return nil, nil end
+    local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
+    if classID == CLASS_BATTLEPET then
+        return PetOwned(itemID, link), "pet"
+    elseif classID == CLASS_MISC then
+        if subclassID == SUBCLASS_MOUNT then return MountOwned(itemID), "mount" end
+        if subclassID == SUBCLASS_PET then return PetOwned(itemID, link), "pet" end
+        if _GetToyInfo and itemID and _GetToyInfo(itemID) ~= nil then return ToyOwned(itemID), "toy" end
+    end
+    return nil, nil
+end
+
+-- Notable = an uncollected mount, pet, or toy.
+function addon:IsNotableItem(itemID, link)
+    local owned, kind = self:CollectibleOwned(itemID, link)
+    if not kind then return false end
+    return owned ~= true
+end
+
+function addon:RareOnLoot(quality, isNotable, isValuable)
     local ra = LootProConfig and LootProConfig.rareAlert
     if not ra then return end
-    if not ((quality and quality >= (ra.threshold or 5)) or isNotable) then return end
+    if not ((quality and quality >= (ra.threshold or 5)) or isNotable or isValuable) then return end
     if ra.flash then RareFlash(quality or 0) end
     if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end

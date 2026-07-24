@@ -72,6 +72,12 @@ function addon:VendorGrayValue()
     return value
 end
 
+-- Best-available unit value in copper. Vendor sell price for now, extendable to a market source later.
+function addon:ItemValue(link)
+    if not link then return 0 end
+    return (_select(11, _GetItemInfo(link))) or 0
+end
+
 local sellFrame = CreateFrame("Frame", "LootProVendorFrame", UIParent, "BackdropTemplate")
 sellFrame:SetSize(220, 42)
 sellFrame:SetPoint("TOP", UIParent, "TOP", 0, -200)

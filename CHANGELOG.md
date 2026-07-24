@@ -5,6 +5,20 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-07-23
+
+### New Features
+- Combine repeated drops (on by default) for framed loot rows. Repeats of the same item stack into one row with a rolling count, gray junk collapses into a single Junk Items row, and rapid money pickups merge into one running total, keeping the feed readable during AoE looting.
+- Pause and resume the session timer from the Recap tab or with /lp pause, so AFK, mailbox, and loading time no longer drag down your gold-per-hour and items-per-hour. The header shows (paused) while stopped, loot is still counted, and the pause survives a /reload.
+- Alert on value box on the Alerts tab. Set a gold amount and the rare-drop alert (flash, sound, and color) also fires when a single drop is worth at least that much, on top of the quality and notable triggers. Set it to 0 to turn it off.
+- Mark gear with a tertiary stat on the Alerts tab tags looted weapons and armor that carry a tertiary stat (Leech, Avoidance, Speed, or Indestructible) in the loot feed, naming the stat. (Retail)
+- Show "already owned" on mount, pet, and toy tooltips on the Recap tab adds a line to those tooltips when you already have it, so you know it is safe to sell or skip. (Retail)
+
+### Improvements
+- The notable-item alert now fires only for mounts, pets, and toys you have not collected yet, instead of every mount, pet, or toy. (Retail)
+- The gear-upgrade tag no longer marks a higher item-level piece that has the wrong primary stat for you, such as an Intellect piece for an Agility character. (Retail)
+- Option tooltips now appear when you hover the option's text, not only the small checkbox, and more options have explanatory tooltips.
+
 ## [2.14.2] - 2026-07-22
 
 ### Improvements

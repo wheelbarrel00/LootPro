@@ -78,6 +78,13 @@ local function CreateStyledButton(parent, width, height, label)
     return btn
 end
 
+-- Widen the hit area over the label so the tooltip shows there, not only over the box. Needs the label text already set.
+local function ExpandCheckHover(cb)
+    local n = cb and cb:GetName()
+    local t = n and _G[n .. "Text"]
+    if t then cb:SetHitRectInsets(0, -(t:GetStringWidth() + 4), 0, 0) end
+end
+
 function ns.UI:Initialize()
     local gui = CreateVersionedMainFrame("LootProGUI", UIParent)
     gui:SetSize(600, 740)
@@ -379,10 +386,26 @@ function ns.UI:Initialize()
     local countCheck = CreateFrame("CheckButton", "LPRO_CountToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     countCheck:SetPoint("TOPLEFT", lootT, "BOTTOMLEFT", 0, -5); _G[countCheck:GetName().."Text"]:SetText("Inject Item Totals (e.g. 14)"); countCheck:SetChecked(LootProConfig.showLootCounts)
     countCheck:SetScript("OnClick", function(self) LootProConfig.showLootCounts = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    countCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Item totals", 1, 1, 1)
+        GameTooltip:AddLine("Adds how many of an item you now own in parentheses after a loot line, like Linen Cloth (14). Off shows only what just dropped.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    countCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(countCheck)
 
     local gIconCheck = CreateFrame("CheckButton", "LPRO_GoldToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     gIconCheck:SetPoint("TOPLEFT", countCheck, "BOTTOMLEFT", 0, -5); _G[gIconCheck:GetName().."Text"]:SetText("Use Coin Icons (Clean Mode only)"); gIconCheck:SetChecked(LootProConfig.showMoneyIcons)
     gIconCheck:SetScript("OnClick", function(self) LootProConfig.showMoneyIcons = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    gIconCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Coin icons", 1, 1, 1)
+        GameTooltip:AddLine("Shows looted money as gold, silver, and copper coin icons instead of the words. Only applies while Clean Mode is on.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    gIconCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(gIconCheck)
 
     local cleanCheck = CreateFrame("CheckButton", "LPRO_CleanToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     cleanCheck:SetPoint("TOPLEFT", gIconCheck, "BOTTOMLEFT", 0, -5); _G[cleanCheck:GetName().."Text"]:SetText("Enable Clean Mode"); cleanCheck:SetChecked(LootProConfig.cleanMode)
@@ -411,6 +434,14 @@ function ns.UI:Initialize()
     local fxpCheck = CreateFrame("CheckButton", "LPRO_FollowerToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     fxpCheck:SetPoint("TOPLEFT", cEndT, "BOTTOMLEFT", 0, -5); _G[fxpCheck:GetName().."Text"]:SetText("Show Combat Follower XP"); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
     fxpCheck:SetScript("OnClick", function(self) LootProConfig.showFollowerXP = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
+    fxpCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Follower XP", 1, 1, 1)
+        GameTooltip:AddLine("Shows experience gained by your pet, battle pet, or follower in the combat feed. Your own XP is controlled by Display Experience.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    fxpCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(fxpCheck)
 
     local xpT = CreateFrame("CheckButton", "LPRO_TGL_xp", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     xpT:SetPoint("TOPLEFT", partyT, "BOTTOMLEFT", 0, -5)
@@ -504,6 +535,7 @@ function ns.UI:Initialize()
             GameTooltip:Show()
         end)
         cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        ExpandCheckHover(cb)
         return cb
     end
 
@@ -515,8 +547,12 @@ function ns.UI:Initialize()
         "Draws each combat, skill, and reputation line as its own bordered row. The border is colored to match that line's color.")
     framedCombatCheck:SetPoint("LEFT", framedLootCheck, "LEFT", 245, 0)
 
+    local mergeCheck = AddFramedToggle("LPRO_MergeRows", "Combine repeated drops", "mergeRows",
+        "In framed loot mode, repeats of the same item stack into one growing row, and gray junk collapses into a single row. Reduces clutter during AoE looting.")
+    mergeCheck:SetPoint("TOPLEFT", framedLootCheck, "BOTTOMLEFT", 0, -8)
+
     local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
-    mmCheck:SetPoint("TOPLEFT", framedLootCheck, "BOTTOMLEFT", 0, -8)
+    mmCheck:SetPoint("TOPLEFT", mergeCheck, "BOTTOMLEFT", 0, -8)
     _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
     mmCheck:SetChecked(not LootProConfig.minimap.hide)
     mmCheck:SetScript("OnClick", function(self)
@@ -550,6 +586,7 @@ function ns.UI:Initialize()
         GameTooltip:Show()
     end)
     qlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(qlCheck)
 
     local speedyCheck = CreateFrame("CheckButton", "LPRO_SpeedyAutoLoot", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     speedyCheck:SetPoint("TOPLEFT", qlCheck, "BOTTOMLEFT", 0, -5)
@@ -565,11 +602,20 @@ function ns.UI:Initialize()
         GameTooltip:Show()
     end)
     speedyCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(speedyCheck)
 
     local capCheck = CreateFrame("CheckButton", "LPRO_CurrencyCap", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     _G[capCheck:GetName().."Text"]:SetText("Warn on currency cap")
     capCheck:SetChecked(LootProConfig.currencyCap)
     capCheck:SetScript("OnClick", function(self) LootProConfig.currencyCap = self:GetChecked() and true or false end)
+    capCheck:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Currency cap warning", 1, 1, 1)
+        GameTooltip:AddLine("Tags a currency in the loot feed with (capped) or (weekly cap) when you have hit its maximum, so you know it is being wasted.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    capCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(capCheck)
 
     local mmHeader = pages.customization:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     mmHeader:SetPoint("TOPLEFT", speedyCheck, "BOTTOMLEFT", 4, -14)
@@ -651,6 +697,7 @@ function ns.UI:Initialize()
         GameTooltip:Show()
     end)
     fadeScaleCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(fadeScaleCheck)
 
     capCheck:SetPoint("TOPLEFT", fadeScaleCheck, "BOTTOMLEFT", 0, -5)
 
@@ -669,6 +716,7 @@ function ns.UI:Initialize()
         GameTooltip:Show()
     end)
     hoverPauseCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(hoverPauseCheck)
 
     do
         local page = pages.recap
@@ -681,6 +729,9 @@ function ns.UI:Initialize()
         local resetSession = CreateStyledButton(page, 140, 24, "Reset Session")
         resetSession:SetPoint("TOPRIGHT", testBtn, "BOTTOMRIGHT", 0, -22)
 
+        local pauseBtn = CreateStyledButton(page, 140, 24, "Pause Timer")
+        pauseBtn:SetPoint("TOPRIGHT", resetSession, "BOTTOMRIGHT", 0, -6)
+
         local tooltipCheck = CreateFrame("CheckButton", "LPRO_TooltipLoots", page, "InterfaceOptionsCheckButtonTemplate")
         tooltipCheck:SetPoint("TOPLEFT", recapEnable, "BOTTOMLEFT", 0, -2)
         local tooltipCheckText = _G[tooltipCheck:GetName().."Text"]
@@ -690,8 +741,20 @@ function ns.UI:Initialize()
             LootProConfig.tooltipLoots = self:GetChecked() and true or false
         end)
 
+        local collectedCheck
+        if addon.IS_RETAIL then
+            collectedCheck = CreateFrame("CheckButton", "LPRO_TooltipCollected", page, "InterfaceOptionsCheckButtonTemplate")
+            collectedCheck:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 0, -2)
+            local ct = _G[collectedCheck:GetName().."Text"]
+            ct:SetText("Show \"already owned\" on mount, pet, and toy tooltips")
+            ct:SetJustifyH("LEFT")
+            collectedCheck:SetScript("OnClick", function(self)
+                LootProConfig.tooltipCollected = self:GetChecked() and true or false
+            end)
+        end
+
         local recapHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        recapHint:SetPoint("TOPLEFT", tooltipCheck, "BOTTOMLEFT", 29, -2)
+        recapHint:SetPoint("TOPLEFT", collectedCheck or tooltipCheck, "BOTTOMLEFT", 29, -2)
         recapHint:SetWidth(430)
         recapHint:SetJustifyH("LEFT")
         recapHint:SetText("Counts reset on logout or Reset Session; a /reload keeps them. Also available via /lp recap.")
@@ -782,19 +845,35 @@ function ns.UI:Initialize()
                 SetRecapBody("|cFF888888Session recap is turned off. Enable it above to start tracking gold, items, currency, and notable drops.|r")
                 return
             end
-            recapHeader:SetText("|cFFFF2222Session:|r " .. addon:RecapFormatDuration(addon:RecapElapsed()))
+            local dur = addon:RecapFormatDuration(addon:RecapElapsed())
+            if addon:RecapIsPaused() then dur = dur .. " |cFFFFA000(paused)|r" end
+            recapHeader:SetText("|cFFFF2222Session:|r " .. dur)
             SetRecapBody(BuildRecapBody())
         end
+
+        local function RefreshPauseBtn()
+            pauseBtn:SetText(addon:RecapIsPaused() and "Resume Timer" or "Pause Timer")
+        end
+        ns.UI.RefreshRecapButtons = RefreshPauseBtn
 
         recapEnable:SetScript("OnClick", function(self)
             LootProConfig.recapEnabled = self:GetChecked() and true or false
             addon:RecapReset()
             page._lastVer = -1
+            RefreshPauseBtn()
             RefreshRecap()
         end)
 
         resetSession:SetScript("OnClick", function()
             addon:RecapReset()
+            page._lastVer = -1
+            RefreshPauseBtn()
+            RefreshRecap()
+        end)
+
+        pauseBtn:SetScript("OnClick", function()
+            addon:RecapPauseToggle()
+            RefreshPauseBtn()
             page._lastVer = -1
             RefreshRecap()
         end)
@@ -806,6 +885,8 @@ function ns.UI:Initialize()
             self._throttle = 1
             recapEnable:SetChecked(LootProConfig.recapEnabled)
             tooltipCheck:SetChecked(LootProConfig.tooltipLoots)
+            if collectedCheck then collectedCheck:SetChecked(LootProConfig.tooltipCollected) end
+            RefreshPauseBtn()
             RefreshRecap()
             recapScroll:SetVerticalScroll(0)
         end)
@@ -815,6 +896,7 @@ function ns.UI:Initialize()
             self._throttle = 0
             if not LootProConfig.recapEnabled then return end
             local dur = addon:RecapFormatDuration(addon:RecapElapsed())
+            if addon:RecapIsPaused() then dur = dur .. " |cFFFFA000(paused)|r" end
             if self._lastDur ~= dur then
                 self._lastDur = dur
                 recapHeader:SetText("|cFFFF2222Session:|r " .. dur)
@@ -986,6 +1068,7 @@ function ns.UI:Initialize()
             GameTooltip:Show()
         end)
         notableCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        ExpandCheckHover(notableCheck)
 
         local rareQualList = {
             { val = 2, lbl = "Uncommon+" },
@@ -1005,6 +1088,34 @@ function ns.UI:Initialize()
             if addon.RareTest then addon:RareTest() end
         end)
 
+        local valueLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        valueLabel:SetPoint("TOPLEFT", rareTestBtn, "BOTTOMLEFT", 0, -18)
+        valueLabel:SetText("Alert on value (gold, 0 = off)")
+
+        local valueBox = CreateFrame("EditBox", "LPRO_RareValue", page, "InputBoxTemplate")
+        valueBox:SetSize(90, 22)
+        valueBox:SetPoint("TOPLEFT", valueLabel, "BOTTOMLEFT", 5, -6)
+        valueBox:SetAutoFocus(false)
+        valueBox:SetNumeric(true)
+        valueBox:SetMaxLetters(9)
+        local function ValueGoldText()
+            return tostring(math.floor((LootProConfig.rareAlert.value or 0) / 10000))
+        end
+        local function SaveRareValue()
+            LootProConfig.rareAlert.value = (tonumber(valueBox:GetText()) or 0) * 10000
+            valueBox:SetText(ValueGoldText())
+            valueBox:ClearFocus()
+        end
+        valueBox:SetScript("OnEnterPressed", SaveRareValue)
+        valueBox:SetScript("OnEscapePressed", function(self) self:SetText(ValueGoldText()); self:ClearFocus() end)
+        valueBox:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Alert on value", 1, 1, 1)
+            GameTooltip:AddLine("Fires the rare-drop alert when a single drop's sell value is at least this many gold. Set 0 to turn it off. Press Enter to save.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        valueBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
         local newAppCheck
         local upgradeCheck
         if addon.IS_RETAIL then
@@ -1021,6 +1132,7 @@ function ns.UI:Initialize()
                 GameTooltip:Show()
             end)
             newAppCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(newAppCheck)
 
             upgradeCheck = CreateFrame("CheckButton", "LPRO_LootUpgrade", page, "InterfaceOptionsCheckButtonTemplate")
             upgradeCheck:SetPoint("TOPLEFT", newAppCheck, "BOTTOMLEFT", 0, -2)
@@ -1035,6 +1147,7 @@ function ns.UI:Initialize()
                 GameTooltip:Show()
             end)
             upgradeCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(upgradeCheck)
         end
 
         local ilvlCheck
@@ -1052,6 +1165,25 @@ function ns.UI:Initialize()
                 GameTooltip:Show()
             end)
             ilvlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(ilvlCheck)
+        end
+
+        local tertiaryCheck
+        if addon.IS_RETAIL then
+            tertiaryCheck = CreateFrame("CheckButton", "LPRO_LootTertiary", page, "InterfaceOptionsCheckButtonTemplate")
+            tertiaryCheck:SetPoint("TOPLEFT", valueBox, "BOTTOMLEFT", -5, -14)
+            _G[tertiaryCheck:GetName().."Text"]:SetText("Mark gear with a tertiary stat")
+            tertiaryCheck:SetScript("OnClick", function(self)
+                LootProConfig.tertiaryStat = self:GetChecked() and true or false
+            end)
+            tertiaryCheck:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Tertiary stat gear", 1, 1, 1)
+                GameTooltip:AddLine("Some weapons and armor roll a bonus \"tertiary\" stat: Leech, Avoidance, Speed, or Indestructible. This tags those drops in the loot feed and names the stat, so you can spot them before vendoring.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            tertiaryCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(tertiaryCheck)
         end
 
         page:SetScript("OnShow", function()
@@ -1064,6 +1196,8 @@ function ns.UI:Initialize()
             if newAppCheck then newAppCheck:SetChecked(LootProConfig.newAppearance) end
             if upgradeCheck then upgradeCheck:SetChecked(LootProConfig.lootUpgrade) end
             if ilvlCheck then ilvlCheck:SetChecked(LootProConfig.lootIlvl) end
+            if tertiaryCheck then tertiaryCheck:SetChecked(LootProConfig.tertiaryStat) end
+            valueBox:SetText(ValueGoldText())
             rareThresh:Refresh()
             RefreshList()
         end)
@@ -1364,13 +1498,17 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.14.0:|r",
+        "|cFFEBB706What's new in 2.15.0:|r",
         " ",
-        "|cFFEBB706Framed loot and combat feeds|r  Turn on Framed loot rows and Framed combat rows on the Customization tab to draw each line as its own bordered row. Loot rows show the icon, name, count, and category, colored by item quality. Combat lines match their own color.",
+        "|cFFEBB706Cleaner loot feed|r  With framed loot rows on, the new Combine repeated drops option stacks repeats of an item into one row with a rolling count, folds gray junk into a single Junk Items row, and merges rapid money pickups into one running total.",
         " ",
-        "|cFFEBB706Shift-click to link|r  Shift-click a framed loot row to link the item in chat. Control-click opens the dressing room, and hovering shows the tooltip.",
+        "|cFFEBB706Pause the session|r  Pause the recap timer from the Recap tab or with /lp pause so AFK and loading time no longer drag down your gold and items per hour. It survives a /reload.",
         " ",
-        "|cFFEBB706Masque support|r  Skin the framed loot icons with Masque if you have it. Without it, the icons keep a clean built-in border.",
+        "|cFFEBB706Alert on value|r  Set a gold amount on the Alerts tab and the rare-drop alert also fires when a single drop is worth at least that much.",
+        " ",
+        "|cFFEBB706Smarter alerts|r  The notable alert now fires only for mounts, pets, and toys you have not collected, and a new option tags gear that has a tertiary stat (Leech, Avoidance, Speed, Indestructible).",
+        " ",
+        "|cFFEBB706Clearer options|r  Every option's tooltip now shows when you hover its text, and collectible tooltips can show when you already own a mount, pet, or toy.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1578,7 +1716,7 @@ function ns.UI:Initialize()
         cleanCheck:SetChecked(LootProConfig.cleanMode); countCheck:SetChecked(LootProConfig.showLootCounts); gIconCheck:SetChecked(LootProConfig.showMoneyIcons); fxpCheck:SetChecked(LootProConfig.showFollowerXP)
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
         fadeScaleCheck:SetChecked(LootProConfig.fadeScale); hoverPauseCheck:SetChecked(LootProConfig.hoverPause)
-        framedLootCheck:SetChecked(LootProConfig.framedLoot); framedCombatCheck:SetChecked(LootProConfig.framedCombat)
+        framedLootCheck:SetChecked(LootProConfig.framedLoot); framedCombatCheck:SetChecked(LootProConfig.framedCombat); mergeCheck:SetChecked(LootProConfig.mergeRows)
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)

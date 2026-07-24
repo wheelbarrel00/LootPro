@@ -24,7 +24,8 @@ local function AddInfo(tooltip)
     if not LootProConfig then return end
     local wantLoot = LootProConfig.tooltipLoots and addon.RecapItemCount
     local wantSell = LootProConfig.tooltipSell
-    if not (wantLoot or wantSell) then return end
+    local wantColl = LootProConfig.tooltipCollected and addon.CollectibleOwned
+    if not (wantLoot or wantSell or wantColl) then return end
 
     local link = GetTipItemLink(tooltip)
     if not link or (_issecret and _issecret(link)) then return end
@@ -43,6 +44,13 @@ local function AddInfo(tooltip)
         local sell = _select(11, _GetItemInfo(link))
         if sell and sell > 0 then
             tooltip:AddLine("|cFFFF2222LootPro|r  Sell: " .. addon:RecapFormatMoney(sell), 1, 1, 1)
+        end
+    end
+
+    if wantColl then
+        local owned, kind = addon:CollectibleOwned(itemID, link)
+        if owned == true and kind then
+            tooltip:AddLine("|cFFFF2222LootPro|r  You already own this " .. kind .. ".", 1, 1, 1)
         end
     end
 end

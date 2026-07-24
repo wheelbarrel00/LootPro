@@ -1,7 +1,7 @@
 ## Interface: 20506
 ## Title: Loot Pro
 ## Notes: Custom Loot and Combat Text.
-## Version: 2.14.2
+## Version: 2.15.0
 ## Author: Wheelbarrel00
 ## IconTexture: Interface\AddOns\LootPro\Media\LootProIcon
 ## SavedVariables: LootProConfig

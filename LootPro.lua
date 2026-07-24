@@ -1,9 +1,9 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.14.2"
+ns.addon.VERSION = "2.15.0"
 -- Bump on each new What's New popup; shown once per revision (LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 9
+ns.addon.WHATS_NEW = 10
 ns.addon.isTesting = false
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
@@ -124,6 +124,13 @@ SlashCmdList["LOOTPRO"] = function(msg)
             print("|cFF00FF00[LootPro]|r Session recap reset.")
         end
         return
+    elseif msg == "pause" then
+        if ns.addon.RecapPauseToggle then
+            local paused = ns.addon:RecapPauseToggle()
+            print(paused and "|cFFFFA000[LootPro]|r Session timer paused." or "|cFF00FF00[LootPro]|r Session timer resumed.")
+            if ns.UI and ns.UI.RefreshRecapButtons then ns.UI.RefreshRecapButtons() end
+        end
+        return
     elseif msg == "whatsnew" then
         if ns.UI and ns.UI.whatsNewFrame then
             ns.UI.whatsNewFrame:Show()
@@ -145,7 +152,7 @@ SlashCmdList["LOOTPRO"] = function(msg)
         end
         return
     elseif msg == "help" or msg == "?" then
-        print("|cFFAAAAFF[LootPro]|r Commands: /lp (toggle GUI), /lp recap (session recap), /lp recap reset, /lp whatsnew, /lp about, /lp test, /lp help")
+        print("|cFFAAAAFF[LootPro]|r Commands: /lp (toggle GUI), /lp recap (session recap), /lp recap reset, /lp pause (pause/resume timer), /lp whatsnew, /lp about, /lp test, /lp help")
         return
     end
     if ns.UI and ns.UI.toggleGUI then

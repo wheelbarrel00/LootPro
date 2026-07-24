@@ -5,6 +5,7 @@ local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInf
 local _GetDetailedItemLevelInfo = (C_Item and C_Item.GetDetailedItemLevelInfo) or GetDetailedItemLevelInfo
 local _GetInventoryItemLink = GetInventoryItemLink
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
+local _GetItemStats = C_Item and C_Item.GetItemStats
 local _select = select
 local _format = string.format
 
@@ -69,7 +70,20 @@ end
 
 if not (addon.IS_RETAIL and _GetDetailedItemLevelInfo and _GetItemInfoInstant and _GetInventoryItemLink) then
     function addon:IsUpgrade() return false end
+    function addon:TertiaryStatTag() return nil end
     return
+end
+
+local PRIMARY_STAT_KEYS = { "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_INTELLECT_SHORT" }
+local function PrimaryStat(link)
+    if not _GetItemStats then return nil end
+    local stats = _GetItemStats(link)
+    if not stats then return nil end
+    for i = 1, #PRIMARY_STAT_KEYS do
+        local key = PRIMARY_STAT_KEYS[i]
+        if (stats[key] or 0) > 0 then return key end
+    end
+    return nil
 end
 
 function addon:IsUpgrade(itemID, link)
@@ -88,12 +102,40 @@ function addon:IsUpgrade(itemID, link)
     end
 
     -- Flag only when an equipped slot holds the SAME armor/weapon type at a lower ilvl: this proves the player can use it, avoiding false "(upgrade)" on gear they can't equip. Conservative for cross-type weapon swaps.
+    local lootedPrimary = PrimaryStat(link)
     for i = 1, #slots do
         local equipped = _GetInventoryItemLink("player", slots[i])
         if equipped and _select(7, _GetItemInfoInstant(equipped)) == subclassID then
             local equippedIlvl = _GetDetailedItemLevelInfo(equipped)
-            if equippedIlvl and lootedIlvl > equippedIlvl then return true end
+            if equippedIlvl and lootedIlvl > equippedIlvl then
+                -- Same subclass can still carry the wrong primary stat, so require a match when both have one.
+                local eqPrimary = PrimaryStat(equipped)
+                if not lootedPrimary or not eqPrimary or lootedPrimary == eqPrimary then
+                    return true
+                end
+            end
         end
     end
     return false
+end
+
+local TERTIARY_KEYS = {
+    "ITEM_MOD_CR_LIFESTEAL_SHORT",
+    "ITEM_MOD_CR_AVOIDANCE_SHORT",
+    "ITEM_MOD_CR_SPEED_SHORT",
+    "ITEM_MOD_CR_STURDINESS_SHORT",
+}
+function addon:TertiaryStatTag(link)
+    if not (_GetItemStats and link) then return nil end
+    local _, _, _, _, _, classID = _GetItemInfoInstant(link)
+    if classID ~= CLASS_WEAPON and classID ~= CLASS_ARMOR then return nil end
+    local stats = _GetItemStats(link)
+    if not stats then return nil end
+    for i = 1, #TERTIARY_KEYS do
+        local key = TERTIARY_KEYS[i]
+        if (stats[key] or 0) > 0 then
+            return " |cff00e6b8(" .. (_G[key] or "Tertiary") .. ")|r"
+        end
+    end
+    return nil
 end

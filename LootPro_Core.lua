@@ -339,6 +339,8 @@ local function RowFade_OnFinished(ag)
     local f = row._owner
     row:Hide()
     row._free = true
+    row:SetScript("OnUpdate", nil)
+    if f and f._moneyRow == row then f._moneyRow, f._moneyCopper = nil, nil end
     if f and f.rowActive then
         for i = #f.rowActive, 1, -1 do
             if f.rowActive[i] == row then table.remove(f.rowActive, i) break end
@@ -479,9 +481,11 @@ end
 
 local function ClearRows(f)
     if not f.rowActive then return end
+    f._moneyRow, f._moneyCopper = nil, nil
     for i = #f.rowActive, 1, -1 do
         local row = f.rowActive[i]
         row.fadeAG:Stop()
+        row:SetScript("OnUpdate", nil)
         row:Hide()
         row._free = true
         f.rowActive[i] = nil
@@ -558,13 +562,73 @@ local function LayoutItemRow(f, row)
     row:SetHeight(math.max(baseH, textH))
 end
 
+-- SetText-based so the count tween never fights Masque's Count region.
+local COUNT_TWEEN_DUR = 0.3
+local function RowCountTween(row, elapsed)
+    row._tweenT = (row._tweenT or 0) + elapsed
+    local p = row._tweenT / COUNT_TWEEN_DUR
+    if p >= 1 then
+        local to = row._tweenTo or 0
+        row.qty:SetText(to > 1 and to or "")
+        row:SetScript("OnUpdate", nil)
+        return
+    end
+    local from = row._tweenFrom or 0
+    local v = math.floor(from + ((row._tweenTo or 0) - from) * p + 0.5)
+    row.qty:SetText(v > 1 and v or "")
+end
+
+local function AnimateRowCount(row, fromVal, toVal)
+    if not row._hasIcon or fromVal == toVal then return end
+    row._tweenFrom, row._tweenTo, row._tweenT = fromVal, toVal, 0
+    row:SetScript("OnUpdate", RowCountTween)
+end
+
+local function FindActiveRow(f, mergeKey)
+    if not (mergeKey and f.rowActive) then return nil end
+    for i = 1, #f.rowActive do
+        local row = f.rowActive[i]
+        if not row._isText and row.mergeKey == mergeKey then return row end
+    end
+    return nil
+end
+
+local function MergeIntoRow(f, row, amt, count, icon, link)
+    local from = row._mergeAmt or 1
+    local to = from + (amt or 1)
+    row._mergeAmt = to
+    if count then
+        row.name:SetText((row._baseName or "") .. " (" .. count .. ")")
+        -- A wider count can re-wrap the name and change the row height, so remeasure and relayout.
+        LayoutItemRow(f, row)
+        LayoutRows(f)
+    end
+    if icon and row._hasIcon then row.icon:SetTexture(icon) end
+    row.itemLink = link
+    AnimateRowCount(row, from, to)
+    StartRowFade(f, row)
+    if row:IsMouseOver() then Row_OnEnter(row) end
+end
+
 -- Border is quality-tinted, or the passed color for currency and money.
-local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link)
+local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link, mergeKey)
     EnsureRows(f)
+    -- Junk collapses many different grays into one row, so it has no single owned count or link.
+    if mergeKey == "junk" then count, link = nil, nil end
+    local existing = FindActiveRow(f, mergeKey)
+    if existing then
+        MergeIntoRow(f, existing, amt, count, icon, link)
+        return
+    end
     local row = TakeRow(f)
+    row:SetScript("OnUpdate", nil)
     row._isText = false
+    row._isMoney = false
     row._hasIcon = icon and true or false
     row.itemLink = link
+    row.mergeKey = mergeKey
+    row._mergeAmt = amt or 1
+    row._baseName = name or ""
     ApplyRowFont(f, row, true)
 
     local br, bg, bb
@@ -607,12 +671,15 @@ local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, li
     if row:IsMouseOver() then Row_OnEnter(row) end
 end
 
-local function RowText(f, text, r, g, b)
+local function RowText(f, text, r, g, b, isMoney)
     EnsureRows(f)
     local row = TakeRow(f)
+    row:SetScript("OnUpdate", nil)
     row._isText = true
+    row._isMoney = isMoney and true or false
     row._hasIcon = false
     row.itemLink = nil
+    row.mergeKey = nil
     local s = ApplyRowFont(f, row, false)
     row:SetHeight(s.size + 12)
     row:SetBackdropBorderColor(r or 1, g or 1, b or 1, 1)
@@ -632,6 +699,37 @@ local function RowText(f, text, r, g, b)
     StartRowFade(f, row)
     -- A recycled row now holds a non-item line, so drop any item tooltip left open over it.
     if row:IsMouseOver() then GameTooltip:Hide() end
+    return row
+end
+
+local function MoneyText(copper)
+    copper = copper or 0
+    if LootProConfig.showMoneyIcons then
+        local g = math.floor(copper / 10000)
+        local s = math.floor((copper % 10000) / 100)
+        local c = copper % 100
+        local st = ""
+        if g > 0 then st = st .. g .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t " end
+        if s > 0 then st = st .. s .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
+        if c > 0 then st = st .. c .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
+        return "+ " .. st
+    end
+    return "+ " .. addon:RecapFormatMoney(copper)
+end
+
+-- Accumulate rapid money loots into one running row while it is still visible.
+local function MoneyRowEmit(f, copper, r, g, b)
+    EnsureRows(f)
+    local row = f._moneyRow
+    if row and not row._free and row._isMoney then
+        f._moneyCopper = (f._moneyCopper or 0) + copper
+        row.name:SetText(MoneyText(f._moneyCopper))
+        row.name:SetTextColor(r, g, b)
+        StartRowFade(f, row)
+    else
+        f._moneyCopper = copper
+        f._moneyRow = RowText(f, MoneyText(copper), r, g, b, true)
+    end
 end
 
 -- Re-apply font and size to a rendered row so the size slider updates framed rows live, re-measuring wrapped height for item rows.
@@ -740,7 +838,7 @@ local function ShowLoot(p, countStr)
     end
     if IsDuplicateDisplay(line) then return end
     if LootProConfig.framedLoot then
-        RowItem(f, p.fIcon, p.fQuality, p.fName or p.cleaned, p.fCategory, p.amt, p.fCount, p.cR, p.cG, p.cB, p.fLink)
+        RowItem(f, p.fIcon, p.fQuality, p.fName or p.cleaned, p.fCategory, p.amt, p.fCount, p.cR, p.cG, p.cB, p.fLink, p.fMergeKey)
     else
         f.display:AddMessage(line, p.cR, p.cG, p.cB)
     end
@@ -1150,6 +1248,8 @@ function addon:RunRegressionTest()
     }
 
     print("|cFFAAAAFF[LootPro]|r Running regression test (12 cases)...")
+    -- Post currency synchronously so the deferred (dedup-timer) output lands within this synchronous test.
+    self._regressionTest = true
     local pass, fail = 0, 0
     for _, tc in ipairs(cases) do
         -- Clear first: maxLines caps GetNumMessages(), so without it later cases read before==after and report false FAILs.
@@ -1168,6 +1268,7 @@ function addon:RunRegressionTest()
         end
     end
 
+    self._regressionTest = nil
     if self.RecapAttachSession then self:RecapAttachSession(recapPrev) end
     for k, v in pairs(snapshot.notifications) do n[k] = v end
     LootProConfig.cleanMode = snapshot.cleanMode
@@ -1374,12 +1475,15 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local s  = PAT_SILVER and _match(msg, PAT_SILVER)
             local co = PAT_COPPER and _match(msg, PAT_COPPER)
 
+            local copper = MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co)
             if LootProConfig.recapEnabled and self.RecapAddMoney then
-                self:RecapAddMoney(MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co))
+                self:RecapAddMoney(copper)
             end
 
             if n.money then
-                if LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
+                if LootProConfig.framedLoot and LootProConfig.mergeRows then
+                    MoneyRowEmit(addon.lootFrame, copper, c.money.r, c.money.g, c.money.b)
+                elseif LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
                     local st = ""
                     if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
                     if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
@@ -1451,7 +1555,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     p.text      = nc and CleanMessage(msg, event) or msg
                     p.noCount   = nc
                 end
-                if _After then
+                if _After and not addon._regressionTest then
                     _After(DEDUP_WINDOW, _curFns[_curSlot])
                 else
                     PostCurrency(p)
@@ -1479,6 +1583,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local isNewApp = false
             local isNotable = false
             local isUpgrade = false
+            local isValuable = false
+            local tertiaryTag = nil
             if isSelf then
                 if LootProConfig.recapEnabled and self.RecapAddItem then
                     self:RecapAddItem(itemID, amt, q, link)
@@ -1490,14 +1596,21 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if ra and ra.notable and self.IsNotableItem then
                     isNotable = self:IsNotableItem(itemID, link)
                 end
+                if ra and ra.value and ra.value > 0 and self.ItemValue then
+                    local unit = self:ItemValue(link)
+                    if unit and unit * amt >= ra.value then isValuable = true end
+                end
                 if self.RareOnLoot then
-                    self:RareOnLoot(q, isNotable)
+                    self:RareOnLoot(q, isNotable, isValuable)
                 end
                 if LootProConfig.newAppearance and self.IsNewAppearance then
                     isNewApp = self:IsNewAppearance(link)
                 end
                 if LootProConfig.lootUpgrade and self.IsUpgrade then
                     isUpgrade = self:IsUpgrade(itemID, link)
+                end
+                if LootProConfig.tertiaryStat and self.TertiaryStatTag then
+                    tertiaryTag = self:TertiaryStatTag(link)
                 end
             end
 
@@ -1524,7 +1637,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if n.loot and q >= threshold and not hidden then
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
-                if ra and ra.color and (q >= ra.threshold or isNotable) then
+                if ra and ra.color and (q >= ra.threshold or isNotable or isValuable) then
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
@@ -1532,13 +1645,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if LootProConfig.lootIlvl and self.LootItemLevel then
                     ilvlTag = self:LootItemLevel(itemID, link) or ""
                 end
-                local marker = ilvlTag .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "")
+                local marker = ilvlTag .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "") .. (tertiaryTag or "")
                 -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
-                local fIcon, fCat, fName
+                local fIcon, fCat, fName, fMergeKey
                 if LootProConfig.framedLoot then
                     fIcon = LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID or link)) or nil
                     fCat = LootCategory(link, itemID)
                     fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
+                    if LootProConfig.mergeRows then
+                        if q == 0 then
+                            fMergeKey, fName, fCat = "junk", "Junk Items", nil
+                        elseif itemID then
+                            fMergeKey = itemID
+                        end
+                    end
                 end
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
@@ -1553,7 +1673,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.amt = amt; p.noCount = noCount
                             p.cR, p.cG, p.cB = lr, lg, lb
                             p.marker = marker
-                            p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link
+                            p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fMergeKey = fMergeKey
                             p.fCount = (not noCount) and cnt or nil
                             ShowLoot(p, CountSuffix(cnt))
                         else
@@ -1567,7 +1687,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
                             lp.cR, lp.cG, lp.cB = lr, lg, lb
                             lp.marker  = marker
-                            lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil
+                            lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
                             _After(0.1, _lootFns[_lootSlot])
                         end
                     else
@@ -1576,7 +1696,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
                         p.marker = marker
-                        p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil
+                        p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
                         ShowLoot(p, "")
                     end
                 else
@@ -1584,7 +1704,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     if not IsDuplicateDisplay(line) then
                         if LootProConfig.framedLoot then
                             local nm = fName or lname or CleanMessage(msg, event)
-                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link)
+                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey)
                         else
                             self.lootFrame.display:AddMessage(line, lr, lg, lb)
                         end

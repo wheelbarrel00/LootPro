@@ -32,6 +32,7 @@ local function NewSession()
     if zone == "" then zone = nil end
     return {
         startTime = _GetTime(),
+        pausedTotal = 0,
         copper = 0,
         vendorCopper = 0,
         graySold = 0,
@@ -77,6 +78,9 @@ end
 local function RestoreSession(saved)
     local s = NewSession()
     s.startTime     = tonumber(saved.startTime) or s.startTime
+    -- GetTime() is continuous across a /reload, so the pause stamp stays valid on restore.
+    s.pausedTotal   = tonumber(saved.pausedTotal) or 0
+    s.pauseStart    = tonumber(saved.pauseStart) or nil
     s.copper        = tonumber(saved.copper) or 0
     s.vendorCopper  = tonumber(saved.vendorCopper) or 0
     s.graySold      = tonumber(saved.graySold) or 0
@@ -129,7 +133,25 @@ function addon:RecapGetSession()
 end
 
 function addon:RecapElapsed()
-    return _GetTime() - session.startTime
+    local paused = session.pausedTotal or 0
+    if session.pauseStart then paused = paused + (_GetTime() - session.pauseStart) end
+    return _GetTime() - session.startTime - paused
+end
+
+function addon:RecapIsPaused()
+    return session.pauseStart ~= nil
+end
+
+-- Freezes the elapsed clock only. Loot is still tallied while paused.
+function addon:RecapPauseToggle()
+    if session.pauseStart then
+        session.pausedTotal = (session.pausedTotal or 0) + (_GetTime() - session.pauseStart)
+        session.pauseStart = nil
+    else
+        session.pauseStart = _GetTime()
+    end
+    session.version = session.version + 1
+    return session.pauseStart ~= nil
 end
 
 function addon:RecapItemCount(itemID)
@@ -269,7 +291,9 @@ function addon:RecapPrint()
     local s = session
     EnsureZone(s)
     local elapsed = self:RecapElapsed()
-    print(_format("|cFFFF2222[LootPro]|r Session Recap (%s)", self:RecapFormatDuration(elapsed)))
+    local durStr = self:RecapFormatDuration(elapsed)
+    if self:RecapIsPaused() then durStr = durStr .. " (paused)" end
+    print(_format("|cFFFF2222[LootPro]|r Session Recap (%s)", durStr))
 
     if s.zone then
         print(_format("  |cFFAAAAAAZone:|r %s", s.zone))
