@@ -551,6 +551,10 @@ function ns.UI:Initialize()
         "In framed loot mode, repeats of the same item stack into one growing row, and gray junk collapses into a single row. Reduces clutter during AoE looting.")
     mergeCheck:SetPoint("TOPLEFT", framedLootCheck, "BOTTOMLEFT", 0, -8)
 
+    local clickThruCheck = AddFramedToggle("LPRO_RowClickThrough", "Click through locked rows", "rowClickThrough",
+        "While the readout is locked, clicks pass through framed rows to whatever is behind them. Trades away shift-clicking a row to link its item.")
+    clickThruCheck:SetPoint("LEFT", mergeCheck, "LEFT", 245, 0)
+
     local mmCheck = CreateFrame("CheckButton", "LPRO_MinimapToggle", pages.customization, "InterfaceOptionsCheckButtonTemplate")
     mmCheck:SetPoint("TOPLEFT", mergeCheck, "BOTTOMLEFT", 0, -8)
     _G[mmCheck:GetName().."Text"]:SetText("Show Minimap Icon")
@@ -1717,6 +1721,7 @@ function ns.UI:Initialize()
         mmCheck:SetChecked(not LootProConfig.minimap.hide)
         fadeScaleCheck:SetChecked(LootProConfig.fadeScale); hoverPauseCheck:SetChecked(LootProConfig.hoverPause)
         framedLootCheck:SetChecked(LootProConfig.framedLoot); framedCombatCheck:SetChecked(LootProConfig.framedCombat); mergeCheck:SetChecked(LootProConfig.mergeRows)
+        clickThruCheck:SetChecked(LootProConfig.rowClickThrough)
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)

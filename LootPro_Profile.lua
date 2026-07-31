@@ -19,6 +19,7 @@ addon.DEFAULTS = {
     fadeScale = false,
     framedLoot = false,
     framedCombat = false,
+    rowClickThrough = false,
     mergeRows = true,
     speedyAutoLoot = false,
     uiScale = 1.0,

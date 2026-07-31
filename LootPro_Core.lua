@@ -405,9 +405,24 @@ local function Row_OnDragStop(row)
     if h then h(row._owner) end
 end
 
+-- Rows are mouse-enabled children, so they keep taking clicks even when the locked parent stops. Motion stays on so hover-pause still gets OnEnter with clicks off.
+local function ApplyRowMouse(row)
+    if LootProConfig.locked and LootProConfig.rowClickThrough then
+        if LootProConfig.hoverPause and row.SetMouseMotionEnabled and row.SetMouseClickEnabled then
+            row:SetMouseClickEnabled(false)
+            row:SetMouseMotionEnabled(true)
+        else
+            row:EnableMouse(false)
+        end
+    else
+        row:EnableMouse(true)
+        if row.SetMouseClickEnabled then row:SetMouseClickEnabled(true) end
+    end
+end
+
 local function BuildRow(f)
     local row = CreateFrame("Button", nil, f.rowHost, "BackdropTemplate")
-    row:EnableMouse(true)
+    ApplyRowMouse(row)
     row:RegisterForClicks("AnyUp")
     row:RegisterForDrag("LeftButton")
     row:SetScript("OnEnter", Row_OnEnter)
@@ -508,6 +523,7 @@ local function TakeRow(f)
         row = AcquireRow(f)
     end
     table.insert(f.rowActive, 1, row)
+    ApplyRowMouse(row)
     return row
 end
 
@@ -734,6 +750,7 @@ end
 
 -- Re-apply font and size to a rendered row so the size slider updates framed rows live, re-measuring wrapped height for item rows.
 local function RestyleRow(f, row)
+    ApplyRowMouse(row)
     local s = ApplyRowFont(f, row, not row._isText)
     if row._isText then
         row:SetHeight(s.size + 12)

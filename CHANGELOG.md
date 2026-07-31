@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.0] - 2026-07-31
+
+### Bug Fixes
+- Fixed a Lua error thrown every time you hovered a companion pet item in your bags while "Show already owned on mount, pet, and toy tooltips" was turned on. The already-owned check was reading the pet's name where the pet journal expected its species id, which also stopped the rest of that tooltip from being built. (Retail)
+
+### New Features
+- Click through locked rows on the Customization tab. While the readout is locked, clicks pass through framed loot and combat rows to whatever is behind them, instead of the row catching them. Leave it off to keep shift-clicking a row to link its item.
+
 ## [2.15.0] - 2026-07-23
 
 ### New Features

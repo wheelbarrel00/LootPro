@@ -27,6 +27,17 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.16.0", date = "2026-07-31",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "Fixed a Lua error thrown every time you hovered a companion pet item in your bags while \"Show already owned on mount, pet, and toy tooltips\" was turned on. The already-owned check was reading the pet's name where the pet journal expected its species id, which also stopped the rest of that tooltip from being built. (Retail)",
+                } },
+                { head = "New Features", items = {
+                    "Click through locked rows on the Customization tab. While the readout is locked, clicks pass through framed loot and combat rows to whatever is behind them, instead of the row catching them. Leave it off to keep shift-clicking a row to link its item.",
+                } },
+            },
+        },
+        {
             version = "2.15.0", date = "2026-07-23",
             sections = {
                 { head = "New Features", items = {

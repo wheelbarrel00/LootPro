@@ -256,8 +256,10 @@ local function PetOwned(itemID, link)
     if not _GetNumCollectedInfo then return nil end
     local speciesID = link and _tonumber(link:match("battlepet:(%d+)"))
     if not speciesID and _GetPetInfoByItemID and itemID then
-        speciesID = _GetPetInfoByItemID(itemID)
+        -- speciesID is return 13 of GetPetInfoByItemID. Return 1 is the pet name.
+        speciesID = _select(13, _GetPetInfoByItemID(itemID))
     end
+    speciesID = _tonumber(speciesID)
     if not speciesID then return nil end
     local num = _GetNumCollectedInfo(speciesID)
     if num == nil then return nil end
@@ -271,6 +273,8 @@ end
 
 -- owned is true/false, or nil when unknown (no journal API). kind is nil for a non-collectible.
 function addon:CollectibleOwned(itemID, link)
+    -- GetItemInfoInstant reports no classID for a caged pet, so classify the battlepet link first.
+    if link and link:match("|Hbattlepet:") then return PetOwned(nil, link), "pet" end
     if not _GetItemInfoInstant or (not itemID and not link) then return nil, nil end
     local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
     if classID == CLASS_BATTLEPET then

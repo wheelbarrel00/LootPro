@@ -30,9 +30,11 @@ local function AddInfo(tooltip)
     local link = GetTipItemLink(tooltip)
     if not link or (_issecret and _issecret(link)) then return end
     local itemID = _tonumber(_match(link, "item:(%d+)"))
-    if not itemID then return end
+    -- A caged pet has a battlepet link and no item id, so only the collectible check can read it.
+    local caged = not itemID and _match(link, "|Hbattlepet:%d+") ~= nil
+    if not (itemID or caged) then return end
 
-    if wantLoot then
+    if wantLoot and itemID then
         local n = addon:RecapItemCount(itemID)
         if n and n > 0 then
             tooltip:AddLine("|cFFFF2222LootPro|r  Looted " .. n .. "x this session", 1, 1, 1)
@@ -40,7 +42,7 @@ local function AddInfo(tooltip)
     end
 
     -- Vendor sell price is field 11 of GetItemInfo (copper).
-    if wantSell then
+    if wantSell and itemID then
         local sell = _select(11, _GetItemInfo(link))
         if sell and sell > 0 then
             tooltip:AddLine("|cFFFF2222LootPro|r  Sell: " .. addon:RecapFormatMoney(sell), 1, 1, 1)
