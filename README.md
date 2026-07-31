@@ -10,11 +10,11 @@
 
 <p align="center">
   <a href="https://github.com/wheelbarrel00/LootPro/releases"><img src="https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=FF2222&label=Version" alt="Version" /></a>
-  <img src="https://img.shields.io/badge/WoW-Midnight%2012.0-8B0000?style=flat-square" alt="WoW Midnight" />
-  <img src="https://img.shields.io/badge/WoW-Classic%20Era%201.15.8-8B0000?style=flat-square" alt="WoW Classic Era" />
-  <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.5-8B0000?style=flat-square" alt="WoW BCC" />
+  <img src="https://img.shields.io/badge/WoW-Midnight%2012.1-8B0000?style=flat-square" alt="WoW Midnight" />
+  <img src="https://img.shields.io/badge/WoW-Classic%20Era%201.15.9-8B0000?style=flat-square" alt="WoW Classic Era" />
+  <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.6-8B0000?style=flat-square" alt="WoW BCC" />
   <img src="https://img.shields.io/badge/WoW-MoP%20Classic%205.5.4-8B0000?style=flat-square" alt="WoW MoP Classic" />
-  <img src="https://img.shields.io/badge/Interface-120005-333333?style=flat-square" alt="Interface" />
+  <img src="https://img.shields.io/badge/Interface-120100-333333?style=flat-square" alt="Interface" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/Memory-~350KB-333333?style=flat-square" alt="Memory" />
 </p>
@@ -23,7 +23,7 @@
 
 ## Overview
 
-Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports WoW Retail (Midnight 12.0) along with Classic Era (1.15.8), BCC Anniversary (2.5.5), and Mists of Pandaria Classic (5.5.4).
+Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports WoW Retail (Midnight 12.1) along with Classic Era (1.15.9), BCC Anniversary (2.5.6), and Mists of Pandaria Classic (5.5.4).
 
 Open with **`/lp`** or the minimap button.
 
@@ -54,6 +54,8 @@ Each display frame (Combat and Loot) has its own text size, fade duration, frame
 ### Framed Loot and Combat Feeds
 
 An optional display style that draws each feed line as its own bordered row instead of scrolling text. Turn on **Framed loot rows** and **Framed combat rows** independently on the Customization tab. Loot rows show the item icon, name, running count, and category, with the border and name colored by item quality — combat, skill, and reputation lines get a matching bordered row colored to match that line. Shift-click a loot row to link the item in chat (a chat box opens for you if one is not already open), control-click for the dressing room, and hover for the item tooltip. While the feeds are unlocked you can drag any row to move them. Every per-frame setting you already use — font, outline, size, colors, fade timing, hover-to-pause, and keep-busy-feeds-longer — carries over, and if you have Masque installed the loot icons take your chosen Masque skin. Off by default.
+
+Because shift-click linking needs the row to receive your click, a visible row keeps catching clicks even while the feeds are locked. If you would rather those clicks reach whatever is behind the feed, turn on **Click through locked rows** on the same tab — rows stop intercepting clicks while locked, at the cost of shift-click linking.
 
 ### Notification Toggles
 
