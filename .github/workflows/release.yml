@@ -34,6 +34,9 @@ jobs:
           echo "Ref: $GITHUB_REF"
           TAG="${GITHUB_REF#refs/tags/}"
           echo "Tag: $TAG"
+          # actions/checkout writes the local tag ref straight to the commit, dropping the
+          # annotation object, so cat-file reports "commit" for an annotated tag. Re-fetch it.
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
           TYPE=$(git cat-file -t "$TAG" || echo "unknown")
           echo "Tag object type: $TYPE  (should be 'tag' for an annotated release)"
           if [ "$TYPE" != "tag" ]; then

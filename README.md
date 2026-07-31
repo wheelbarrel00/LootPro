@@ -37,11 +37,15 @@ Strips the default "You receive loot:" and "You receive currency:" clutter from 
 
 ### Smart Rarity Filtering
 
-Set a minimum quality threshold so only items at or above that rarity appear in the loot frame. Common grey drops can be silenced entirely while greens, blues, and epics still show. When an item has not yet been cached by the client, Loot Pro fails open and displays the message rather than silently dropping it.
+Set a minimum quality threshold so only items at or above that rarity appear in the loot frame. Common grey drops can be silenced entirely while greens, blues, and epics still show. Your own loot and other players' loot get independent thresholds, so you can watch every drop you pick up while only hearing about the group's epics. When an item has not yet been cached by the client, Loot Pro fails open and displays the message rather than silently dropping it.
 
 ### Category Filtering
 
-Beyond the rarity threshold, entire item classes can be hidden from the loot frame — Trade Goods, Consumables, Quest Items, and Recipes — from the Notifications tab. Filtered items are still counted by the session recap; only their feed lines are suppressed.
+Beyond the rarity threshold, entire item classes can be hidden from the loot frame — Trade Goods, Consumables, Quest Items, Recipes, Gear, Gems, Enhancements, Miscellaneous, and Glyphs — from the Notifications tab. Filtered items are still counted by the session recap; only their feed lines are suppressed.
+
+### Name Block List
+
+A dedicated Block tab hides loot by name or keyword. Any drop whose name contains one of your blocked words never reaches the feed, which catches the specific junk that slips past a rarity or category filter. As with the other filters, blocked items are still counted by the session recap.
 
 ### Full Color Customization
 
@@ -57,6 +61,10 @@ An optional display style that draws each feed line as its own bordered row inst
 
 Because shift-click linking needs the row to receive your click, a visible row keeps catching clicks even while the feeds are locked. If you would rather those clicks reach whatever is behind the feed, turn on **Click through locked rows** on the same tab — rows stop intercepting clicks while locked, at the cost of shift-click linking.
 
+### Combine Repeated Drops
+
+In framed loot mode, repeats of the same item stack into a single growing row with a rolling count instead of pushing a new row for every pickup, gray junk collapses into one Junk Items row, and rapid money pickups merge into a single running total. This keeps the feed readable during AoE pulls, where the old behavior would blow past your max visible lines in a second. On by default; turn it off on the Customization tab to get one row per drop.
+
 ### Notification Toggles
 
 Every message type can be individually enabled or disabled. Additional toggles control loot count injection, coin icon display, Clean Mode, and combat follower XP visibility.
@@ -64,6 +72,8 @@ Every message type can be individually enabled or disabled. Additional toggles c
 ### Session Recap
 
 A dedicated Recap tab (and the `/lp recap` command) tracks your current play session: total gold, items broken down by rarity, currencies earned, and a short list of notable epic-or-better drops. The tally is held entirely in memory and resets on each login or reload, so it adds nothing to your saved variables. Disabled by default; enable it on the Recap tab.
+
+The session timer can be paused and resumed from the Recap tab or with `/lp pause`, so AFK time, mailbox trips, and loading screens stop dragging down your gold-per-hour and items-per-hour. The header shows **(paused)** while stopped, loot is still counted while paused, and the pause survives a `/reload`.
 
 ### Watched-Item Alerts
 
@@ -73,9 +83,15 @@ The Alerts tab lets you build a watchlist by item name, item ID, or shift-clicke
 
 Optionally color a looted line by its item quality, flash the loot frame, and play a sound when a drop meets a configurable quality threshold (Legendary by default). All three effects are off by default and configured on the Alerts tab.
 
+The same alert can also fire on value: set a gold amount in the **Alert on value** box and any single drop worth at least that much triggers the flash, sound, and coloring regardless of its rarity, which catches the expensive trade goods that never reach epic quality. Set it to 0 to turn it off.
+
 ### Loot Counts in Tooltips
 
-Item tooltips can display how many of that item you have looted during the current session, sourced from the session recap.
+Item tooltips can display how many of that item you have looted during the current session, sourced from the session recap. Enable it on the Recap tab.
+
+### Already-Owned Collectibles in Tooltips
+
+Mount, pet, and toy tooltips can show a line telling you that you already have it, so a duplicate is safe to sell, trade, or skip without opening the relevant journal to check. Off by default; enable "Show already owned on mount, pet, and toy tooltips" on the Recap tab. Retail only, since the Classic flavors have no shared collection journals.
 
 ### Currency Cap Warnings
 
@@ -96,6 +112,10 @@ A LibDBIcon minimap button provides one-click access to the settings panel. Comp
 ### New-Appearance Marker
 
 When you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)**, so a fresh appearance is never vendored or disenchanted by mistake. Off by default; enable it on the Alerts tab. Retail only, since the Classic flavors have no transmog appearance collection.
+
+### Tertiary Stat Marker
+
+Looted weapons and armor that carry a tertiary stat — Leech, Avoidance, Speed, or Indestructible — are tagged on their loot line with the stat named, so a piece worth keeping for its tertiary is obvious without opening the tooltip. Off by default; enable it on the Alerts tab. Retail only.
 
 ### Notable-Item Alerts
 
@@ -139,8 +159,11 @@ Two optional behaviors on the Customization tab: pause fading while your cursor 
 | `/lpro` | Toggle the settings window (alternate) |
 | `/lp recap` | Print the current session recap (gold, items, currencies, notable drops) |
 | `/lp recap reset` | Start a fresh recap session |
+| `/lp pause` | Pause or resume the session timer |
+| `/lp about` | Open the About tab and in-game changelog |
+| `/lp help` | List every command |
 
-The config UI has seven tabs: Layout, Colors, Notifs, Custom, Recap, Alerts, and Vendor. A Reset to Defaults button at the bottom of every tab restores all settings to their original values.
+The config UI has nine tabs: Layout, Colors, Notifications, Custom, Recap, Alerts, Block, Vendor, and About. A Reset to Defaults button at the bottom of every tab restores all settings to their original values, behind a confirmation prompt.
 
 ---
 
