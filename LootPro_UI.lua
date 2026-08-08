@@ -144,16 +144,16 @@ function ns.UI:Initialize()
         about = CreateFrame("Frame", nil, gui)
     }
 
-    for _, p in pairs(pages) do 
+    for _, p in pairs(pages) do
         p:SetSize(500, 610)
-        p:SetPoint("TOP", 0, -140) 
-        p:Hide() 
+        p:SetPoint("TOP", 0, -140)
+        p:Hide()
     end
 
-    local function ShowPage(name) 
-        for k, p in pairs(pages) do 
-            if k == name then p:Show() else p:Hide() end 
-        end 
+    local function ShowPage(name)
+        for k, p in pairs(pages) do
+            if k == name then p:Show() else p:Hide() end
+        end
     end
 
     local tabs = {}
@@ -261,20 +261,20 @@ function ns.UI:Initialize()
 
     local lockBtn = CreateStyledButton(gui, 140, 26, LootProConfig.locked and "Unlock Windows" or "Lock Windows")
     lockBtn:SetPoint("TOPLEFT", 25, -100)
-    lockBtn:SetScript("OnClick", function() 
-        LootProConfig.locked = not LootProConfig.locked 
-        addon:UpdateAllVisuals() 
-        lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows") 
+    lockBtn:SetScript("OnClick", function()
+        LootProConfig.locked = not LootProConfig.locked
+        addon:UpdateAllVisuals()
+        lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows")
     end)
 
     local testBtn = CreateStyledButton(gui, 140, 26, "Start Test Mode")
     testBtn:SetPoint("TOPRIGHT", -25, -100)
-    testBtn:SetScript("OnClick", function() 
-        addon.isTesting = not addon.isTesting 
-        if addon.isTesting then 
-            testBtn:SetText("Stop Test Mode") 
-            addon.combatFrame.display:SetFading(false) 
-            addon.lootFrame.display:SetFading(false) 
+    testBtn:SetScript("OnClick", function()
+        addon.isTesting = not addon.isTesting
+        if addon.isTesting then
+            testBtn:SetText("Stop Test Mode")
+            addon.combatFrame.display:SetFading(false)
+            addon.lootFrame.display:SetFading(false)
             addon:PostTestMessages()
         else
             testBtn:SetText("Start Test Mode")
@@ -327,24 +327,24 @@ function ns.UI:Initialize()
 
     local syncLayout = CreateStyledButton(pages.layout, 220, 25, "Sync Combat Layout to Loot")
     syncLayout:SetPoint("BOTTOM", 0, 80)
-    syncLayout:SetScript("OnClick", function() 
+    syncLayout:SetScript("OnClick", function()
         LootProConfig.loot.size = LootProConfig.combat.size
         LootProConfig.loot.fade = LootProConfig.combat.fade
         LootProConfig.loot.width = LootProConfig.combat.width
         LootProConfig.loot.height = LootProConfig.combat.height
         LootProConfig.loot.maxLines = LootProConfig.combat.maxLines
         lSize:SetValue(LootProConfig.combat.size); lFade:SetValue(LootProConfig.combat.fade); lWidth:SetValue(LootProConfig.combat.width); lHeight:SetValue(LootProConfig.combat.height); lMaxLines:SetValue(LootProConfig.combat.maxLines)
-        addon:UpdateAllVisuals() 
+        addon:UpdateAllVisuals()
     end)
 
     local colorRows = {}
     local function AddColor(key, title, func)
         local row = U.CreateColorRow("LPRO_CLR_"..title, pages.colors, key, func, title)
         if #colorRows == 0 then row:SetPoint("TOP", 0, 0) else row:SetPoint("TOP", colorRows[#colorRows], "BOTTOM", 0, -3) end
-        table.insert(colorRows, row) 
+        table.insert(colorRows, row)
         row:Refresh()
     end
-    
+
     AddColor("money", "Money", function() return "10 Gold 75 Silver 20 Copper" end)
     AddColor("currency", "Currency", function() return "+ 25 Kej" end)
     AddColor("loot", "Loot", function() return "+1 |T134414:0|t Hearthstone (1)" end)
@@ -410,7 +410,7 @@ function ns.UI:Initialize()
     local cleanCheck = CreateFrame("CheckButton", "LPRO_CleanToggle_N", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
     cleanCheck:SetPoint("TOPLEFT", gIconCheck, "BOTTOMLEFT", 0, -5); _G[cleanCheck:GetName().."Text"]:SetText("Enable Clean Mode"); cleanCheck:SetChecked(LootProConfig.cleanMode)
     cleanCheck:SetScript("OnClick", function(self) LootProConfig.cleanMode = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
-    
+
     local cleanDesc = pages.notifications:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cleanDesc:SetPoint("TOPLEFT", cleanCheck, "BOTTOMLEFT", 25, 0); cleanDesc:SetTextColor(0.6, 0.6, 0.6); cleanDesc:SetText("(Strips text like 'You receive loot:')")
 
@@ -451,7 +451,7 @@ function ns.UI:Initialize()
     xpT:SetScript("OnClick", function(self) LootProConfig.notifications["xp"] = self:GetChecked(); if addon.isTesting then addon:PostTestMessages() end end)
     toggles["xp"] = xpT
 
-    local delvT = AddToggle("delver", "Display Delve Companion XP", "delver", fxpCheck) 
+    local delvT = AddToggle("delver", "Display Delve Companion XP", "delver", fxpCheck)
     local skillT = AddToggle("skill", "Display Skill Gains", "skill", delvT)
     local honorT = AddToggle("honor", "Display Honor Gains", "honor", skillT)
     local repGT = AddToggle("repGain", "Display Reputation GAIN", "repGain", honorT)
@@ -679,7 +679,7 @@ function ns.UI:Initialize()
     local lFont = U.CreateFontDropdown("LPRO_LF", "Loot Font", pages.customization, "loot")
     lFont.label:SetPoint("TOPRIGHT", -50, 0); lFont:ClearAllPoints(); lFont:SetPoint("TOPRIGHT", lFont.label, "BOTTOMRIGHT", 0, -5); pages.customization.lF = lFont
 
-    local lOut = U.CreateGenericCycler("LPRO_LO", "Loot Outline", pages.customization, outList, "outline", "loot") 
+    local lOut = U.CreateGenericCycler("LPRO_LO", "Loot Outline", pages.customization, outList, "outline", "loot")
     lOut.label:SetPoint("TOPRIGHT", lFont, "BOTTOMRIGHT", -40, -15); lOut:ClearAllPoints(); lOut:SetPoint("TOPRIGHT", lOut.label, "BOTTOMRIGHT", 0, -5); pages.customization.lO = lOut
 
     local syncCustom = CreateStyledButton(pages.customization, 220, 25, "Sync Combat Fonts to Loot")
@@ -1462,20 +1462,20 @@ function ns.UI:Initialize()
         welcome:Hide()
         gui:Show()
     end)
-    
+
     local hideCheck = CreateFrame("CheckButton", "LPRO_HideWelcome", welcome, "InterfaceOptionsCheckButtonTemplate")
     hideCheck:SetPoint("BOTTOMLEFT", 20, 15)
     _G[hideCheck:GetName().."Text"]:SetText("Don't show this again")
     hideCheck:SetChecked(LootProConfig.hideWelcome)
     hideCheck:HookScript("OnShow", function(self) self:SetChecked(LootProConfig.hideWelcome) end)
     hideCheck:SetScript("OnClick", function(self) LootProConfig.hideWelcome = self:GetChecked() and true or false end)
-    
+
     welcome:HookScript("OnHide", function()
         if hideCheck:GetChecked() then
             LootProConfig.hideWelcome = true
         end
     end)
-    
+
     ns.UI.welcomeFrame = welcome
 
     local WN_WIDTH, WN_MIN_HEIGHT = 480, 360

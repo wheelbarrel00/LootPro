@@ -512,7 +512,7 @@ A loot-awareness update. Every new alert is off by default; turn on what you wan
 - Active tab highlighting in config UI — the current tab is now visually distinct
 
 ### Changed
-- Closing the config UI now automatically deactivates Unlock Windows and 
+- Closing the config UI now automatically deactivates Unlock Windows and
   Test Mode if either is active
 
 ### Fixed

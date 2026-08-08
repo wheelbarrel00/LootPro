@@ -154,7 +154,7 @@ end
 
 local function CleanMessage(msg, event)
     if not msg or type(msg) ~= "string" then return msg end
-    
+
     if event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
         if PAT_FACTION_UP then
             local fac = _match(msg, PAT_FACTION_UP)
@@ -164,11 +164,11 @@ local function CleanMessage(msg, event)
             local fac = _match(msg, PAT_FACTION_DOWN)
             if fac then return fac end
         end
-        
+
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         local amount = _match(msg, "([%d%p%s]*%d)")
         if amount then return "+ " .. amount .. " XP" end
-        
+
     elseif _find(event, "CHAT_MSG_LOOT") or _find(event, "CHAT_MSG_CURRENCY") then
         local cleaned = msg
         local n
@@ -182,7 +182,7 @@ local function CleanMessage(msg, event)
         cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", TrailerRepl)
         return cleaned
     end
-    
+
     return msg
 end
 
@@ -913,28 +913,28 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     local f = CreateFrame("Frame", name.."Anchor", UIParent, "BackdropTemplate")
     f.configKey = configKey
     f.defaultY = defaultY
-    f:SetPoint("CENTER", 0, defaultY) 
+    f:SetPoint("CENTER", 0, defaultY)
     f:SetMovable(true)
     f:SetClampedToScreen(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving) 
-    
-    f:SetScript("OnDragStop", function(self) 
+    f:SetScript("OnDragStart", f.StartMoving)
+
+    f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        if addon:IsReady() then 
+        if addon:IsReady() then
             local p, _, rp, x, y = self:GetPoint()
             LootProConfig[self.configKey].point = p
             LootProConfig[self.configKey].relativePoint = rp or p
             LootProConfig[self.configKey].x = x
-            LootProConfig[self.configKey].y = y 
-        end 
+            LootProConfig[self.configKey].y = y
+        end
     end)
-    
+
     f.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
     f.label:SetPoint("CENTER")
     f.label:SetText(labelText)
     f.label:Hide()
-    
+
     f.display = CreateFrame("ScrollingMessageFrame", name.."Display", f)
     f.display:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -10)
     f.display:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 10)
@@ -1048,13 +1048,13 @@ local _updateConfigsBuf = { {}, {} }
 
 function addon:UpdateAllVisuals()
     if not self:IsReady() then return end
-    
+
     if LootProConfig.minimap.hide then
         self.LDBIcon:Hide("LootPro")
     else
         self.LDBIcon:Show("LootPro")
-    end    
-    
+    end
+
     _updateConfigsBuf[1].f, _updateConfigsBuf[1].s = self.combatFrame, LootProConfig.combat
     _updateConfigsBuf[2].f, _updateConfigsBuf[2].s = self.lootFrame,   LootProConfig.loot
 
@@ -1084,17 +1084,17 @@ function addon:UpdateAllVisuals()
         end
 
         if not f._backdropApplied then
-            f:SetBackdrop({ 
-                bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
-                tile = true, 
-                tileSize = 16, 
-                edgeSize = 16, 
-                insets = { left = 3, right = 3, top = 3, bottom = 3 } 
+            f:SetBackdrop({
+                bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                tile = true,
+                tileSize = 16,
+                edgeSize = 16,
+                insets = { left = 3, right = 3, top = 3, bottom = 3 }
             })
             f._backdropApplied = true
         end
-        
+
         if LootProConfig.locked then
             f:SetBackdropColor(0,0,0,0)
             f:SetBackdropBorderColor(0,0,0,0)
@@ -1113,16 +1113,16 @@ function addon:UpdateAllVisuals()
             if f.SetMouseClickEnabled then f:SetMouseClickEnabled(true) end
             f.label:Show()
         end
-        
+
         local fontPath = LSM and LSM:Fetch("font", s.font) or DEFAULT_FONT
         local flags = (s.outline == "NONE") and "" or (s.outline or "OUTLINE")
-        
-        if flags == "" then 
+
+        if flags == "" then
             f.display:SetShadowColor(0, 0, 0, 0.6)
-            f.display:SetShadowOffset(1, -1) 
-        else 
+            f.display:SetShadowOffset(1, -1)
+        else
             f.display:SetShadowColor(0, 0, 0, 0)
-            f.display:SetShadowOffset(0, 0) 
+            f.display:SetShadowOffset(0, 0)
         end
 
         local fontKey = _tostring(fontPath).."|".._tostring(s.size).."|"..flags
@@ -1369,30 +1369,30 @@ local evts = {
     "PLAYER_LOGOUT",
     "PLAYER_REGEN_DISABLED",
     "PLAYER_REGEN_ENABLED",
-    "CHAT_MSG_LOOT", 
-    "CHAT_MSG_CURRENCY", 
-    "CHAT_MSG_MONEY", 
-    "CHAT_MSG_SKILL", 
+    "CHAT_MSG_LOOT",
+    "CHAT_MSG_CURRENCY",
+    "CHAT_MSG_MONEY",
+    "CHAT_MSG_SKILL",
     "CHAT_MSG_SYSTEM",
-    "CHAT_MSG_COMBAT_FACTION_CHANGE", 
-    "CHAT_MSG_COMBAT_XP_GAIN", 
+    "CHAT_MSG_COMBAT_FACTION_CHANGE",
+    "CHAT_MSG_COMBAT_XP_GAIN",
     "CHAT_MSG_COMBAT_HONOR_GAIN"
 }
 
-for _, v in ipairs(evts) do 
-    addon:RegisterEvent(v) 
+for _, v in ipairs(evts) do
+    addon:RegisterEvent(v)
 end
 evts = nil
 
 addon:SetScript("OnEvent", function(self, event, ...)
     local arg1 = ...
-    
-    if event == "ADDON_LOADED" and arg1 == addonName then 
+
+    if event == "ADDON_LOADED" and arg1 == addonName then
         self:InitSettings()
         self.LDBIcon:Register("LootPro", self.lootProLDB, LootProConfig.minimap)
         self:UnregisterEvent("ADDON_LOADED")
         return
-        
+
     elseif event == "PLAYER_LOGIN" then
         if not self:IsReady() then self:InitSettings() end
         if ns.UI then ns.UI:Initialize() end
@@ -1423,7 +1423,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
     elseif self:IsReady() then
         local c = LootProConfig.colors
         local n = LootProConfig.notifications
-        
+
         if event == "PLAYER_REGEN_DISABLED" then
             if n.combatEnter then
                 CombatEmit(LootProConfig.combatEnterText, c.combatEnter.r, c.combatEnter.g, c.combatEnter.b)

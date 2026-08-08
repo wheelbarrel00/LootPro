@@ -188,28 +188,28 @@ function U.CreateFontDropdown(name, title, parent, configKey)
 end
 
 function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
-    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     l:SetText(title)
-    
+
     local c = CreateFrame("Frame", name, parent, "BackdropTemplate")
     c:SetSize(140, 26)
     c:SetPoint("TOP", l, "BOTTOM", 0, -5)
     c:SetBackdrop(BACKDROP_CYCLER)
     c:SetBackdropColor(0,0,0,0.8)
-    
-    local t = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") 
+
+    local t = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     t:SetPoint("CENTER")
-    
-    local function UpdateText() 
+
+    local function UpdateText()
         local cfg = GetCfg(configKey)
         local cur = cfg[settingKey]
-        
-        for _, v in ipairs(list) do 
-            if v.val == cur then 
-                t:SetText(v.lbl) 
-            end 
-        end 
-        
+
+        for _, v in ipairs(list) do
+            if v.val == cur then
+                t:SetText(v.lbl)
+            end
+        end
+
         if configKey ~= "root" and cfg.font then
             local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
             local f = (cur == "NONE") and "" or cur
@@ -217,62 +217,62 @@ function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)
                 SafeSetFont(t, p, 13, f)
             end
         end
-        
-        if addon.UpdateAllVisuals then 
-            addon:UpdateAllVisuals() 
-        end 
+
+        if addon.UpdateAllVisuals then
+            addon:UpdateAllVisuals()
+        end
     end
-    
-    local function Cycle(d) 
+
+    local function Cycle(d)
         local cfg = GetCfg(configKey)
-        local idx = 1 
-        
-        for i, v in ipairs(list) do 
-            if v.val == cfg[settingKey] then 
-                idx = i 
-                break 
-            end 
-        end 
-        
-        idx = idx + d 
-        if idx > #list then 
-            idx = 1 
-        elseif idx < 1 then 
-            idx = #list 
-        end 
-        
-        cfg[settingKey] = list[idx].val 
-        UpdateText() 
+        local idx = 1
+
+        for i, v in ipairs(list) do
+            if v.val == cfg[settingKey] then
+                idx = i
+                break
+            end
+        end
+
+        idx = idx + d
+        if idx > #list then
+            idx = 1
+        elseif idx < 1 then
+            idx = #list
+        end
+
+        cfg[settingKey] = list[idx].val
+        UpdateText()
     end
-    
+
     local pb = CreateFrame("Button", nil, c)
     pb:SetSize(18,18)
     pb:SetPoint("LEFT", 2, 0)
     pb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
     pb:SetScript("OnClick", function() Cycle(-1) end)
-    
+
     local nb = CreateFrame("Button", nil, c)
     nb:SetSize(18,18)
     nb:SetPoint("RIGHT", -2, 0)
     nb:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
     nb:SetScript("OnClick", function() Cycle(1) end)
-    
+
     c.Refresh = UpdateText
-    c.label = l 
+    c.label = l
     return c
 end
 
 function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, configKey)
-    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     l:SetText(title)
     l:Hide()
-    
-    local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate") 
-    s:SetPoint("TOP", l, "BOTTOM", 0, -10) 
-    s:SetMinMaxValues(minVal, maxVal) 
-    s:SetValueStep(step) 
+
+    local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    s:SetPoint("TOP", l, "BOTTOM", 0, -10)
+    s:SetMinMaxValues(minVal, maxVal)
+    s:SetValueStep(step)
     s:SetObeyStepOnDrag(true)
-    
+
     local valText = _G[name.."Text"]
     valText:SetFontObject("GameFontNormal")
     local valFmt = title .. ": %d" .. ((settingKey == "fade") and "s" or "")
@@ -306,31 +306,31 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
 end
 
 function U.CreateEditBox(name, title, parent, settingKey)
-    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal") 
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     l:SetText(title)
-    
-    local eb = CreateFrame("EditBox", name, parent, "InputBoxTemplate") 
-    eb:SetSize(180, 20) 
+
+    local eb = CreateFrame("EditBox", name, parent, "InputBoxTemplate")
+    eb:SetSize(180, 20)
     eb:SetAutoFocus(false)
-    
-    eb:SetScript("OnShow", function(self) 
-        self:SetText(LootProConfig[settingKey] or "") 
+
+    eb:SetScript("OnShow", function(self)
+        self:SetText(LootProConfig[settingKey] or "")
     end)
-    
-    eb:SetScript("OnEnterPressed", function(self) 
+
+    eb:SetScript("OnEnterPressed", function(self)
         LootProConfig[settingKey] = self:GetText()
         self:ClearFocus()
-        if addon.isTesting and addon.PostTestMessages then 
-            addon:PostTestMessages() 
-        end 
+        if addon.isTesting and addon.PostTestMessages then
+            addon:PostTestMessages()
+        end
     end)
-    
-    eb:SetScript("OnEscapePressed", function(self) 
+
+    eb:SetScript("OnEscapePressed", function(self)
         self:SetText(LootProConfig[settingKey] or "")
-        self:ClearFocus() 
+        self:ClearFocus()
     end)
-    
-    eb.label = l 
+
+    eb.label = l
     return eb
 end
 
@@ -339,33 +339,33 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
     f:SetSize(400, 28)
     f:SetBackdrop(BACKDROP_COLORROW)
     f:SetBackdropColor(0,0,0,0.5)
-    
+
     local tex = f:CreateTexture(nil, "ARTWORK")
-    tex:SetSize(16, 16) 
+    tex:SetSize(16, 16)
     tex:SetPoint("LEFT", 10, 0)
-    
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall") 
-    title:SetPoint("LEFT", tex, "RIGHT", 10, 0) 
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("LEFT", tex, "RIGHT", 10, 0)
     title:SetText(label or (name:gsub("LPRO_CLR_", "")))
-    
+
     local preview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     preview:SetPoint("RIGHT", -12, 0)
-    
+
     local function Update()
         local c = LootProConfig.colors[colorKey]
         tex:SetColorTexture(c.r, c.g, c.b)
         preview:SetText(previewFunc())
         preview:SetTextColor(c.r, c.g, c.b)
     end
-    
+
     local function OnColorChanged()
         local r, g, b
-        if ColorPickerFrame.GetColorRGB then 
-            r, g, b = ColorPickerFrame:GetColorRGB() 
-        elseif ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker then 
-            r, g, b = ColorPickerFrame.Content.ColorPicker:GetColorRGB() 
+        if ColorPickerFrame.GetColorRGB then
+            r, g, b = ColorPickerFrame:GetColorRGB()
+        elseif ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker then
+            r, g, b = ColorPickerFrame.Content.ColorPicker:GetColorRGB()
         end
-        
+
         if r and g and b then
             local cc = LootProConfig.colors[colorKey]
             cc.r, cc.g, cc.b = r, g, b
@@ -375,7 +375,7 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
             end
         end
     end
-    
+
     local function CancelColor(prev)
         prev = prev or ColorPickerFrame.previousValues
         if not prev then return end
@@ -401,7 +401,7 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
             ColorPickerFrame:Show()
         end
     end)
-    
+
     f.Refresh = Update
     return f
 end

@@ -3,7 +3,7 @@ local addon = ns.addon
 
 addon.DEFAULTS = {
     locked = true,
-    cleanMode = true, 
+    cleanMode = true,
     minQualityOwn = 0,
     minQualityOther = 0,
     showFollowerXP = false,
@@ -50,7 +50,7 @@ addon.DEFAULTS = {
         repGain = {r = 0.1, g = 0.8, b = 0.8},
         repLoss = {r = 0.8, g = 0.1, b = 0.1},
         xp = {r = 0.7, g = 0.3, b = 1.0},
-        delver = {r = 1.0, g = 0.7, b = 0.2} 
+        delver = {r = 1.0, g = 0.7, b = 0.2}
     },
     notifications = {
         money = true, currency = true, loot = true, skill = true,
