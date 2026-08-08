@@ -5,6 +5,20 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.0] - 2026-08-08
+
+### Bug Fixes
+- Gear tags now appear on framed loot rows. The item level tag, and on Retail the new appearance, upgrade, and tertiary-stat tags, were being worked out for every gear drop and then thrown away before the row was drawn, so with Framed loot rows turned on none of them ever showed. Item level, new appearance, and upgrade have been missing there since 2.14.0, and the tertiary-stat tag since it shipped in 2.15.0. A combined row also picks up a tag now when a later drop resolves one the first drop was too early to know.
+- Combined rows show their running tally when loot icons are turned off. The count badge sits on the icon, so with icons hidden the Junk Items row never appeared to change and every gray after the first looked like it had vanished. The tally now shows in the row name instead, alongside the item total rather than in place of it.
+- Fewer repeat drops go missing during AoE looting. Two identical loot lines arriving in the same instant could cancel each other out when the feed was not showing item totals, so the second drop was discarded instead of combining into the row.
+- Alert on value no longer treats a brand new item as worthless. An item the game client had not cached yet reported no sell price, which read as zero, so the first drop of something valuable never set off the alert. It now tells unknown apart from worthless, and asks the client for the price so the next drop is covered.
+- Click through locked rows no longer leaves an item tooltip stuck on screen. With the option turned on and the cursor resting where rows appear, looting popped a tooltip that nothing could close.
+- Items that report progress instead of a stack size, such as Companion Experience and Boon of Power, no longer show a meaningless quantity on framed rows.
+
+### Improvements
+- Combining a repeat drop no longer re-positions every visible row, trimming wasted work during heavy AoE looting.
+- The What's New popup no longer describes Retail-only options to Classic players.
+
 ## [2.16.0] - 2026-07-31
 
 ### Bug Fixes

@@ -72,10 +72,10 @@ function addon:VendorGrayValue()
     return value
 end
 
--- Best-available unit value in copper. Vendor sell price for now, extendable to a market source later.
+-- Best-available unit value in copper, or nil while the item is uncached - 0 means cached and worthless. Vendor sell price for now, extendable to a market source later.
 function addon:ItemValue(link)
-    if not link then return 0 end
-    return (_select(11, _GetItemInfo(link))) or 0
+    if not link then return nil end
+    return (_select(11, _GetItemInfo(link)))
 end
 
 local sellFrame = CreateFrame("Frame", "LootProVendorFrame", UIParent, "BackdropTemplate")

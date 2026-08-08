@@ -15,6 +15,7 @@ local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInf
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 -- 12.0 "secret values": guard before any string op on a CHAT_MSG payload (nil pre-12.0).
 local _issecret = issecretvalue
 
@@ -239,18 +240,20 @@ local function IsRecentCurrency(name)
 end
 
 -- Final dedup on the fully-rendered line (count included) catches doubled LOOT lines the name dedup misses; a real second drop differs by count, so it still shows.
+-- Lines that render no count are identical for two same-tick drops, so those callers pass the live bag count as a salt on its own ring.
 local DISPLAY_DEDUP_WINDOW = 0.3
 local DISP_RING = 8
-local _dispStr, _dispTime, _dispIdx = {}, {}, 0
-local function IsDuplicateDisplay(line)
+local _dispStr, _dispSalt, _dispTime, _dispIdx = {}, {}, {}, 0
+local function IsDuplicateDisplay(line, salt)
     local now = _GetTime()
     for i = 1, DISP_RING do
-        if _dispStr[i] == line and (now - _dispTime[i]) <= DISPLAY_DEDUP_WINDOW then
+        if _dispStr[i] == line and _dispSalt[i] == salt and (now - _dispTime[i]) <= DISPLAY_DEDUP_WINDOW then
             return true
         end
     end
     _dispIdx = (_dispIdx % DISP_RING) + 1
     _dispStr[_dispIdx] = line
+    _dispSalt[_dispIdx] = salt
     _dispTime[_dispIdx] = now
     return false
 end
@@ -411,12 +414,16 @@ local function ApplyRowMouse(row)
         if LootProConfig.hoverPause and row.SetMouseMotionEnabled and row.SetMouseClickEnabled then
             row:SetMouseClickEnabled(false)
             row:SetMouseMotionEnabled(true)
+            row._noHover = false
         else
             row:EnableMouse(false)
+            -- No OnLeave can fire with the mouse off, so the manual tooltip refresh must skip this row or it strands a tooltip nothing closes.
+            row._noHover = true
         end
     else
         row:EnableMouse(true)
         if row.SetMouseClickEnabled then row:SetMouseClickEnabled(true) end
+        row._noHover = false
     end
 end
 
@@ -609,31 +616,42 @@ local function FindActiveRow(f, mergeKey)
     return nil
 end
 
-local function MergeIntoRow(f, row, amt, count, icon, link)
+-- The qty badge is a child of the icon, so an iconless row has nowhere to show a tally but its own name.
+local function RowNameText(row, count)
+    local text = row._baseName or ""
+    local n = row._mergeAmt or 1
+    if not row._hasIcon and n > 1 then text = text .. " x" .. n end
+    if count then text = text .. " (" .. count .. ")" end
+    return text .. (row._marker or "")
+end
+
+local function MergeIntoRow(f, row, amt, count, icon, link, marker)
     local from = row._mergeAmt or 1
     local to = from + (amt or 1)
     row._mergeAmt = to
-    if count then
-        row.name:SetText((row._baseName or "") .. " (" .. count .. ")")
-        -- A wider count can re-wrap the name and change the row height, so remeasure and relayout.
+    -- Every marker source is per-drop and cache-dependent, so a later drop can resolve a tag the first one could not.
+    local newMark = marker and marker ~= "" and marker ~= row._marker
+    if newMark then row._marker = marker end
+    if count or not row._hasIcon or newMark then
+        row.name:SetText(RowNameText(row, count))
+        -- A wider count can re-wrap the name and change the row height, so remeasure. Rows below reflow on their own relative anchors.
         LayoutItemRow(f, row)
-        LayoutRows(f)
     end
     if icon and row._hasIcon then row.icon:SetTexture(icon) end
     row.itemLink = link
     AnimateRowCount(row, from, to)
     StartRowFade(f, row)
-    if row:IsMouseOver() then Row_OnEnter(row) end
+    if not row._noHover and row:IsMouseOver() then Row_OnEnter(row) end
 end
 
 -- Border is quality-tinted, or the passed color for currency and money.
-local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link, mergeKey)
+local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link, mergeKey, marker)
     EnsureRows(f)
-    -- Junk collapses many different grays into one row, so it has no single owned count or link.
-    if mergeKey == "junk" then count, link = nil, nil end
+    -- Junk collapses many different grays into one row, so it has no single owned count, link or marker.
+    if mergeKey == "junk" then count, link, marker = nil, nil, nil end
     local existing = FindActiveRow(f, mergeKey)
     if existing then
-        MergeIntoRow(f, existing, amt, count, icon, link)
+        MergeIntoRow(f, existing, amt, count, icon, link, marker)
         return
     end
     local row = TakeRow(f)
@@ -645,6 +663,7 @@ local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, li
     row.mergeKey = mergeKey
     row._mergeAmt = amt or 1
     row._baseName = name or ""
+    row._marker = marker
     ApplyRowFont(f, row, true)
 
     local br, bg, bb
@@ -664,9 +683,7 @@ local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, li
     row.name:SetWordWrap(true)
     row.name:SetJustifyH("LEFT")
     row.name:SetJustifyV("TOP")
-    local nameText = name or ""
-    if count then nameText = nameText .. " (" .. count .. ")" end
-    row.name:SetText(nameText)
+    row.name:SetText(RowNameText(row, count))
     row.name:SetTextColor(br, bg, bb)
 
     row.cat:SetJustifyH("LEFT")
@@ -684,7 +701,7 @@ local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, li
     LayoutRows(f)
     StartRowFade(f, row)
     -- A recycled row can swap items under a resting cursor without firing OnEnter, so refresh its tooltip.
-    if row:IsMouseOver() then Row_OnEnter(row) end
+    if not row._noHover and row:IsMouseOver() then Row_OnEnter(row) end
 end
 
 local function RowText(f, text, r, g, b, isMoney)
@@ -853,9 +870,14 @@ local function ShowLoot(p, countStr)
     else
         line = "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr .. marker
     end
-    if IsDuplicateDisplay(line) then return end
+    local salt
+    if (p.noCount or countStr == "") and p.itemID and _GetItemCount then
+        salt = _GetItemCount(p.itemID, true)
+    end
+    if IsDuplicateDisplay(line, salt) then return end
     if LootProConfig.framedLoot then
-        RowItem(f, p.fIcon, p.fQuality, p.fName or p.cleaned, p.fCategory, p.amt, p.fCount, p.cR, p.cG, p.cB, p.fLink, p.fMergeKey)
+        -- No-count items carry an XP or charge figure in amt, not a stack size, so it must not reach the qty badge or the row tally.
+        RowItem(f, p.fIcon, p.fQuality, p.fName or p.cleaned, p.fCategory, (not p.noCount) and p.amt or 1, p.fCount, p.cR, p.cG, p.cB, p.fLink, p.fMergeKey, marker)
     else
         f.display:AddMessage(line, p.cR, p.cG, p.cB)
     end
@@ -865,7 +887,7 @@ local function PostDeferredLoot(p)
     -- At +0.1s BAG_UPDATE has landed so GetItemCount is already post-loot. Take the larger of it and the pre-loot snapshot plus amt so we neither double-count nor under-count.
     local live = (_GetItemCount and _GetItemCount(p.itemID, true)) or 0
     local cnt = math.max((p.preCount or 0) + p.amt, live)
-    p.fCount = cnt
+    p.fCount = (not p.noCount) and cnt or nil
     ShowLoot(p, CountSuffix(cnt))
 end
 
@@ -1615,7 +1637,12 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
                 if ra and ra.value and ra.value > 0 and self.ItemValue then
                     local unit = self:ItemValue(link)
-                    if unit and unit * amt >= ra.value then isValuable = true end
+                    if unit then
+                        if unit * amt >= ra.value then isValuable = true end
+                    elseif itemID and _RequestItemData then
+                        -- An uncached item has no sell price yet, so warm it for next time instead of reading the miss as worthless.
+                        _RequestItemData(itemID)
+                    end
                 end
                 if self.RareOnLoot then
                     self:RareOnLoot(q, isNotable, isValuable)
@@ -1692,6 +1719,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                             p.marker = marker
                             p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fMergeKey = fMergeKey
                             p.fCount = (not noCount) and cnt or nil
+                            p.itemID = itemID
                             ShowLoot(p, CountSuffix(cnt))
                         else
                             _lootSlot = (_lootSlot % POOL_SIZE) + 1
@@ -1714,14 +1742,16 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.cR, p.cG, p.cB = lr, lg, lb
                         p.marker = marker
                         p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
+                        p.itemID = itemID
                         ShowLoot(p, "")
                     end
                 else
                     local line = GetIconString(msg) .. msg .. marker
-                    if not IsDuplicateDisplay(line) then
+                    local salt = itemID and _GetItemCount and _GetItemCount(itemID, true)
+                    if not IsDuplicateDisplay(line, salt) then
                         if LootProConfig.framedLoot then
                             local nm = fName or lname or CleanMessage(msg, event)
-                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey)
+                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey, marker)
                         else
                             self.lootFrame.display:AddMessage(line, lr, lg, lb)
                         end

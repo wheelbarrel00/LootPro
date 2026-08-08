@@ -1501,18 +1501,20 @@ function ns.UI:Initialize()
     wnBody:SetJustifyH("LEFT")
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
+    -- New appearance, upgrade, and tertiary stat are retail-only tags. Item level is not, so Classic gets the shorter sentence.
+    local wnTags = addon.IS_RETAIL
+        and "Item level, new appearance, upgrade, and tertiary-stat tags were"
+        or "The item level tag was"
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.15.0:|r",
+        "|cFFEBB706What's new in 2.17.0:|r",
         " ",
-        "|cFFEBB706Cleaner loot feed|r  With framed loot rows on, the new Combine repeated drops option stacks repeats of an item into one row with a rolling count, folds gray junk into a single Junk Items row, and merges rapid money pickups into one running total.",
+        "|cFFEBB706Gear tags are back on framed rows|r  " .. wnTags .. " worked out for every gear drop and then thrown away before the row was drawn, so with framed loot rows on they never appeared. They now show the same way they always have in text mode.",
         " ",
-        "|cFFEBB706Pause the session|r  Pause the recap timer from the Recap tab or with /lp pause so AFK and loading time no longer drag down your gold and items per hour. It survives a /reload.",
+        "|cFFEBB706Nothing lost while AoE looting|r  Combined rows show their running tally even with loot icons turned off, so the Junk Items row no longer looks frozen, and fewer repeat drops go missing when several of the same item land at once.",
         " ",
-        "|cFFEBB706Alert on value|r  Set a gold amount on the Alerts tab and the rare-drop alert also fires when a single drop is worth at least that much.",
+        "|cFFEBB706Alert on value is more reliable|r  An item the game client had not cached yet reported no sell price, which read as worthless, so the first drop of something valuable never set off the alert. It now tells unknown apart from worthless.",
         " ",
-        "|cFFEBB706Smarter alerts|r  The notable alert now fires only for mounts, pets, and toys you have not collected, and a new option tags gear that has a tertiary stat (Leech, Avoidance, Speed, Indestructible).",
-        " ",
-        "|cFFEBB706Clearer options|r  Every option's tooltip now shows when you hover its text, and collectible tooltips can show when you already own a mount, pet, or toy.",
+        "|cFFEBB706Click through locked rows|r  Added in 2.16.0 on the Customization tab and easy to miss: while the readout is locked, clicks pass through framed rows to whatever is behind them. It no longer leaves an item tooltip stuck on screen.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
