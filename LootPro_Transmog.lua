@@ -28,6 +28,8 @@ local function EnsureInvalidator()
     invalidator = CreateFrame("Frame")
     invalidator:RegisterEvent("TRANSMOG_COLLECTION_SOURCE_ADDED")
     invalidator:RegisterEvent("TRANSMOG_COLLECTION_SOURCE_REMOVED")
+    -- The wardrobe streams in after login, so verdicts formed against a partial collection have to be dropped too.
+    invalidator:RegisterEvent("TRANSMOG_COLLECTION_UPDATED")
     invalidator:SetScript("OnEvent", function()
         _wipe(cache)
         cacheCount = 0
@@ -43,12 +45,13 @@ function addon:IsNewAppearance(link)
     local appearanceID, sourceID = GetSource(link)
     if not appearanceID or not sourceID or sourceID == 0 then return false end
 
-    local cached = cache[sourceID]
+    -- Keyed by appearance, not source: the verdict belongs to the appearance, so every sibling source of one look shares this entry.
+    local cached = cache[appearanceID]
     if cached ~= nil then return cached end
 
-    -- Transient nil sources: bail without caching, so a guess is never cached as truth.
+    -- Transient nil or not-yet-streamed empty sources: bail without caching, so a guess is never cached as truth.
     local sources = GetAllSources(appearanceID)
-    if not sources then return false end
+    if not sources or #sources == 0 then return false end
 
     EnsureInvalidator()
     local isNew = true
@@ -63,7 +66,7 @@ function addon:IsNewAppearance(link)
         _wipe(cache)
         cacheCount = 0
     end
-    cache[sourceID] = isNew
+    cache[appearanceID] = isNew
     cacheCount = cacheCount + 1
     return isNew
 end

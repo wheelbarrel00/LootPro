@@ -10,6 +10,7 @@ local _select = select
 local _format = string.format
 
 local CLASS_WEAPON, CLASS_ARMOR = 2, 4
+local ARMOR_COSMETIC = 5
 
 -- Equip location -> the inventory slot(s) it competes with; multi-slot types (rings/trinkets/one-hand weapons) win if they beat any one of them.
 local SLOTS = {
@@ -45,8 +46,13 @@ if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
     function addon:LootItemLevel(itemID, link)
         if not link then return nil end
 
-        local _, _, _, _, _, classID = _GetItemInfoInstant(link)
+        local _, _, _, equipLoc, _, classID, subclassID = _GetItemInfoInstant(link)
         if classID ~= CLASS_WEAPON and classID ~= CLASS_ARMOR then return nil end
+        -- Shirts, tabards and cosmetic armor carry no meaningful item level and would all read [1].
+        if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD"
+           or (addon.IS_RETAIL and classID == CLASS_ARMOR and subclassID == ARMOR_COSMETIC) then
+            return nil
+        end
 
         local ilvl = _GetDetailedItemLevelInfo(link)
         if not ilvl or ilvl == 0 then
@@ -66,6 +72,8 @@ if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
         end
         return tag
     end
+else
+    function addon.LootItemLevel() return nil end
 end
 
 if not (addon.IS_RETAIL and _GetDetailedItemLevelInfo and _GetItemInfoInstant and _GetInventoryItemLink) then
@@ -74,10 +82,17 @@ if not (addon.IS_RETAIL and _GetDetailedItemLevelInfo and _GetItemInfoInstant an
     return
 end
 
+-- GetItemStats builds a fresh table per call and one gear line asks twice about the same looted item. Only a real table is memoized, since nil just means the data has not loaded yet.
+local _statsLink, _statsTable
+local function ItemStats(link)
+    if link == _statsLink and _statsTable then return _statsTable end
+    local stats = _GetItemStats and _GetItemStats(link)
+    if stats then _statsLink, _statsTable = link, stats end
+    return stats
+end
+
 local PRIMARY_STAT_KEYS = { "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_INTELLECT_SHORT" }
-local function PrimaryStat(link)
-    if not _GetItemStats then return nil end
-    local stats = _GetItemStats(link)
+local function PrimaryStatOf(stats)
     if not stats then return nil end
     for i = 1, #PRIMARY_STAT_KEYS do
         local key = PRIMARY_STAT_KEYS[i]
@@ -102,16 +117,24 @@ function addon:IsUpgrade(itemID, link)
     end
 
     -- Flag only when an equipped slot holds the SAME armor/weapon type at a lower ilvl: this proves the player can use it, avoiding false "(upgrade)" on gear they can't equip. Conservative for cross-type weapon swaps.
-    local lootedPrimary = PrimaryStat(link)
+    local lootedPrimary, primaryRead
     for i = 1, #slots do
         local equipped = _GetInventoryItemLink("player", slots[i])
-        if equipped and _select(7, _GetItemInfoInstant(equipped)) == subclassID then
-            local equippedIlvl = _GetDetailedItemLevelInfo(equipped)
-            if equippedIlvl and lootedIlvl > equippedIlvl then
-                -- Same subclass can still carry the wrong primary stat, so require a match when both have one.
-                local eqPrimary = PrimaryStat(equipped)
-                if not lootedPrimary or not eqPrimary or lootedPrimary == eqPrimary then
-                    return true
+        if equipped then
+            -- Subclass ids repeat across item classes (a one-hand axe and a held-in-offhand are both subclass 0), so the class has to match too.
+            local eqClass, eqSub = _select(6, _GetItemInfoInstant(equipped))
+            if eqClass == classID and eqSub == subclassID then
+                local equippedIlvl = _GetDetailedItemLevelInfo(equipped)
+                if equippedIlvl and lootedIlvl > equippedIlvl then
+                    -- Same subclass can still carry the wrong primary stat, so require a match when both have one.
+                    if not primaryRead then
+                        primaryRead = true
+                        lootedPrimary = PrimaryStatOf(ItemStats(link))
+                    end
+                    local eqPrimary = PrimaryStatOf(_GetItemStats and _GetItemStats(equipped))
+                    if not lootedPrimary or not eqPrimary or lootedPrimary == eqPrimary then
+                        return true
+                    end
                 end
             end
         end
@@ -125,16 +148,22 @@ local TERTIARY_KEYS = {
     "ITEM_MOD_CR_SPEED_SHORT",
     "ITEM_MOD_CR_STURDINESS_SHORT",
 }
+local tertiaryTags = {}
 function addon:TertiaryStatTag(link)
     if not (_GetItemStats and link) then return nil end
     local _, _, _, _, _, classID = _GetItemInfoInstant(link)
     if classID ~= CLASS_WEAPON and classID ~= CLASS_ARMOR then return nil end
-    local stats = _GetItemStats(link)
+    local stats = ItemStats(link)
     if not stats then return nil end
     for i = 1, #TERTIARY_KEYS do
         local key = TERTIARY_KEYS[i]
         if (stats[key] or 0) > 0 then
-            return " |cff00e6b8(" .. (_G[key] or "Tertiary") .. ")|r"
+            local tag = tertiaryTags[key]
+            if not tag then
+                tag = " |cff00e6b8(" .. (_G[key] or "Tertiary") .. ")|r"
+                tertiaryTags[key] = tag
+            end
+            return tag
         end
     end
     return nil

@@ -4,13 +4,16 @@ local U = ns.U
 
 ns.UI = {}
 
+-- Shared across every panel, button and tab: SetBackdrop only reads the table, it never mutates it.
+local PANEL_BACKDROP = {
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+}
+
 local function CreateVersionedMainFrame(name, parent)
     local f = CreateFrame("Frame", name, parent, "BackdropTemplate")
-    f:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
+    f:SetBackdrop(PANEL_BACKDROP)
     f:SetBackdropColor(0.05, 0.05, 0.05, 0.95)
     f:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
     f:SetMovable(true)
@@ -25,11 +28,7 @@ local function CreateCloseButton(parent)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(20, 20)
     b:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -6, -6)
-    b:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
+    b:SetBackdrop(PANEL_BACKDROP)
     b:SetBackdropColor(0.30, 0.00, 0.00, 0.80)
     b:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
 
@@ -48,14 +47,15 @@ local function CreateCloseButton(parent)
     return b
 end
 
+local function StyledButton_OnEnter(self) self:SetBackdropColor(0.541, 0.024, 0.004, 1.0) end
+local function StyledButton_OnLeave(self) self:SetBackdropColor(0.427, 0.020, 0.004, 1.0) end
+local function StyledButton_SetText(self, t) self.label:SetText(t) end
+local function StyledButton_GetFontString(self) return self.label end
+
 local function CreateStyledButton(parent, width, height, label)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(width, height)
-    btn:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
+    btn:SetBackdrop(PANEL_BACKDROP)
     btn:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
     btn:SetBackdropBorderColor(0.10, 0.00, 0.00, 1.0)
 
@@ -66,15 +66,11 @@ local function CreateStyledButton(parent, width, height, label)
     text:SetTextColor(0.922, 0.718, 0.024, 1.0)
     btn.label = text
 
-    btn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.541, 0.024, 0.004, 1.0)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.427, 0.020, 0.004, 1.0)
-    end)
+    btn:SetScript("OnEnter", StyledButton_OnEnter)
+    btn:SetScript("OnLeave", StyledButton_OnLeave)
 
-    btn.SetText = function(self, t) self.label:SetText(t) end
-    btn.GetFontString = function(self) return self.label end
+    btn.SetText = StyledButton_SetText
+    btn.GetFontString = StyledButton_GetFontString
     return btn
 end
 
@@ -206,11 +202,7 @@ function ns.UI:Initialize()
             tab:SetPoint("LEFT", lastTab, "RIGHT", TAB_PADDING, 0)
         end
 
-        tab:SetBackdrop({
-            bgFile   = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8",
-            edgeSize = 1,
-        })
+        tab:SetBackdrop(PANEL_BACKDROP)
         tab:SetBackdropColor(0.15, 0.15, 0.15, 1.0)
         tab:SetBackdropBorderColor(0.25, 0.25, 0.25, 0.50)
 
@@ -811,7 +803,7 @@ function ns.UI:Initialize()
                 local qc = _G.ITEM_QUALITY_COLORS
                 for _, r in ipairs(addon:RecapRarityList()) do
                     local hex = (qc and qc[r.quality] and qc[r.quality].hex) or "|cFFFFFFFF"
-                    parts[#parts + 1] = hex .. r.count .. " " .. string.lower(r.name) .. "|r"
+                    parts[#parts + 1] = hex .. r.count .. " " .. r.name .. "|r"
                 end
                 if #parts > 0 then
                     lines[#lines + 1] = "    " .. table.concat(parts, ", ")
@@ -1366,12 +1358,19 @@ function ns.UI:Initialize()
         sellNowBtn:SetScript("OnClick", function()
             addon:VendorStart(true)
         end)
+        local grayTipAt, grayTipLine
         sellNowBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(0.541, 0.024, 0.004, 1.0)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Sell Grays Now", 1, 1, 1)
             if addon.VendorGrayValue then
-                GameTooltip:AddLine("Current vendor value: " .. addon:RecapFormatMoney(addon:VendorGrayValue()), 0.8, 0.8, 0.8)
+                -- Each hover otherwise runs a full bag scan, and the bags cannot meaningfully change inside a second.
+                local now = GetTime()
+                if not grayTipLine or now - grayTipAt > 1 then
+                    grayTipAt = now
+                    grayTipLine = "Current vendor value: " .. addon:RecapFormatMoney(addon:VendorGrayValue())
+                end
+                GameTooltip:AddLine(grayTipLine, 0.8, 0.8, 0.8)
             end
             GameTooltip:AddLine("Requires an open merchant window.", 0.6, 0.6, 0.6)
             GameTooltip:Show()
@@ -1736,6 +1735,11 @@ function ns.UI:Initialize()
                 if fs then fs:SetTextColor(c.r, c.g, c.b) end
             end
         end
+        lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows")
+        -- Recap/Alerts/Block/Vendor sync their widgets in OnShow, and Show() never re-fires it on the page that is already visible.
+        local shownPage = currentActiveTab and pages[currentActiveTab]
+        local onShow = shownPage and shownPage:GetScript("OnShow")
+        if onShow then onShow(shownPage) end
     end
 
     ns.UI:RefreshAllWidgets()

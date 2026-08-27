@@ -115,6 +115,9 @@ end
 
 function addon:ResetDefaults()
     LootProConfig = self:DeepCopy(addon.DEFAULTS)
+    LootProConfig.whatsNewSeen = addon.WHATS_NEW
+    -- LibDBIcon captured the old minimap table when it registered, so hand it the new one or drag positions stop persisting.
+    if self.LDBIcon then self.LDBIcon:Refresh("LootPro", LootProConfig.minimap) end
     self:UpdateAllVisuals()
     if ns.UI and ns.UI.RefreshAllWidgets then ns.UI:RefreshAllWidgets() end
     print("|cFF00FF00[LootPro]|r Settings reset to defaults.")

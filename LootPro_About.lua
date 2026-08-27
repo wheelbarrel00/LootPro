@@ -27,6 +27,32 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.17.2", date = "2026-08-26",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "Looting a caged battle pet no longer throws a Lua error. With Framed loot rows and loot icons both turned on, every caged pet drop raised an error and the drop never reached the feed.",
+                    "The session recap no longer undercounts currency. Two separate gains of the same currency arriving close together were read as one message delivered twice, so only the first counted toward the session total. This showed up most while looting a pile of mobs in quick succession.",
+                    "The running total beside a loot line is accurate again. When your bags updated before the loot message arrived, the total was inflated by the size of the drop, and a party member's pickup was added to your own total instead of being left out of it.",
+                    "Reset to Defaults now refreshes everything on screen. The Recap, Alerts, Block, and Vendor tabs kept showing your old settings until you switched tabs and back, and the Lock Windows button could be left describing the opposite of what it would do.",
+                    "Reset to Defaults no longer stops the minimap button from remembering where you drag it, and no longer re-shows the What's New popup for a version you had already seen.",
+                    "Shirts, tabards, and cosmetic armor no longer show a meaningless item level of 1 on loot lines.",
+                    "Repeat drops of the same item during AoE looting are told apart more reliably, so fewer of them go missing from the feed or from a combined row's tally.",
+                    "The gear upgrade tag no longer compares a weapon against a held off-hand item, which could tag a plain higher item level weapon as an upgrade over something it cannot actually replace. (Retail)",
+                    "The new appearance marker no longer calls an outfit new while your collection is still loading in after login, and it updates once loading finishes. (Retail)",
+                    "The Sell Grays progress bar now fills all the way when some items are skipped, and a skipped item no longer stalls the run for a moment.",
+                } },
+                { head = "Improvements", items = {
+                    "Item tooltips do far less work while the cursor rests on them. The loot count, sell price, stack value, and already-owned lines are reused instead of being rebuilt several times a second, and hovering something that cannot stack skips the stack-value work entirely.",
+                    "Scanning your bags for grays is much cheaper. Items already known not to be gray are ruled out before the costly check, which you will notice when opening a vendor and when hovering Sell Grays Now.",
+                    "Gear drops read their stats once per line instead of up to four times, and the item level and tertiary stat tags are reused between drops.",
+                    "The new appearance check now shares one answer across every source of the same look, so repeat drops of gear you have already seen resolve without re-checking. (Retail)",
+                    "Less work per loot line all round: icons, row fonts, and matched names are reused rather than rebuilt, and the loot feed stops running timers once it has nothing left to fade.",
+                    "Dragging a color on the Colors tab no longer rebuilds the whole test feed on every small movement.",
+                    "Your session is no longer written to disk when you log out, since only a /reload can restore it.",
+                } },
+            },
+        },
+        {
             version = "2.17.0", date = "2026-08-08",
             sections = {
                 { head = "Bug Fixes", items = {

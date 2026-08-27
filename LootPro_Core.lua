@@ -6,6 +6,7 @@ local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 local _tonumber, _tostring = tonumber, tostring
 local _match, _format, _gsub, _find = string.match, string.format, string.gsub, string.find
 local _select = select
+local _wipe = wipe
 local _GetTime = GetTime
 local _After = C_Timer and C_Timer.After
 local _NewTicker = C_Timer and C_Timer.NewTicker
@@ -128,23 +129,37 @@ local function IsSelfLoot(msg)
     return false
 end
 
-local function GetIconString(msg)
-    if not msg or type(msg) ~= "string" then return "" end
+local ICON_MARKUP = {}
+local ICON_MARKUP_CAP = 256
+local iconMarkupCount = 0
 
-    local itemID = _match(msg, "item:(%d+)")
-    if itemID and LootProConfig.showLootIcons then
-        local icon
-        if _GetItemInfoInstant then
-            local _, _, _, _, _icon = _GetItemInfoInstant(itemID)
-            icon = _icon
-        else
-            icon = _select(10, _GetItemInfo(itemID))
-        end
-        if icon then
-            return "|T" .. icon .. ":0|t "
-        end
+local function GetIconString(msg, itemID)
+    if not (LootProConfig and LootProConfig.showLootIcons) then return "" end
+    if not itemID then
+        if not msg or type(msg) ~= "string" then return "" end
+        itemID = _match(msg, "item:(%d+)")
+        if not itemID then return "" end
     end
-    return ""
+
+    local icon
+    if _GetItemInfoInstant then
+        icon = _select(5, _GetItemInfoInstant(itemID))
+    else
+        icon = _select(10, _GetItemInfo(itemID))
+    end
+    if not icon then return "" end
+
+    local markup = ICON_MARKUP[icon]
+    if not markup then
+        if iconMarkupCount >= ICON_MARKUP_CAP then
+            _wipe(ICON_MARKUP)
+            iconMarkupCount = 0
+        end
+        markup = "|T" .. icon .. ":0|t "
+        ICON_MARKUP[icon] = markup
+        iconMarkupCount = iconMarkupCount + 1
+    end
+    return markup
 end
 
 local function TrailerRepl(m)
@@ -538,6 +553,11 @@ local function ApplyRowFont(f, row, twoLine)
     local s = LootProConfig[f.configKey]
     local fontPath = (LSM and LSM:Fetch("font", s.font)) or DEFAULT_FONT
     local flags = (s.outline == "NONE") and "" or (s.outline or "OUTLINE")
+    -- Pooled rows alternate between text and item use, so a row reused as an item row still has to font row.cat.
+    if row._fontPath == fontPath and row._fontSize == s.size and row._fontFlags == flags and row._fontTwoLine == twoLine then
+        return s
+    end
+    row._fontPath, row._fontSize, row._fontFlags, row._fontTwoLine = fontPath, s.size, flags, twoLine
     SafeSetFont(row.name, fontPath, s.size, flags)
     if twoLine then
         SafeSetFont(row.cat, fontPath, math.max(9, math.floor(s.size * 0.55)), flags)
@@ -824,8 +844,8 @@ local function LootTextEmit(text, r, g, b)
     else f.display:AddMessage(text, r, g, b) end
 end
 
--- Pooled param tables + pre-bound timer fns (rotated per event) so the hot loot path allocates zero closures; a slot is reused only after POOL_SIZE events.
-local POOL_SIZE = 16
+-- Pooled param tables + pre-bound timer fns (rotated per event) so the hot loot path allocates zero closures. A slot is reused only after POOL_SIZE events, sized so an AoE burst cannot wrap the pool inside the 0.1s defer window and force a line out before its BAG_UPDATE lands.
+local POOL_SIZE = 48
 local _curParams = {}
 local _curFns    = {}
 local _lootParams = {}
@@ -870,8 +890,9 @@ local function ShowLoot(p, countStr)
     else
         line = "+" .. p.amt .. " " .. p.iconStr .. p.cleaned .. countStr .. marker
     end
-    local salt
-    if (p.noCount or countStr == "") and p.itemID and _GetItemCount then
+    -- Deferred lines all post in the same frame, so the bag count taken back when the event arrived is what separates two real drops from one message delivered twice.
+    local salt = p.preCount
+    if not salt and (p.noCount or countStr == "") and p.itemID and _GetItemCount then
         salt = _GetItemCount(p.itemID, true)
     end
     if IsDuplicateDisplay(line, salt) then return end
@@ -884,10 +905,14 @@ local function ShowLoot(p, countStr)
 end
 
 local function PostDeferredLoot(p)
-    -- At +0.1s BAG_UPDATE has landed so GetItemCount is already post-loot. Take the larger of it and the pre-loot snapshot plus amt so we neither double-count nor under-count.
+    -- A slot reused before its timer fires flushes itself early, so the stale timer has to find the flag down and bail.
+    if not p._pending then return end
+    p._pending = false
+    -- At +0.1s BAG_UPDATE has landed, so the live read is already post-loot. Adding amt again double-counts, and a party member's amt was never ours to add.
     local live = (_GetItemCount and _GetItemCount(p.itemID, true)) or 0
-    local cnt = math.max((p.preCount or 0) + p.amt, live)
-    p.fCount = (not p.noCount) and cnt or nil
+    local cnt = live
+    if cnt == 0 and p.isSelf then cnt = (p.preCount or 0) + p.amt end
+    p.fCount = (not p.noCount) and cnt > 0 and cnt or nil
     ShowLoot(p, CountSuffix(cnt))
 end
 
@@ -917,11 +942,13 @@ local function SweepReadout(f)
     if disp:GetNumMessages() == 0 then return end
     local idle = _GetTime() - (disp._lastAdd or 0)
     local life = LineLife(disp, f.configKey)
-    if idle < life or (f.IsMouseOver and f:IsMouseOver()) then
+    if idle < life then
         f._sweepPending = true
         if _After then _After(math.max(0.3, life - idle), f._sweepFn) end
         return
     end
+    -- A parked cursor would otherwise re-arm a timer every 0.3s forever. OnLeave schedules a fresh sweep on the way out.
+    if f.IsMouseOver and f:IsMouseOver() then return end
     disp:Clear()
 end
 
@@ -1179,6 +1206,17 @@ function addon:UpdateAllVisuals()
     end
 end
 
+local function TestTex(itemID, fallback)
+    if not LootProConfig.showLootIcons then return nil end
+    local tex = _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID))
+    return tex or fallback
+end
+
+local function TestLootIcon(itemID, fallback)
+    local tex = TestTex(itemID, fallback)
+    return tex and ("|T" .. tex .. ":0|t ") or ""
+end
+
 function addon:PostTestMessages()
     self.combatFrame.display:Clear()
     self.lootFrame.display:Clear()
@@ -1196,19 +1234,10 @@ function addon:PostTestMessages()
         .. "32 |TInterface\\MoneyFrame\\UI-CopperIcon:0|t "
     LootTextEmit("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
 
-    local function TestTex(itemID, fallback)
-        if not LootProConfig.showLootIcons then return nil end
-        local tex = _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID))
-        return tex or fallback
-    end
     if LootProConfig.framedLoot then
         RowItem(self.lootFrame, TestTex(241308, 134414), 3, "Light's Potential", "Consumable", 10, 20, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(241308)))
         RowItem(self.lootFrame, TestTex(259085, 134414), 4, "Void-Touched Augment Rune", "Consumable", 5, 10, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(259085)))
     else
-        local function TestLootIcon(itemID, fallback)
-            local tex = TestTex(itemID, fallback)
-            return tex and ("|T" .. tex .. ":0|t ") or ""
-        end
         self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
         self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
     end
@@ -1332,12 +1361,21 @@ local _LootSlot        = LootSlot
 local _LootSlotHasItem = LootSlotHasItem
 local _IsModifiedClick = IsModifiedClick
 
-local speedyLoot = { ticker = nil, lastCount = nil }
+local speedyLoot = { ticker = nil, lastCount = nil, slot = 0 }
 
 local function SpeedyStop()
     if speedyLoot.ticker then
         speedyLoot.ticker:Cancel()
         speedyLoot.ticker = nil
+    end
+end
+
+local function SpeedyTick()
+    if speedyLoot.slot >= 1 then
+        if _LootSlotHasItem(speedyLoot.slot) then _LootSlot(speedyLoot.slot) end
+        speedyLoot.slot = speedyLoot.slot - 1
+    else
+        SpeedyStop()
     end
 end
 
@@ -1351,15 +1389,8 @@ local function SpeedyLootReady()
     speedyLoot.lastCount = n
 
     SpeedyStop()
-    local slot = n
-    speedyLoot.ticker = _NewTicker and _NewTicker(0.03, function()
-        if slot >= 1 then
-            if _LootSlotHasItem(slot) then _LootSlot(slot) end
-            slot = slot - 1
-        else
-            SpeedyStop()
-        end
-    end, n + 1)
+    speedyLoot.slot = n
+    speedyLoot.ticker = _NewTicker and _NewTicker(0.03, SpeedyTick, n + 1)
     if not speedyLoot.ticker then
         for i = n, 1, -1 do
             if _LootSlotHasItem(i) then _LootSlot(i) end
@@ -1541,7 +1572,8 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
 
             -- Mark/check the dedup synchronously (before scheduling): deferring to the timer would let two same-frame events both see an empty cache and both display.
-            local dedupKey = currencyName or msg
+            -- The amount is part of the key because this return also gates the recap tally. A double-fire repeats the exact amount, two real gains usually differ.
+            local dedupKey = (currencyName or msg) .. "#" .. amt
             if IsRecentCurrency(dedupKey) then return end
             MarkCurrencyShown(dedupKey)
 
@@ -1693,7 +1725,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
                 local fIcon, fCat, fName, fMergeKey
                 if LootProConfig.framedLoot then
-                    fIcon = LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID or link)) or nil
+                    -- Caged pets loot as |Hbattlepet: links, so both extractors miss and GetItemInfoInstant would throw on a nil source.
+                    local iconSrc = itemID or link
+                    fIcon = iconSrc and LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(iconSrc)) or nil
                     fCat = LootCategory(link, itemID)
                     fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
                     if LootProConfig.mergeRows then
@@ -1709,35 +1743,29 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     local noCount = IsNoCountItem(cleaned)
 
                     if itemID and LootProConfig.showLootCounts and _GetItemNameByID then
-                        -- GetItemCount often returns the PRE-loot total, so add amt to reflect the post-loot count.
-                        if itemID and _GetItemNameByID and _GetItemNameByID(itemID) then
-                            local cnt = ((_GetItemCount and _GetItemCount(itemID, true)) or 0) + amt
-                            local p = _lootSync
-                            p.iconStr = GetIconString(msg); p.cleaned = cleaned
-                            p.amt = amt; p.noCount = noCount
-                            p.cR, p.cG, p.cB = lr, lg, lb
-                            p.marker = marker
-                            p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fMergeKey = fMergeKey
-                            p.fCount = (not noCount) and cnt or nil
-                            p.itemID = itemID
-                            ShowLoot(p, CountSuffix(cnt))
-                        else
-                            _lootSlot = (_lootSlot % POOL_SIZE) + 1
-                            local lp = _lootParams[_lootSlot]
-                            lp.iconStr = GetIconString(msg)
-                            lp.cleaned = cleaned
-                            lp.amt     = amt
-                            lp.noCount = noCount
-                            lp.itemID  = itemID
-                            lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
-                            lp.cR, lp.cG, lp.cB = lr, lg, lb
-                            lp.marker  = marker
-                            lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
+                        -- The running total is only trustworthy once BAG_UPDATE has landed, so every counted line defers and reads it live.
+                        _lootSlot = (_lootSlot % POOL_SIZE) + 1
+                        local lp = _lootParams[_lootSlot]
+                        if lp._pending then PostDeferredLoot(lp) end
+                        lp._pending = true
+                        lp.iconStr = GetIconString(msg, itemID)
+                        lp.cleaned = cleaned
+                        lp.amt     = amt
+                        lp.noCount = noCount
+                        lp.itemID  = itemID
+                        lp.isSelf  = isSelf
+                        lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
+                        lp.cR, lp.cG, lp.cB = lr, lg, lb
+                        lp.marker  = marker
+                        lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
+                        if _After and not addon._regressionTest then
                             _After(0.1, _lootFns[_lootSlot])
+                        else
+                            PostDeferredLoot(lp)
                         end
                     else
                         local p = _lootSync
-                        p.iconStr = GetIconString(msg); p.cleaned = cleaned
+                        p.iconStr = GetIconString(msg, itemID); p.cleaned = cleaned
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
                         p.marker = marker
@@ -1746,7 +1774,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         ShowLoot(p, "")
                     end
                 else
-                    local line = GetIconString(msg) .. msg .. marker
+                    local line = GetIconString(msg, itemID) .. msg .. marker
                     local salt = itemID and _GetItemCount and _GetItemCount(itemID, true)
                     if not IsDuplicateDisplay(line, salt) then
                         if LootProConfig.framedLoot then

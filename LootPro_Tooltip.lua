@@ -1,12 +1,19 @@
 local addonName, ns = ...
 local addon = ns.addon
 
-local _tonumber = tonumber
-local _match = string.match
+local _find = string.find
 local _select = select
 local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 local _GetContainerItemInfo = C_Container and C_Container.GetContainerItemInfo
+local _GetContainerItemID = C_Container and C_Container.GetContainerItemID
 local _issecret = issecretvalue
+
+-- GameTooltip reruns its setter about five times a second while the cursor rests on an item, so each line is memoized against what it was built from.
+local _lootID, _lootN, _lootLine
+local _sellID, _sellV, _sellLine
+local _stackID, _stackN, _stackLine
+local OWNED_LINE = {}
 
 local function GetTipItemLink(tooltip)
     if tooltip and tooltip.GetItem then
@@ -23,21 +30,25 @@ end
 local function AddInfo(tooltip)
     if not LootProConfig then return end
     local wantLoot = LootProConfig.tooltipLoots and addon.RecapItemCount
-    local wantSell = LootProConfig.tooltipSell
+    local wantSell = LootProConfig.tooltipSell and addon.RecapFormatMoney
     local wantColl = LootProConfig.tooltipCollected and addon.CollectibleOwned
     if not (wantLoot or wantSell or wantColl) then return end
 
     local link = GetTipItemLink(tooltip)
     if not link or (_issecret and _issecret(link)) then return end
-    local itemID = _tonumber(_match(link, "item:(%d+)"))
+    local itemID = _GetItemInfoInstant and _GetItemInfoInstant(link)
     -- A caged pet has a battlepet link and no item id, so only the collectible check can read it.
-    local caged = not itemID and _match(link, "|Hbattlepet:%d+") ~= nil
+    local caged = not itemID and _find(link, "|Hbattlepet:", 1, true) ~= nil
     if not (itemID or caged) then return end
 
     if wantLoot and itemID then
         local n = addon:RecapItemCount(itemID)
         if n and n > 0 then
-            tooltip:AddLine("|cFFFF2222LootPro|r  Looted " .. n .. "x this session", 1, 1, 1)
+            if itemID ~= _lootID or n ~= _lootN then
+                _lootID, _lootN = itemID, n
+                _lootLine = "|cFFFF2222LootPro|r  Looted " .. n .. "x this session"
+            end
+            tooltip:AddLine(_lootLine, 1, 1, 1)
         end
     end
 
@@ -45,14 +56,23 @@ local function AddInfo(tooltip)
     if wantSell and itemID then
         local sell = _select(11, _GetItemInfo(link))
         if sell and sell > 0 then
-            tooltip:AddLine("|cFFFF2222LootPro|r  Sell: " .. addon:RecapFormatMoney(sell), 1, 1, 1)
+            if itemID ~= _sellID or sell ~= _sellV then
+                _sellID, _sellV = itemID, sell
+                _sellLine = "|cFFFF2222LootPro|r  Sell: " .. addon:RecapFormatMoney(sell)
+            end
+            tooltip:AddLine(_sellLine, 1, 1, 1)
         end
     end
 
     if wantColl then
         local owned, kind = addon:CollectibleOwned(itemID, link)
         if owned == true and kind then
-            tooltip:AddLine("|cFFFF2222LootPro|r  You already own this " .. kind .. ".", 1, 1, 1)
+            local line = OWNED_LINE[kind]
+            if not line then
+                line = "|cFFFF2222LootPro|r  You already own this " .. kind .. "."
+                OWNED_LINE[kind] = line
+            end
+            tooltip:AddLine(line, 1, 1, 1)
         end
     end
 end
@@ -72,16 +92,22 @@ elseif _G.GameTooltip and _G.GameTooltip.HookScript then
     end
 end
 
-if _GetContainerItemInfo and _G.GameTooltip and _G.GameTooltip.SetBagItem then
+if _GetContainerItemInfo and _GetContainerItemID and _G.GameTooltip and _G.GameTooltip.SetBagItem then
     hooksecurefunc(_G.GameTooltip, "SetBagItem", function(self, bag, slot)
-        if not (LootProConfig and LootProConfig.tooltipSell) then return end
+        if not (LootProConfig and LootProConfig.tooltipSell and addon.RecapFormatMoney) then return end
+        -- GetContainerItemInfo builds a table per call, and the item id already settles whether this slot can stack or sell at all.
+        local id = _GetContainerItemID(bag, slot)
+        if not id then return end
+        local maxStack, _, _, sell = _select(8, _GetItemInfo(id))
+        if not maxStack or maxStack <= 1 or not sell or sell <= 0 then return end
         local info = _GetContainerItemInfo(bag, slot)
         if not info or info.hasNoValue or not info.stackCount or info.stackCount <= 1 then return end
-        local sell = info.itemID and _select(11, _GetItemInfo(info.itemID))
-        if sell and sell > 0 then
-            self:AddLine("|cFFFF2222LootPro|r  Stack of " .. info.stackCount .. ": "
-                .. addon:RecapFormatMoney(sell * info.stackCount), 1, 1, 1)
-            self:Show()
+        if id ~= _stackID or info.stackCount ~= _stackN then
+            _stackID, _stackN = id, info.stackCount
+            _stackLine = "|cFFFF2222LootPro|r  Stack of " .. info.stackCount .. ": "
+                .. addon:RecapFormatMoney(sell * info.stackCount)
         end
+        self:AddLine(_stackLine, 1, 1, 1)
+        self:Show()
     end)
 end

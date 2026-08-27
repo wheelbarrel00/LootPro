@@ -1,8 +1,8 @@
 local addonName, ns = ...
 local addon = ns.addon
 
-local _GetItemInfoInstant = GetItemInfoInstant
-local _GetItemInfo = GetItemInfo
+local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _select = select
 local _tonumber = tonumber
@@ -79,6 +79,15 @@ function addon:WatchRemove(index)
     return false
 end
 
+-- The watch and block matchers lowercase the same loot name on the same event, so the last one is kept.
+local _lowerFrom, _lowerTo
+local function LowerName(name)
+    if name ~= _lowerFrom then
+        _lowerFrom, _lowerTo = name, name:lower()
+    end
+    return _lowerTo
+end
+
 function addon:WatchMatch(itemID, name)
     local wl = LootProConfig and LootProConfig.watchlist
     if not wl or not wl.items then return nil end
@@ -87,7 +96,7 @@ function addon:WatchMatch(itemID, name)
         if e.id and itemID and e.id == itemID then
             return e
         elseif e.key and name then
-            lname = lname or name:lower()
+            lname = lname or LowerName(name)
             if lname:find(e.key, 1, true) then
                 return e
             end
@@ -135,7 +144,7 @@ function addon:BlockMatch(name)
     local bl = LootProConfig and LootProConfig.lootBlacklist
     if not bl or not bl.items or not name then return false end
     if #bl.items == 0 then return false end
-    local lname = name:lower()
+    local lname = LowerName(name)
     for _, e in ipairs(bl.items) do
         if e.key and lname:find(e.key, 1, true) then
             return true

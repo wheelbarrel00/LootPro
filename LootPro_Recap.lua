@@ -14,15 +14,16 @@ local PER_ITEM_CAP = 500
 -- Only honor the reload flag if stamped within this window. A crash after a /reload leaves a stale flagged blob, and a relaunch always takes far longer than a real /reload.
 local RELOAD_MAX_GAP = 120
 
+-- Stored lowercase because both readers render them mid-sentence, as in "5 epic, 3 rare".
 local RARITY_NAMES = {
-    [0] = "Poor",
-    [1] = "Common",
-    [2] = "Uncommon",
-    [3] = "Rare",
-    [4] = "Epic",
-    [5] = "Legendary",
-    [6] = "Artifact",
-    [7] = "Heirloom",
+    [0] = "poor",
+    [1] = "common",
+    [2] = "uncommon",
+    [3] = "rare",
+    [4] = "epic",
+    [5] = "legendary",
+    [6] = "artifact",
+    [7] = "heirloom",
 }
 
 local session
@@ -102,8 +103,8 @@ function addon:RecapLoad()
     if recapLoaded then return end
     recapLoaded = true
     local saved = _G.LootProSession
-    if type(saved) == "table" and saved.__reload
-       and saved.__stamp and (_time() - saved.__stamp) < RELOAD_MAX_GAP then
+    local stamp = type(saved) == "table" and tonumber(saved.__stamp)
+    if stamp and saved.__reload and (_time() - stamp) < RELOAD_MAX_GAP then
         session = RestoreSession(saved)
     else
         session = NewSession()
@@ -114,7 +115,8 @@ end
 function addon:RecapPersist()
     session.__reload = reloadIntent or nil
     session.__stamp = reloadIntent and _time() or nil
-    _G.LootProSession = session
+    -- Only a /reload restores this, so a normal logout would write the whole session to disk for nothing.
+    _G.LootProSession = reloadIntent and session or nil
 end
 
 function addon:RecapDetachSession()
@@ -316,7 +318,7 @@ function addon:RecapPrint()
         local qc = _G.ITEM_QUALITY_COLORS
         for _, r in ipairs(self:RecapRarityList()) do
             local hex = (qc and qc[r.quality] and qc[r.quality].hex) or "|cFFFFFFFF"
-            parts[#parts + 1] = _format("%s%d %s|r", hex, r.count, r.name:lower())
+            parts[#parts + 1] = _format("%s%d %s|r", hex, r.count, r.name)
         end
         if #parts > 0 then
             print("           " .. table.concat(parts, ", "))

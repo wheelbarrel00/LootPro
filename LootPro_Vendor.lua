@@ -3,8 +3,9 @@ local addon = ns.addon
 
 local _format = string.format
 local _select = select
-local _GetItemInfo = GetItemInfo
-local _GetItemInfoInstant = GetItemInfoInstant
+local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _GetMoney = GetMoney
 local _After = C_Timer and C_Timer.After
@@ -14,6 +15,7 @@ local _issecret = issecretvalue
 local _Container = C_Container
 local _GetNumSlots  = (_Container and _Container.GetContainerNumSlots)  or GetContainerNumSlots
 local _GetSlotInfo  = (_Container and _Container.GetContainerItemInfo)  or GetContainerItemInfo
+local _GetSlotID    = (_Container and _Container.GetContainerItemID)    or GetContainerItemID
 local _UseContainer = (_Container and _Container.UseContainerItem)      or UseContainerItem
 
 local NUM_BAGS = (NUM_BAG_SLOTS or 4)
@@ -35,12 +37,24 @@ end
 
 local entryPool = {}
 
+-- ReadSlot builds an info table per occupied slot and almost nothing in a bag is gray. An uncached quality reads nil and still falls through, so no gray is missed.
+local function MaybeGray(bag, slot)
+    if not (_GetSlotID and _GetItemQualityByID) then return true end
+    local id = _GetSlotID(bag, slot)
+    if not id then return false end
+    local q = _GetItemQualityByID(id)
+    return q == nil or q == 0
+end
+
 local function BuildGrayList(collect)
     local value, count = 0, 0
     for bag = 0, NUM_BAGS do
         local slots = _GetNumSlots(bag) or 0
         for slot = 1, slots do
-            local link, quality, noValue, locked, itemID, stackCount = ReadSlot(bag, slot)
+            local link, quality, noValue, locked, itemID, stackCount
+            if MaybeGray(bag, slot) then
+                link, quality, noValue, locked, itemID, stackCount = ReadSlot(bag, slot)
+            end
             if link and not (_issecret and _issecret(link))
                and quality == 0 and not noValue and not locked then
                 local classID = itemID and _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
@@ -74,7 +88,7 @@ end
 
 -- Best-available unit value in copper, or nil while the item is uncached - 0 means cached and worthless. Vendor sell price for now, extendable to a market source later.
 function addon:ItemValue(link)
-    if not link then return nil end
+    if not link or (_issecret and _issecret(link)) then return nil end
     return (_select(11, _GetItemInfo(link)))
 end
 
@@ -118,6 +132,7 @@ local info = {
     cursor   = 1,
     sold     = 0,
     gold     = 0,
+    showBar  = false,
 }
 sellFrame.Info = info
 
@@ -187,8 +202,14 @@ sellFrame:SetScript("OnUpdate", function(_, elapsed)
         _UseContainer(e.bag, e.slot)
         info.sold = info.sold + 1
         info.gold = info.gold + gained
-        bar:SetValue(info.sold)
-        bar.text:SetText(_format("%d / %d", info.sold, info.count))
+    else
+        -- Nothing was sold, so do not burn a whole interval waiting to try the next entry.
+        info.timer = 0
+    end
+    -- Counting entries processed rather than sold lets the bar actually reach full when some are skipped.
+    if info.showBar then
+        bar:SetValue(info.cursor - 1)
+        bar.text:SetText(_format("%d / %d", info.cursor - 1, info.count))
     end
 end)
 
@@ -216,11 +237,14 @@ function addon:VendorStart(manual)
     info.cursor   = 1
     info.sold     = 0
     info.gold     = 0
+    info.showBar  = cfg.progressBar and true or false
 
-    bar:SetMinMaxValues(0, count)
-    bar:SetValue(0)
-    bar.text:SetText("0 / " .. count)
-    sellFrame:SetAlpha(cfg.progressBar and 1 or 0)
+    if info.showBar then
+        bar:SetMinMaxValues(0, count)
+        bar:SetValue(0)
+        bar.text:SetText("0 / " .. count)
+    end
+    sellFrame:SetAlpha(info.showBar and 1 or 0)
     sellFrame:Show()
 end
 

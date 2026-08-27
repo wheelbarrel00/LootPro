@@ -334,6 +334,24 @@ function U.CreateEditBox(name, title, parent, settingKey)
     return eb
 end
 
+-- The color wheel fires this continuously while dragging, and each rebuild clears and repopulates both frames.
+local testFeedPending
+local function FlushTestFeed()
+    testFeedPending = false
+    if addon.isTesting and addon.PostTestMessages then addon:PostTestMessages() end
+end
+
+local function RequestTestFeed()
+    if not (addon.isTesting and addon.PostTestMessages) then return end
+    if not (C_Timer and C_Timer.After) then
+        addon:PostTestMessages()
+        return
+    end
+    if testFeedPending then return end
+    testFeedPending = true
+    C_Timer.After(0.1, FlushTestFeed)
+end
+
 function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
     local f = CreateFrame("Button", name, parent, "BackdropTemplate")
     f:SetSize(400, 28)
@@ -368,11 +386,10 @@ function U.CreateColorRow(name, parent, colorKey, previewFunc, label)
 
         if r and g and b then
             local cc = LootProConfig.colors[colorKey]
+            if cc.r == r and cc.g == g and cc.b == b then return end
             cc.r, cc.g, cc.b = r, g, b
             Update()
-            if addon.isTesting and addon.PostTestMessages then
-                addon:PostTestMessages()
-            end
+            RequestTestFeed()
         end
     end
 
