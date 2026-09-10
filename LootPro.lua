@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.17.2"
+ns.addon.VERSION = "2.17.3"
 -- Bump on each new What's New popup; shown once per revision (LootProConfig.whatsNewSeen).
 ns.addon.WHATS_NEW = 11
 ns.addon.isTesting = false

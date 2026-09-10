@@ -1,203 +1,374 @@
-<p align="center">
-  <img src="https://img.icons8.com/color/96/world-of-warcraft.png" alt="Loot Pro" width="96" />
-</p>
+# Loot Pro
 
-<h1 align="center">Loot Pro</h1>
+**A clean replacement for World of Warcraft's loot and combat text. Two repositionable readouts, one for combat and system messages and one for loot and money, with a color and a toggle for every kind of message. On top of the live feed it adds the loot tools the default UI never had: a session recap with gold per hour, watched-item alerts, gear markers, a name block list, and automatic gray selling. Install it and it works right away. Everything beyond the basics is off until you turn it on.**
 
-<p align="center">
-  <strong>Ultra-lightweight loot and combat text replacement for World of Warcraft</strong>
-</p>
+[![Join our Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/vm8K2WfQUE) [![Version](https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=6D0501&label=Version&style=flat-square)](https://github.com/wheelbarrel00/LootPro/releases) ![WoW Midnight](https://img.shields.io/badge/WoW-Midnight12.1-8B0000?style=flat-square) ![WoW Classic Era](https://img.shields.io/badge/WoW-ClassicEra1.15.9-8B0000?style=flat-square) ![WoW TBC](https://img.shields.io/badge/WoW-BurningCrusade2.5.6-8B0000?style=flat-square) ![WoW MoP](https://img.shields.io/badge/WoW-MoP5.5.4-8B0000?style=flat-square) ![Dependencies](https://img.shields.io/badge/Dependencies-None-6D0501?style=flat-square) [![License](https://img.shields.io/github/license/wheelbarrel00/LootPro?style=flat-square&color=333333)](https://github.com/wheelbarrel00/LootPro/blob/main/LICENSE)
 
-<p align="center">
-  <a href="https://github.com/wheelbarrel00/LootPro/releases"><img src="https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=FF2222&label=Version" alt="Version" /></a>
-  <img src="https://img.shields.io/badge/WoW-Midnight%2012.1-8B0000?style=flat-square" alt="WoW Midnight" />
-  <img src="https://img.shields.io/badge/WoW-Classic%20Era%201.15.9-8B0000?style=flat-square" alt="WoW Classic Era" />
-  <img src="https://img.shields.io/badge/WoW-BCC%20Anniversary%202.5.6-8B0000?style=flat-square" alt="WoW BCC" />
-  <img src="https://img.shields.io/badge/WoW-MoP%20Classic%205.5.4-8B0000?style=flat-square" alt="WoW MoP Classic" />
-  <img src="https://img.shields.io/badge/Interface-120100-333333?style=flat-square" alt="Interface" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-333333?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Memory-~350KB-333333?style=flat-square" alt="Memory" />
-</p>
+***
 
----
+# Contents
 
-## Overview
+1. What it does
+2. Quick start
+3. Layout: sizing and placing the two readouts
+4. Colors
+5. Notifications: what shows up at all
+6. Custom: fonts, framed rows, and behavior
+7. Recap: your session at a glance
+8. Alerts: watch list, rare drops, and gear markers
+9. Block: hiding loot by name
+10. Vendor: selling grays
+11. Item tooltips
+12. Slash commands
+13. Minimap button
+14. Flavor differences
+15. Dependencies
+16. Gallery
+17. Found a bug
 
-Loot Pro replaces WoW's default scrolling combat and loot text with two clean, repositionable display frames: one for Combat and System messages, one for Loot and Money. Every message type has its own color, toggle, and formatting controls. On top of the live feed it adds optional loot-awareness tools — a session recap, watched-item and rare-drop alerts, tooltip loot counts, category filters, and currency-cap warnings — all off by default. The addon runs at roughly 350 KB of memory, requires no external dependencies, and supports WoW Retail (Midnight 12.1) along with Classic Era (1.15.9), BCC Anniversary (2.5.6), and Mists of Pandaria Classic (5.5.4).
+***
 
-Open with **`/lp`** or the minimap button.
+# What it does
 
----
+Loot Pro replaces the default scrolling combat and loot text with two frames you control.
 
-## Features
+**The combat readout** carries combat start and end, experience, skill gains, honor, reputation, and Delve companion experience.
 
-### Clean Mode
+**The loot readout** carries money, currency, and item loot.
 
-Strips the default "You receive loot:" and "You receive currency:" clutter from every message, leaving just the item name, inline icon, and current bag count. Money messages can optionally display gold, silver, and copper with coin icons instead of raw text.
+Each one has its own size, width, height, fade time, maximum line count, font, and outline. Every kind of message has its own color and its own on and off switch. Out of the box you get clean text with inline item icons and a running total of how many of each item you own.
 
-### Smart Rarity Filtering
+Everything past that is optional and off by default. Turn on only what you want.
 
-Set a minimum quality threshold so only items at or above that rarity appear in the loot frame. Common grey drops can be silenced entirely while greens, blues, and epics still show. Your own loot and other players' loot get independent thresholds, so you can watch every drop you pick up while only hearing about the group's epics. When an item has not yet been cached by the client, Loot Pro fails open and displays the message rather than silently dropping it.
+Loot Pro never equips, trades, or destroys anything. Two features do act for you once you turn them on, and both are off by default: Speedy AutoLoot takes items from a corpse on your behalf, and the Vendor tab sells gray items while a merchant window is open.
 
-### Category Filtering
+***
 
-Beyond the rarity threshold, entire item classes can be hidden from the loot frame — Trade Goods, Consumables, Quest Items, Recipes, Gear, Gems, Enhancements, Miscellaneous, and Glyphs — from the Notifications tab. Filtered items are still counted by the session recap; only their feed lines are suppressed.
+# Quick start
 
-### Name Block List
+1. Install and log in. Your loot and combat text is already running through Loot Pro.
+2. Type **`/lp`**, or left-click the minimap button, to open the options.
+3. Click **Unlock Windows** at the top left, drag the two readouts where you want them, then click **Lock Windows**.
+4. Click **Start Test Mode** at the top right to fill both readouts with sample lines while you pick colors and sizes. Click it again to stop.
 
-A dedicated Block tab hides loot by name or keyword. Any drop whose name contains one of your blocked words never reaches the feed, which catches the specific junk that slips past a rarity or category filter. As with the other filters, blocked items are still counted by the session recap.
+That is enough to use it. Everything below is optional.
 
-### Full Color Customization
+The settings window has nine tabs: Layout, Colors, Notifications, Custom, Recap, Alerts, Block, Vendor, and About.
 
-All 11 message categories have independent color pickers: Money, Currency, Loot, Combat Start, Combat End, Experience, Delver XP, Skill Gains, Honor, Reputation Gain, and Reputation Loss. Colors are previewed live in the settings panel and applied instantly.
+***
 
-### Per-Frame Layout Controls
+# Layout: sizing and placing the two readouts
 
-Each display frame (Combat and Loot) has its own text size, fade duration, frame width, frame height, and max visible lines. A sync button copies one frame's layout to the other. Font selection supports LibSharedMedia-3.0, unlocking dozens of additional fonts when installed. Outline modes include Thin, Thick, and None (with drop shadow).
+**Options > Layout.** Ten sliders, five for each readout, plus a sync button.
 
-### Framed Loot and Combat Feeds
+| Slider | Range | Default | What it does |
+|---|---|---|---|
+| Combat Text Size | 10 to 50 | 20 | Font size of the combat readout |
+| Combat Fade (sec) | 1 to 30 | 6 | How long a line stays before it fades |
+| Combat Frame Width | 200 to 1200 | 200 | |
+| Combat Frame Height | 50 to 800 | 200 | |
+| Max Combat Lines | 1 to 20 | 4 | How many lines can be on screen at once |
+| Loot Text Size | 10 to 50 | 22 | |
+| Loot Fade (sec) | 1 to 30 | 6 | |
+| Loot Frame Width | 200 to 1200 | 200 | |
+| Loot Frame Height | 50 to 800 | 200 | |
+| Max Loot Lines | 1 to 20 | 4 | |
 
-An optional display style that draws each feed line as its own bordered row instead of scrolling text. Turn on **Framed loot rows** and **Framed combat rows** independently on the Customization tab. Loot rows show the item icon, name, running count, and category, with the border and name colored by item quality — combat, skill, and reputation lines get a matching bordered row colored to match that line. Shift-click a loot row to link the item in chat (a chat box opens for you if one is not already open), control-click for the dressing room, and hover for the item tooltip. While the feeds are unlocked you can drag any row to move them. Every per-frame setting you already use — font, outline, size, colors, fade timing, hover-to-pause, and keep-busy-feeds-longer — carries over, and if you have Masque installed the loot icons take your chosen Masque skin. Off by default.
+**Sync Combat Layout to Loot** copies the five combat values onto the loot readout. It goes one way only, from combat to loot, and it overwrites whatever the loot readout had. There is no button for the other direction, so set up combat first if you plan to use it.
 
-Because shift-click linking needs the row to receive your click, a visible row keeps catching clicks even while the feeds are locked. If you would rather those clicks reach whatever is behind the feed, turn on **Click through locked rows** on the same tab — rows stop intercepting clicks while locked, at the cost of shift-click linking.
+Frame width and height set the area a readout occupies, which decides where long lines wrap. To move a readout, use **Unlock Windows** at the top of the settings panel and drag it.
 
-### Combine Repeated Drops
+***
 
-In framed loot mode, repeats of the same item stack into a single growing row with a rolling count instead of pushing a new row for every pickup, gray junk collapses into one Junk Items row, and rapid money pickups merge into a single running total. This keeps the feed readable during AoE pulls, where the old behavior would blow past your max visible lines in a second. On by default; turn it off on the Customization tab to get one row per drop.
+# Colors
 
-### Notification Toggles
+**Options > Colors.** Eleven color swatches, one for each kind of message. Click a swatch to open the standard color picker. Next to each one is a live sample line in that color, so you can see the result as you drag.
 
-Every message type can be individually enabled or disabled. Additional toggles control loot count injection, coin icon display, Clean Mode, and combat follower XP visibility.
+Money, Currency, Loot, Combat Start, Combat End, Experience, Delver XP, Skill, Honor, Rep Gain, and Rep Loss.
 
-### Session Recap
+Turn on **Start Test Mode** first and the real readouts fill with sample lines that recolor as you pick, which is a better preview than the swatch alone.
 
-A dedicated Recap tab (and the `/lp recap` command) tracks your current play session: total gold, items broken down by rarity, currencies earned, and a short list of notable epic-or-better drops. The tally is held entirely in memory and resets on each login or reload, so it adds nothing to your saved variables. Disabled by default; enable it on the Recap tab.
+***
 
-The session timer can be paused and resumed from the Recap tab or with `/lp pause`, so AFK time, mailbox trips, and loading screens stop dragging down your gold-per-hour and items-per-hour. The header shows **(paused)** while stopped, loot is still counted while paused, and the pause survives a `/reload`.
+# Notifications: what shows up at all
 
-### Watched-Item Alerts
+**Options > Notifications.** This tab decides which messages reach a readout, and how much of each item drop you see.
 
-The Alerts tab lets you build a watchlist by item name, item ID, or shift-clicked item link. When you loot a watched item, Loot Pro shows a center-screen toast and plays an alert sound so you never miss it. Disabled by default.
+## Message toggles
 
-### Rare Drop Alerts
+Sixteen checkboxes. All are on by default except **Display Delve Companion XP** and **Show Combat Follower XP**.
 
-Optionally color a looted line by its item quality, flash the loot frame, and play a sound when a drop meets a configurable quality threshold (Legendary by default). All three effects are off by default and configured on the Alerts tab.
+The loot readout carries Display Money, Display Currency, Display Item Loot, and Display Party Loot. The combat readout carries Display Experience, Display Combat START, Display Combat END, Display Skill Gains, Display Honor Gains, Display Reputation GAIN, and Display Reputation LOSS.
 
-The same alert can also fire on value: set a gold amount in the **Alert on value** box and any single drop worth at least that much triggers the flash, sound, and coloring regardless of its rarity, which catches the expensive trade goods that never reach epic quality. Set it to 0 to turn it off.
+Three of them change formatting rather than turning a message on or off:
 
-### Loot Counts in Tooltips
+**Enable Clean Mode** (on) strips the game's wrapper text, so "You receive loot: [Linen Cloth]" becomes just the item with its icon. Turn it off to see the original message.
 
-Item tooltips can display how many of that item you have looted during the current session, sourced from the session recap. Enable it on the Recap tab.
+**Inject Item Totals** (on) adds how many you now own in parentheses after the item, as in `Linen Cloth (14)`. Turn it off to see only what just dropped.
 
-### Already-Owned Collectibles in Tooltips
+**Use Coin Icons** (on) shows looted money as gold, silver, and copper coin icons instead of the words. It only applies while Clean Mode is on.
 
-Mount, pet, and toy tooltips can show a line telling you that you already have it, so a duplicate is safe to sell, trade, or skip without opening the relevant journal to check. Off by default; enable "Show already owned on mount, pet, and toy tooltips" on the Recap tab. Retail only, since the Classic flavors have no shared collection journals.
+**Show Combat Follower XP** (off) adds experience earned by your pet, battle pet, or follower. Your own experience is controlled separately by Display Experience.
 
-### Currency Cap Warnings
+## Minimum Loot Quality
 
-When a currency reaches its maximum or weekly cap, its line in the loot frame is tagged so you know further gains are going to waste.
+Two dropdowns that hide drops below a quality you choose. Each cycles through Poor+ (All), Common+, Uncommon+, Rare+, Epic+, and Legendary+.
 
-### Auto-Sell Gray Items
+**Your Loot** applies to what you pick up. **Others' Loot** applies to what the group picks up. They are separate on purpose, so you can watch every scrap you loot while only hearing about the group's rares. Both default to Poor+ (All), which hides nothing.
 
-A dedicated Vendor tab can automatically sell your poor-quality (gray) junk whenever you open a merchant, with a configurable sell speed and an optional on-screen progress bar. A "Sell Grays Now" button sells on demand, and an optional chat report lists each item sold. Off by default; quest items and items with no sell value are never sold, and each bag slot is re-verified the moment before it sells so a misplaced item is never vendored by mistake.
+If the game client has not cached an item yet, Loot Pro shows the line rather than risk hiding something you wanted.
 
-### Movable Frames and Test Mode
+## Hide from loot feed
 
-Unlock Windows mode makes both display frames draggable so you can reposition them anywhere on screen. Test Mode freezes fading and displays sample messages for every category so you can preview your color and layout choices without leaving town.
+Nine checkboxes that hide whole categories of item, all off by default: Trade Goods, Consumables, Quest Items, Recipes, Gear, Gems, Enhancements, Misc, and Glyphs.
 
-### Minimap Button
+Gear covers weapons and armor together. There is no separate weapon and armor split.
 
-A LibDBIcon minimap button provides one-click access to the settings panel. Compatible with Titan Panel, ChocolateBar, ElvUI, and other broker display addons. The button can be hidden from the Customization tab, and its left, right, and middle clicks are each configurable — open settings, print the session recap, toggle window lock, or do nothing.
+Hidden items still count toward the session recap. Only the line in the feed is suppressed, so your totals stay honest no matter how much you filter.
 
-### New-Appearance Marker
+***
 
-When you loot a weapon or armor piece whose transmog appearance you have not collected from any source yet, its loot line is tagged with a cyan **(new look)**, so a fresh appearance is never vendored or disenchanted by mistake. Off by default; enable it on the Alerts tab. Retail only, since the Classic flavors have no transmog appearance collection.
+# Custom: fonts, framed rows, and behavior
 
-### Tertiary Stat Marker
+**Options > Custom.**
 
-Looted weapons and armor that carry a tertiary stat — Leech, Avoidance, Speed, or Indestructible — are tagged on their loot line with the stat named, so a piece worth keeping for its tertiary is obvious without opening the tooltip. Off by default; enable it on the Alerts tab. Retail only.
+## Fonts
 
-### Notable-Item Alerts
+**Combat Font** and **Loot Font** list every font registered with LibSharedMedia-3.0, so any font pack you already have shows up automatically. With no font pack installed you get the game's default.
 
-The rare-drop alert can optionally fire for mounts, pets, and toys even when they fall below your quality threshold, so an uncommon mount or a blue battle pet still gets your configured flash, sound, and line coloring. Off by default; enable "Also alert on notable items" on the Alerts tab.
+**Combat Outline** and **Loot Outline** each offer None, Thin, Thick, and Pixel. Thin is the default. Choosing None adds a drop shadow instead, so text stays readable on a light background.
 
-### Vendor Sell Price in Tooltips
+**Sync Combat Fonts to Loot** copies the font and outline from combat onto loot. Like the layout sync, it goes one way only.
 
-Item tooltips can show the vendor sell price, plus the full stack value when you hover a stack in your bags — handy for deciding what to keep or sell. Off by default; enable it on the Vendor tab. Quest items and items with no sell value show nothing.
+## Framed rows
 
-### Loot Feed Quality-of-Life
+By default both readouts are scrolling text. Framed rows draw each line as its own bordered row instead.
 
-Two optional behaviors on the Customization tab: pause fading while your cursor is over a readout so a busy feed can be read, and keep busy feeds visible longer by extending how long lines stay up during a big pull. Both off by default.
+**Framed loot rows** (off) gives every drop a row with the item icon, the name, your running total, and the item category. The border and the name are colored by item quality. You can shift-click a row to link the item in chat, control-click it for the dressing room, and hover it for the normal item tooltip.
 
----
+**Framed combat rows** (off) does the same for combat, skill, and reputation lines, with the border colored to match that line.
 
-## Installation
+**Combine repeated drops** (on) makes repeats of the same item stack into one growing row with a rolling count, collapses gray junk into a single Junk Items row, and merges rapid money pickups into one running total. This is what keeps the feed readable during an AoE pull. It only does anything while Framed loot rows is on.
 
-### From CurseForge
+**Click through locked rows** (off) is the fix for one trade-off. A framed row has to receive your click for shift-click linking to work, so a visible row keeps catching clicks even while the readout is locked. Turn this on and clicks pass through to whatever is behind the feed, at the cost of shift-click linking.
 
-1. Install via the [CurseForge app](https://www.curseforge.com/) or download manually
-2. The addon will be placed automatically in your AddOns folder
+If you have Masque installed, the icons on framed loot rows take your chosen Masque skin.
 
-### Manual Install
+## Behavior
 
-1. Download the latest release from the [Releases](https://github.com/wheelbarrel00/LootPro/releases) page
-2. Extract the `LootPro` folder into:
-   ```
-   World of Warcraft/_retail_/Interface/AddOns/
-   ```
-   For Classic, use the matching folder instead of `_retail_`: `_classic_era_` (Classic Era), `_anniversary_` (BCC Anniversary), or `_classic_` (Mists of Pandaria Classic).
-3. Restart WoW or type `/reload` if already in-game
-4. Enable **Loot Pro** at the character select screen
+**Fast Loot** is Blizzard's own Auto Loot setting, exposed here so you do not have to go looking for it. It grabs everything from a corpse in one click instead of opening the loot window. Because it is the game's own setting and not Loot Pro's, Reset to Defaults does not touch it.
 
----
+**Speedy AutoLoot** (off) is Loot Pro's own, and it works even with Fast Loot off. When loot becomes available it takes every slot automatically, about thirty per second, so the loot window never opens. Hold your auto-loot modifier key (Shift by default) as you loot and it stands aside so you can open the window by hand.
 
-## Commands
+**Warn on currency cap** (on) tags a currency line with a red `(capped)` or an orange `(weekly cap)` once you have hit its maximum, so you can see at a glance that further gains are being wasted. It is a tag on the line, not a popup or a sound.
 
-| Command | Action |
+**Keep busy feeds up longer** (off) stretches how long lines stay visible when many arrive at once, adding time per extra line and easing back to your normal fade setting as the feed clears.
+
+**Pause fade while hovering the feed** (off) freezes fading while your cursor rests on a readout, so you can actually read a busy feed. Clicks still pass through to whatever is behind it.
+
+**Show Minimap Icon** (on) hides or shows the minimap button.
+
+## Minimap Button Clicks
+
+Three dropdowns set what left, right, and middle click do. Each offers Open Settings, Print Recap, Toggle Lock, and Nothing. The defaults are Open Settings, Print Recap, and Toggle Lock.
+
+## Options Window Scale
+
+A slider from 75% to 125% that resizes the settings window and nothing else. Your readouts, the minimap icon, and the alert banner are unaffected. The percentage updates as you drag and the new size applies when you let go.
+
+## Combat text
+
+**Combat Start Text** and **Combat End Text** are edit boxes for the words shown when you enter and leave combat. Press Enter to save, or Escape to discard.
+
+***
+
+# Recap: your session at a glance
+
+**Options > Recap.** Off by default. Tick **Enable Session Recap** to start tracking.
+
+Once on, the tab shows a live panel with your current zone, gold gained, vendor income, gold and items per hour once a minute has passed, a count of items looted broken down by rarity, every currency you have earned, and up to ten of your most recent Epic-or-better drops.
+
+**Reset Session** starts a fresh session. **Pause Timer** stops the clock without stopping the tracking, so a trip to the mailbox or a long queue does not drag your per-hour numbers down. Loot is still counted while paused, and the pause survives a `/reload`.
+
+The session lives in memory. A `/reload` keeps it, logging out clears it, so it never bloats your saved variables.
+
+You can print the same summary to chat at any time with **`/lp recap`**, which is handy for pasting into a group chat.
+
+***
+
+# Alerts: watch list, rare drops, and gear markers
+
+**Options > Alerts.** Three groups of settings share this tab.
+
+## Watch list
+
+Tick **Enable Watch Alerts** (off by default) and build a list of items you do not want to miss. When one drops, Loot Pro shows a banner in the center of your screen and plays a sound.
+
+Add an item by typing its name, typing its item ID, or shift-clicking it straight into the box. A name matches any item containing that text, so `Ore` catches every ore. A link or an ID matches that one item exactly. The list holds up to thirty entries and each has a Remove button.
+
+Alerts fire only for items **you** loot, not the group's. **Play Alert Sound** (on) controls the sound, and **Test Alert** fires a sample banner so you can check placement.
+
+## Rare Drop Alerts
+
+A separate alert for anything valuable, whether or not it is on your watch list. There are four triggers and three effects, and you mix them freely.
+
+**Alert on quality** sets the rarity that fires the alert. It offers Uncommon+, Rare+, Epic+, and Legendary+, and defaults to Legendary+.
+
+**Also alert on notable items** (off) fires for mounts, pets, and toys even when they fall below that quality bar, so an uncommon mount still gets your attention. On Retail this only counts collectibles you do not already own.
+
+**Alert on value (gold, 0 = off)** fires when a single drop is worth at least the number of gold you enter. This catches the expensive trade goods that never reach epic quality. Worth knowing: the figure used is the item's **vendor sell price** multiplied by the stack, not its auction house value, so a soulbound item with no sell price can never trigger it. Press Enter to save.
+
+The three effects are **Color loot line by rarity**, **Flash the loot frame**, and **Play alert sound**, all off by default. Note that coloring by rarity is part of the alert rather than a general setting, so it applies to lines that trip one of the triggers above, not to every drop.
+
+**Test Rare Drop** fires the flash and sound so you can judge them without waiting for a real drop.
+
+## Gear markers
+
+Four tags that get appended to a loot line so you can judge a drop without opening its tooltip. All are off by default.
+
+| Marker | Looks like | What it means |
+|---|---|---|
+| **Show item level on gear** | `[485]` in gold | The item level of any looted weapon or armor. This one applies to the group's drops as well as your own, and works on every game version. Shirts, tabards, and cosmetic armor are skipped, since their item level is meaningless. |
+| **Mark new transmog appearances** | `(new look)` in blue | You have not collected this appearance from any source yet, so it is not safe to vendor. Retail only. |
+| **Mark gear upgrades** | `(upgrade)` in green | Higher item level than what you have equipped in that slot. It only fires when the drop is the same armor or weapon type you already wear, and when the primary stat matches, so an Intellect piece is never flagged for an Agility character. Retail only. |
+| **Mark gear with a tertiary stat** | `(Leech)` in teal | The piece rolled a bonus tertiary stat, named on the line. Leech, Avoidance, Speed, or Indestructible. Retail only. |
+
+The three Retail-only markers appear on your own drops. The item level tag is the one that also applies to loot the group picks up.
+
+***
+
+# Block: hiding loot by name
+
+**Options > Block.** A list of words. Any drop whose name contains one of them never reaches the loot feed.
+
+Matching is case-insensitive and partial, so `Tattered` hides every tattered thing. Add an entry by typing it or by shift-clicking an item into the box. The list holds up to fifty entries.
+
+This is the tool for the specific junk that slips past a quality or category filter. As with every other filter, blocked items are still counted in the session recap.
+
+***
+
+# Vendor: selling grays
+
+**Options > Vendor.** Off by default.
+
+**Automatically sell gray items at vendors** (off) sells every poor-quality item in your bags as soon as you open a merchant. Quest items and items with no sell value are never sold, and each bag slot is checked again in the instant before it sells, so an item you moved mid-sale is never vendored by mistake.
+
+**Sell Interval** (0.1 to 1.0 seconds, default 0.2) is the delay between each item. A longer interval is gentler on the server and makes the progress bar easier to follow.
+
+**Show progress bar while selling** (on) shows a small on-screen bar counting through the run.
+
+**Print each item sold to chat** (off) lists every item and what it sold for.
+
+**Sell Grays Now** runs a pass on demand, even with automatic selling turned off. Hover it to see what your current grays are worth before you commit. It needs an open merchant window.
+
+A **This Session** line shows how many grays you have sold and for how much. It covers both automatic and manual sales, and clears when the session recap does.
+
+The merchant's own Sell All Junk button already sells everything at once. What this adds is doing it automatically, at a pace you can watch, with a running total.
+
+***
+
+# Item tooltips
+
+Three optional lines that Loot Pro can add to item tooltips. They are spread across two tabs because each belongs with the feature that feeds it.
+
+**Show "looted this session" on item tooltips** (**Recap** tab, on by default) adds how many of that item you have looted this session. It needs the session recap turned on to show anything.
+
+**Show "already owned" on mount, pet, and toy tooltips** (**Recap** tab, off) tells you that you already have the mount, pet, or toy in your hands, so a duplicate is safe to sell or pass on without opening a journal to check. Retail only, since the Classic versions have no shared collection journals.
+
+**Show vendor sell price on item tooltips** (**Vendor** tab, off) adds the sell price, plus the value of the whole stack when you hover a stack in your bags.
+
+***
+
+# Slash commands
+
+| Command | What it does |
 |---|---|
-| `/lp` | Toggle the settings window |
-| `/lpro` | Toggle the settings window (alternate) |
-| `/lp recap` | Print the current session recap (gold, items, currencies, notable drops) |
-| `/lp recap reset` | Start a fresh recap session |
-| `/lp pause` | Pause or resume the session timer |
-| `/lp about` | Open the About tab and in-game changelog |
-| `/lp help` | List every command |
+| **`/lp`** | Open or close the settings window |
+| **`/lp recap`** | Print the session recap to chat |
+| **`/lp recap reset`** | Start a fresh recap session |
+| **`/lp pause`** | Pause or resume the session timer |
+| **`/lp about`** | Open the About tab and the in-game changelog |
+| **`/lp whatsnew`** | Show the What's New popup again |
+| **`/lp whatsnew reset`** | Make What's New show once more on your next `/reload` |
+| **`/lp test`** | Run a self-check that posts one of every message type and reports pass or fail |
+| **`/lp help`** | List the commands |
 
-The config UI has nine tabs: Layout, Colors, Notifications, Custom, Recap, Alerts, Block, Vendor, and About. A Reset to Defaults button at the bottom of every tab restores all settings to their original values, behind a confirmation prompt.
+***
 
----
+# Minimap button
 
-## Dependencies
+A LibDataBroker launcher with a LibDBIcon minimap button, so Titan Panel, ChocolateBar, Bazooka, and similar display addons pick it up automatically.
 
-**Required:** None — Loot Pro is fully standalone.
+| Click | Default action |
+|---|---|
+| **Left** | Open Settings |
+| **Right** | Print Recap |
+| **Middle** | Toggle Lock |
+
+All three are configurable on the Custom tab, and each can be set to Nothing. Hovering the icon shows the version and a reminder of what your three clicks currently do. The button itself can be hidden from the Custom tab.
+
+***
+
+# Flavor differences
+
+Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic (2.5.6), and Mists of Pandaria Classic (5.5.4) from one install. The differences all come down to features the older clients do not have.
+
+| Feature | Retail (Midnight) | Classic |
+|---|---|---|
+| Item level on gear | Yes | Yes |
+| New transmog appearance marker | Yes | Not available, no appearance collection |
+| Gear upgrade marker | Yes | Not available |
+| Tertiary stat marker | Yes | Not available, no tertiary stats |
+| "Already owned" collectible tooltips | Yes | Not available, no shared journals |
+| Notable-item alerts for uncollected mounts, pets, and toys | Yes | Fires for all mounts, pets, and toys |
+| Everything else | Yes | Yes |
+
+Options that do not apply are simply absent from the settings panel on those versions rather than present and broken.
+
+***
+
+# Reset to Defaults
+
+A button at the bottom of every tab except About. It is behind a confirmation prompt, because it clears more than it might sound like: every color, every toggle, every slider, your window positions, **and both your watch list and your block list**. It cannot be undone.
+
+Two things it leaves alone. Your current recap session keeps running, and Fast Loot is Blizzard's own setting so it stays as you had it.
+
+***
+
+# Dependencies
+
+**Required: none.** Loot Pro is standalone.
 
 **Optional:**
-- [LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0) — unlocks dozens of additional fonts from within the Loot Pro settings panel
-- [Masque](https://www.curseforge.com/wow/addons/masque) — skins the icons on the framed loot rows when that option is enabled
 
-LibStub, LibDataBroker-1.1, CallbackHandler-1.0, and LibDBIcon-1.0 are bundled with the addon.
+- **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0)** adds every font from any font pack you have to the two font pickers.
+- **[Masque](https://www.curseforge.com/wow/addons/masque)** skins the item icons on framed loot rows.
 
----
+LibStub, LibDataBroker-1.1, CallbackHandler-1.0, and LibDBIcon-1.0 are bundled, so there is nothing else to install.
 
-## Gallery
+## Manual install
 
-<img width="3838" height="2155" alt="Screenshot 2026-04-14 152345" src="https://github.com/user-attachments/assets/e367cdb9-63c0-4410-825d-232c3f6ccce6" />
-<img width="3839" height="2159" alt="Screenshot 2026-04-14 152320" src="https://github.com/user-attachments/assets/3b3c8b40-54a1-470f-9464-ddc3184dec35" />
-<img width="3830" height="2142" alt="Screenshot 2026-04-14 152241" src="https://github.com/user-attachments/assets/dc4d4e64-9003-4637-b16d-91a0932fb33e" />
-<img width="3839" height="2159" alt="Screenshot 2026-04-14 152112" src="https://github.com/user-attachments/assets/f52e12aa-5ec7-48ca-8295-e8084c738c91" />
-<img width="935" height="1227" alt="Screenshot 2026-04-14 152026" src="https://github.com/user-attachments/assets/585e322c-7621-47a9-9c5d-7f752a2ab18e" />
-<img width="937" height="1223" alt="Screenshot 2026-04-14 151950" src="https://github.com/user-attachments/assets/e26d50d1-b011-4af7-ac97-ead30785a113" />
-<img width="933" height="1226" alt="Screenshot 2026-04-14 151943" src="https://github.com/user-attachments/assets/a8caccb6-60a4-4f61-aa65-7b3780a61aff" />
-<img width="936" height="1227" alt="Screenshot 2026-04-14 151933" src="https://github.com/user-attachments/assets/1f831a0c-6a54-4cef-8e82-3208f92de3cb" />
+Download the latest release, then extract the `LootPro` folder into `World of Warcraft/_retail_/Interface/AddOns/`. For the Classic versions use the matching folder instead of `_retail_`: `_classic_era_`, `_anniversary_` for Burning Crusade, or `_classic_` for Mists of Pandaria.
 
----
+***
 
-## License
+# Gallery
 
-This project is licensed under the [MIT License](LICENSE).
+<img width="3838" height="2155" alt="Loot Pro in action" src="https://github.com/user-attachments/assets/e367cdb9-63c0-4410-825d-232c3f6ccce6" />
+<img width="3839" height="2159" alt="Loot Pro loot feed" src="https://github.com/user-attachments/assets/3b3c8b40-54a1-470f-9464-ddc3184dec35" />
+<img width="3830" height="2142" alt="Loot Pro combat feed" src="https://github.com/user-attachments/assets/dc4d4e64-9003-4637-b16d-91a0932fb33e" />
+<img width="3839" height="2159" alt="Loot Pro settings" src="https://github.com/user-attachments/assets/f52e12aa-5ec7-48ca-8295-e8084c738c91" />
+<img width="935" height="1227" alt="Layout tab" src="https://github.com/user-attachments/assets/585e322c-7621-47a9-9c5d-7f752a2ab18e" />
+<img width="937" height="1223" alt="Colors tab" src="https://github.com/user-attachments/assets/e26d50d1-b011-4af7-ac97-ead30785a113" />
+<img width="933" height="1226" alt="Notifications tab" src="https://github.com/user-attachments/assets/a8caccb6-60a4-4f61-aa65-7b3780a61aff" />
+<img width="936" height="1227" alt="Custom tab" src="https://github.com/user-attachments/assets/1f831a0c-6a54-4cef-8e82-3208f92de3cb" />
 
----
+***
 
-<p align="center">
-  <sub>Built by Wheelbarrel00 for the Midnight expansion and WoW Classic (Era, BCC, MoP)</sub>
-</p>
+# Found a bug or have an idea?
+
+Report it on the **[GitHub Issues page](https://github.com/wheelbarrel00/LootPro/issues)**. Include the error text if you can grab it, since BugSack and BugGrabber make that easy, and what you were doing when it happened.
+
+***
+
+Made with care for the Midnight expansion and WoW Classic. **Got a question or want to hear about updates? [Join the Discord](https://discord.gg/vm8K2WfQUE)** If you like this one, check out my other addons: **[Cooldown Master](https://www.curseforge.com/wow/addons/cooldown-master)**, **[Everything Quests](https://www.curseforge.com/wow/addons/everything-quests)**, and **[Everything Delves](https://www.curseforge.com/wow/addons/everything-delves)**. Released under the MIT License.

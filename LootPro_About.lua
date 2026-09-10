@@ -5,12 +5,17 @@ ns.about = {
     links = {
         curseforge = "https://www.curseforge.com/wow/addons/loot-pro",
         github     = "https://github.com/wheelbarrel00/LootPro",
-        bug        = "https://github.com/wheelbarrel00/lootpro/issues",
+        bug        = "https://github.com/wheelbarrel00/LootPro/issues",
     },
 
     changelogURL = "https://www.curseforge.com/wow/addons/loot-pro/files",
 
     moreAddons = {
+        {
+            name = "Cooldown Master",
+            cf   = "https://www.curseforge.com/wow/addons/cooldown-master",
+            gh   = "https://github.com/wheelbarrel00/CooldownMaster",
+        },
         {
             name = "Everything Delves",
             cf   = "https://www.curseforge.com/wow/addons/everything-delves",
@@ -26,6 +31,14 @@ ns.about = {
     thanks = { "Agaman", "Rhinoplasty" },
 
     changelog = {
+        {
+            version = "2.17.3", date = "2026-09-09",
+            sections = {
+                { head = "Improvements", items = {
+                    "Updated the supported client versions so the addon is no longer flagged as out of date.",
+                } },
+            },
+        },
         {
             version = "2.17.2", date = "2026-08-26",
             sections = {
