@@ -22,9 +22,10 @@
 12. Slash commands
 13. Minimap button
 14. Flavor differences
-15. Dependencies
-16. Gallery
-17. Found a bug
+15. Reset to Defaults
+16. Dependencies
+17. Gallery
+18. Found a bug
 
 ***
 
@@ -82,11 +83,23 @@ Frame width and height set the area a readout occupies, which decides where long
 
 # Colors
 
-**Options > Colors.** Eleven color swatches, one for each kind of message. Click a swatch to open the standard color picker. Next to each one is a live sample line in that color, so you can see the result as you drag.
+**Options > Colors.** Twelve color swatches, one for each kind of message. Click a swatch to open the standard color picker. Next to each one is a live sample line in that color, so you can see the result as you drag.
 
-Money, Currency, Loot, Combat Start, Combat End, Experience, Delver XP, Skill, Honor, Rep Gain, and Rep Loss.
+Money, Currency, Loot, Quest Items, Combat Start, Combat End, Experience, Delver XP, Skill, Honor, Rep Gain, and Rep Loss.
 
 Turn on **Start Test Mode** first and the real readouts fill with sample lines that recolor as you pick, which is a better preview than the swatch alone.
+
+## Quest item coloring
+
+Two checkboxes sit below the swatches, both off by default.
+
+**Color quest items** paints your own quest drops in the **Quest Items** color instead of their item quality color, so they stand out in a busy feed. Framed rows take the color on the item name and the borders, plain text lines take it on the whole line.
+
+It covers more than the items tagged Quest. When an active quest asks you to collect ordinary cloth, meat, or ore, those count too, which is the half that is easy to miss because the game does not flag them as quest items at all. Since most of them are white or gray, they are shown even when they fall below your Minimum Loot Quality, as otherwise the feature would do nothing on a filtered feed. Your **Hide from loot feed** categories and your block list still hide anything they are set to hide.
+
+A gray quest item also keeps its own framed row instead of collapsing into the combined Junk Items row.
+
+**Use my class color** paints them in your class color and ignores the swatch. It is there for anyone whose color picker does not already offer a class color of its own, and it picks up a class color addon's palette when one is installed.
 
 ***
 
@@ -320,6 +333,7 @@ Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic 
 | Gear upgrade marker | Yes | Not available |
 | Tertiary stat marker | Yes | Not available, no tertiary stats |
 | "Already owned" collectible tooltips | Yes | Not available, no shared journals |
+| Quest item coloring | Yes | Yes |
 | Notable-item alerts for uncollected mounts, pets, and toys | Yes | Fires for all mounts, pets, and toys |
 | Everything else | Yes | Yes |
 

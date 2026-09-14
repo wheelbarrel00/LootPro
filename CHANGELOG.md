@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0] - 2026-09-13
+
+### New Features
+- Color quest items on the Colors tab. Turn it on and your own quest drops are painted in a color you pick instead of their item quality color, so they stand out in a busy feed. Framed rows take the color on the item name and the borders, plain text lines take it on the whole line. It is off by default.
+- "Use my class color" paints quest items in your class color instead of the "Quest Items" swatch, for anyone whose color picker does not already offer a class color.
+- Quest coloring covers both quest-type items and the ordinary items an active quest asks you to collect, such as the cloth or meat that only matters while you are on the quest. Those are shown even when they fall below your Minimum Loot Quality, since most of them are white or gray and would never reach the feed otherwise. Your loot filters and block list still hide anything they are set to hide.
+- A gray quest item keeps its own framed row instead of collapsing into the combined "Junk Items" row, so it still stands out while you are AoE looting.
+
 ## [2.17.3] - 2026-09-09
 
 ### Improvements

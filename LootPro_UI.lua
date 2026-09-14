@@ -335,11 +335,13 @@ function ns.UI:Initialize()
         if #colorRows == 0 then row:SetPoint("TOP", 0, 0) else row:SetPoint("TOP", colorRows[#colorRows], "BOTTOM", 0, -3) end
         table.insert(colorRows, row)
         row:Refresh()
+        return row
     end
 
     AddColor("money", "Money", function() return "10 Gold 75 Silver 20 Copper" end)
     AddColor("currency", "Currency", function() return "+ 25 Kej" end)
     AddColor("loot", "Loot", function() return "+1 |T134414:0|t Hearthstone (1)" end)
+    local questColorRow = AddColor("questItem", "Quest Items", function() return "+1 |TInterface\\Icons\\INV_Misc_Note_01:0|t Quest Item (3)" end)
     AddColor("combatEnter", "Combat Start", function() return LootProConfig.combatEnterText end)
     AddColor("combatLeave", "Combat End", function() return LootProConfig.combatLeaveText end)
     AddColor("xp", "Experience", function() return "+ 1,500 XP" end)
@@ -348,6 +350,48 @@ function ns.UI:Initialize()
     AddColor("honor", "Honor", function() return "+ 15 Honor" end)
     AddColor("repGain", "Rep Gain", function() return "+ 250 Rep: Silvermoon Court" end)
     AddColor("repLoss", "Rep Loss", function() return "- 25 Rep: Bloodsail Buccaneers" end)
+
+    local questColorCheck, questClassCheck
+    local function SyncQuestColorWidgets()
+        local qc = LootProConfig.questColor
+        questColorCheck:SetChecked(qc.enabled)
+        questClassCheck:SetChecked(qc.classColor)
+        questColorRow:SetAlpha((qc.enabled and not qc.classColor) and 1 or 0.4)
+        questClassCheck:SetAlpha(qc.enabled and 1 or 0.4)
+        if addon.isTesting then addon:PostTestMessages() end
+    end
+
+    questColorCheck = CreateFrame("CheckButton", "LPRO_QuestColor", pages.colors, "InterfaceOptionsCheckButtonTemplate")
+    questColorCheck:SetPoint("TOPLEFT", colorRows[#colorRows], "BOTTOMLEFT", 0, -8)
+    _G[questColorCheck:GetName().."Text"]:SetText("Color quest items")
+    questColorCheck:SetScript("OnClick", function(cb)
+        LootProConfig.questColor.enabled = cb:GetChecked() and true or false
+        SyncQuestColorWidgets()
+    end)
+    questColorCheck:SetScript("OnEnter", function(cb)
+        GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Color quest items", 1, 1, 1)
+        GameTooltip:AddLine("Paints your own quest drops in the Quest Items color instead of their quality color, so they stand out. Framed rows take the color on the name and the borders, plain lines take it on the whole line. Covers both quest-type items and ordinary items your active quests ask you to collect, and shows them even when they fall below your minimum quality. Loot filters and the block list still hide whatever they are set to hide.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    questColorCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(questColorCheck)
+
+    questClassCheck = CreateFrame("CheckButton", "LPRO_QuestColorClass", pages.colors, "InterfaceOptionsCheckButtonTemplate")
+    questClassCheck:SetPoint("TOPLEFT", questColorCheck, "BOTTOMLEFT", 16, -2)
+    _G[questClassCheck:GetName().."Text"]:SetText("Use my class color")
+    questClassCheck:SetScript("OnClick", function(cb)
+        LootProConfig.questColor.classColor = cb:GetChecked() and true or false
+        SyncQuestColorWidgets()
+    end)
+    questClassCheck:SetScript("OnEnter", function(cb)
+        GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Use my class color", 1, 1, 1)
+        GameTooltip:AddLine("Colors quest items with your own class color and ignores the Quest Items swatch above. Picks up a class color addon's palette when one is installed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    questClassCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ExpandCheckHover(questClassCheck)
 
     local resetBtn = CreateStyledButton(gui, 160, 28, "Reset to Defaults")
     resetBtn:SetPoint("BOTTOM", gui, "BOTTOM", 0, 35)
@@ -1500,20 +1544,14 @@ function ns.UI:Initialize()
     wnBody:SetJustifyH("LEFT")
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
-    -- New appearance, upgrade, and tertiary stat are retail-only tags. Item level is not, so Classic gets the shorter sentence.
-    local wnTags = addon.IS_RETAIL
-        and "Item level, new appearance, upgrade, and tertiary-stat tags were"
-        or "The item level tag was"
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.17.0:|r",
+        "|cFFEBB706What's new in 2.18.0:|r",
         " ",
-        "|cFFEBB706Gear tags are back on framed rows|r  " .. wnTags .. " worked out for every gear drop and then thrown away before the row was drawn, so with framed loot rows on they never appeared. They now show the same way they always have in text mode.",
+        "|cFFEBB706Color your quest items|r  New on the Colors tab. Turn on \"Color quest items\" and your own quest drops are painted in a color you pick instead of their item quality color, so they stand out in a busy feed. Framed rows take the color on the item name and the borders, plain text lines take it on the whole line. It is off by default.",
         " ",
-        "|cFFEBB706Nothing lost while AoE looting|r  Combined rows show their running tally even with loot icons turned off, so the Junk Items row no longer looks frozen, and fewer repeat drops go missing when several of the same item land at once.",
+        "|cFFEBB706Or use your class color|r  Tick \"Use my class color\" and quest items take your own class color rather than the swatch, for anyone whose color picker does not already offer one.",
         " ",
-        "|cFFEBB706Alert on value is more reliable|r  An item the game client had not cached yet reported no sell price, which read as worthless, so the first drop of something valuable never set off the alert. It now tells unknown apart from worthless.",
-        " ",
-        "|cFFEBB706Click through locked rows|r  Added in 2.16.0 on the Customization tab and easy to miss: while the readout is locked, clicks pass through framed rows to whatever is behind them. It no longer leaves an item tooltip stuck on screen.",
+        "|cFFEBB706It catches the ones that are easy to miss|r  Coloring covers both quest-type items and the ordinary cloth or meat an active quest asks you to collect. Those are shown even when they fall below your Minimum Loot Quality, since most of them are white or gray and would never reach the feed otherwise. A gray quest item also keeps its own framed row instead of collapsing into Junk Items.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1727,6 +1765,7 @@ function ns.UI:Initialize()
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)
         for _, row in ipairs(colorRows) do row:Refresh() end
+        SyncQuestColorWidgets()
         for key, cb in pairs(toggles) do
             cb:SetChecked(LootProConfig.notifications[key])
             local c = LootProConfig.colors[key]

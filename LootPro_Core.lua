@@ -17,6 +17,12 @@ local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _GetCurrencyInfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
+local _GetNumLootItems = GetNumLootItems
+local _GetLootSlotLink = GetLootSlotLink
+local _GetLootSlotInfo = GetLootSlotInfo
+local _GetQuestLogTitle = GetQuestLogTitle
+local _GetNumQuestLeaderBoards = GetNumQuestLeaderBoards
+local _GetQuestLogLeaderBoard = GetQuestLogLeaderBoard
 -- 12.0 "secret values": guard before any string op on a CHAT_MSG payload (nil pre-12.0).
 local _issecret = issecretvalue
 
@@ -288,6 +294,191 @@ local function _SweepDedup()
     end
 end
 local _dedupTicker = _NewTicker and _NewTicker(60, _SweepDedup) or nil
+
+local CLASS_QUEST = 12
+local QUEST_MARK_TTL, QUEST_MARK_SWEEP = 30, 64
+local questSeen, questSeenCount = {}, 0
+
+local function MarkQuestItem(itemID)
+    if not itemID then return end
+    local now = _GetTime()
+    if questSeenCount >= QUEST_MARK_SWEEP then
+        questSeenCount = 0
+        for k, t in pairs(questSeen) do
+            if now - t > QUEST_MARK_TTL then questSeen[k] = nil else questSeenCount = questSeenCount + 1 end
+        end
+    end
+    if not questSeen[itemID] then questSeenCount = questSeenCount + 1 end
+    questSeen[itemID] = now
+end
+
+local function IsQuestColorOn()
+    local qc = LootProConfig and LootProConfig.questColor
+    return (qc and qc.enabled) and true or false
+end
+
+local function IsQuestLoot(itemID)
+    if not itemID then return false end
+    local t = questSeen[itemID]
+    if t and _GetTime() - t <= QUEST_MARK_TTL then return true end
+    return _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID)) == CLASS_QUEST
+end
+
+-- Retail numbers its format arguments (%2$d/%3$d %1$s), so the name is not always the first capture and ToPattern cannot build this.
+local function ObjectivePattern(fmt)
+    if not fmt then return nil end
+    local pat, nameIdx, idx, pos = "", nil, 0, 1
+    while true do
+        local a, b, conv = _find(fmt, "%%%d*%$?([sd])", pos)
+        if not a then break end
+        pat = pat .. EscapeLiteral(fmt:sub(pos, a - 1))
+        idx = idx + 1
+        if conv == "s" then
+            nameIdx = idx
+            pat = pat .. "(.-)"
+        else
+            pat = pat .. "(%d+)"
+        end
+        pos = b + 1
+    end
+    if not nameIdx then return nil end
+    return { pat = "^" .. pat .. EscapeLiteral(fmt:sub(pos)) .. "$", idx = nameIdx }
+end
+
+local QUEST_OBJECTIVE_PATS = {}
+do
+    local seen = {}
+    for _, fmt in ipairs({ _G.QUEST_ITEMS_NEEDED, _G.QUEST_OBJECTS_FOUND, "%s: %d/%d" }) do
+        local p = ObjectivePattern(fmt)
+        if p and not seen[p.pat] then
+            seen[p.pat] = true
+            QUEST_OBJECTIVE_PATS[#QUEST_OBJECTIVE_PATS + 1] = p
+        end
+    end
+end
+
+local questObjectiveItems, questObjectivesStale, questObjectivesAt = {}, true, 0
+local QUEST_REBUILD_INTERVAL, MAX_QUEST_LOG_SCAN = 5, 200
+local _QuestLog = C_QuestLog
+
+local function AddQuestObjectiveName(text)
+    if not text or text == "" then return end
+    for i = 1, #QUEST_OBJECTIVE_PATS do
+        local p = QUEST_OBJECTIVE_PATS[i]
+        local c1, c2, c3 = _match(text, p.pat)
+        if c1 then
+            local name = (p.idx == 1 and c1) or (p.idx == 2 and c2) or c3
+            if name and name ~= "" then
+                questObjectiveItems[name] = true
+                return
+            end
+        end
+    end
+end
+
+local function RebuildQuestObjectives()
+    questObjectivesStale = false
+    questObjectivesAt = _GetTime()
+    _wipe(questObjectiveItems)
+    if _QuestLog and _QuestLog.GetNumQuestLogEntries and _QuestLog.GetInfo and _QuestLog.GetQuestObjectives then
+        for i = 1, _QuestLog.GetNumQuestLogEntries() do
+            local info = _QuestLog.GetInfo(i)
+            if info and not info.isHeader and info.questID then
+                local objectives = _QuestLog.GetQuestObjectives(info.questID)
+                for j = 1, (objectives and #objectives or 0) do
+                    local o = objectives[j]
+                    if o and o.type == "item" then AddQuestObjectiveName(o.text) end
+                end
+            end
+        end
+    elseif _GetQuestLogTitle and _GetNumQuestLeaderBoards and _GetQuestLogLeaderBoard then
+        -- Classic's GetNumQuestLogEntries counts only the rows the log is showing, so bounding on it would drop every quest under a collapsed header.
+        for i = 1, MAX_QUEST_LOG_SCAN do
+            local title, _, _, isHeader = _GetQuestLogTitle(i)
+            if not title then break end
+            if not isHeader then
+                for j = 1, (_GetNumQuestLeaderBoards(i) or 0) do
+                    local text, objType = _GetQuestLogLeaderBoard(j, i)
+                    if objType == "item" then AddQuestObjectiveName(text) end
+                end
+            end
+        end
+    end
+end
+
+-- Blizzard's loot flag only covers Quest-class items, so match the log's own item objectives by name for the ordinary items a quest asks you to collect.
+local function IsQuestObjectiveItem(name)
+    if not name then return false end
+    -- Each rebuild allocates a table per quest and objective, and looting a quest item re-arms the stale flag, so the floor stops an AoE pull rebuilding per corpse.
+    if questObjectivesStale and _GetTime() - questObjectivesAt >= QUEST_REBUILD_INTERVAL then
+        pcall(RebuildQuestObjectives)
+    end
+    return questObjectiveItems[name] or false
+end
+
+local questObjectiveWatcher
+local function EnsureQuestObjectiveWatcher()
+    if questObjectiveWatcher then return end
+    questObjectiveWatcher = CreateFrame("Frame")
+    questObjectiveWatcher:RegisterEvent("QUEST_LOG_UPDATE")
+    questObjectiveWatcher:SetScript("OnEvent", function() questObjectivesStale = true end)
+end
+
+-- The chat feed only sees a message, so the loot window is scanned up front and its item IDs marked for the lines that follow.
+local questScanned = 0
+local function ScanQuestLoot()
+    if not IsQuestColorOn() then return end
+    EnsureQuestObjectiveWatcher()
+    local n = (_GetNumLootItems and _GetNumLootItems()) or 0
+    -- LOOT_READY and LOOT_OPENED both land on one window, and speedy auto-loot drains it from the first.
+    if n == 0 or questScanned == n then return end
+    local incomplete = false
+    for slot = 1, n do
+        local link = _GetLootSlotLink and _GetLootSlotLink(slot)
+        local itemID = link and not (_issecret and _issecret(link)) and _tonumber(_match(link, "item:(%d+)"))
+        if itemID then
+            local ok, _, name, _, _, _, _, isQuestItem, questID = pcall(_GetLootSlotInfo, slot)
+            if not ok or not name then
+                incomplete = true
+            -- A secret value cannot be indexed, compared or even tested for truth, so screen every field before use.
+            elseif not (_issecret and (_issecret(name) or _issecret(isQuestItem) or _issecret(questID)))
+                and (isQuestItem or questID or IsQuestObjectiveItem(name)) then
+                MarkQuestItem(itemID)
+            end
+        end
+    end
+    -- A slot the server had not filled in yet earns another pass on LOOT_OPENED.
+    questScanned = incomplete and 0 or n
+end
+
+local white = { r = 1, g = 1, b = 1 }
+-- Read the globals live: a class color addon such as ElvUI installs CUSTOM_CLASS_COLORS after we load.
+local function QuestRGB()
+    local qc = LootProConfig.questColor
+    if qc.classColor then
+        local class = _select(2, UnitClass("player"))
+        local cc = (_G.CUSTOM_CLASS_COLORS and _G.CUSTOM_CLASS_COLORS[class])
+                or (_G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class])
+                or white
+        return cc.r, cc.g, cc.b
+    end
+    local c = LootProConfig.colors.questItem
+    return c.r, c.g, c.b
+end
+
+local function ColorByte(v)
+    v = math.floor((v or 0) * 255 + 0.5)
+    return v < 0 and 0 or (v > 255 and 255 or v)
+end
+
+-- Swapping the link's own quality escape is the only way to recolor the name in a text line, and retail can emit the named form (|cnIQ4:) instead of eight hex digits.
+local function RecolorItemLink(s, r, g, b)
+    if not s then return s end
+    local escape = _format("|cff%02x%02x%02x", ColorByte(r), ColorByte(g), ColorByte(b))
+    local out, hits = _gsub(s, "|c%x%x%x%x%x%x%x%x(|Hitem:)", escape .. "%1", 1)
+    if hits == 0 then out = _gsub(s, "|cn[^:|]+:(|Hitem:)", escape .. "%1", 1) end
+    return out
+end
 
 -- Optional per-feed framed-row renderer (toggled by framedLoot/framedCombat): a separate path from the text feed using a fixed, self-fading row pool.
 local ROW_GAP, ROW_FADE = 2, 1
@@ -1206,6 +1397,8 @@ function addon:UpdateAllVisuals()
     end
 end
 
+local QUEST_TEST_ICON = "Interface\\Icons\\INV_Misc_Note_01"
+
 local function TestTex(itemID, fallback)
     if not LootProConfig.showLootIcons then return nil end
     local tex = _GetItemInfoInstant and _select(5, _GetItemInfoInstant(itemID))
@@ -1241,6 +1434,16 @@ function addon:PostTestMessages()
         self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
         self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
     end
+
+    if IsQuestColorOn() then
+        local qr, qg, qb = QuestRGB()
+        if LootProConfig.framedLoot then
+            RowItem(self.lootFrame, LootProConfig.showLootIcons and QUEST_TEST_ICON or nil, nil, "Quest Item", "Quest", 1, 3, qr, qg, qb, nil)
+        else
+            local icon = LootProConfig.showLootIcons and ("|T" .. QUEST_TEST_ICON .. ":0|t ") or ""
+            self.lootFrame.display:AddMessage("+1 " .. icon .. "Quest Item (3)", qr, qg, qb)
+        end
+    end
 end
 
 -- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string); verify that in-game in an active Mythic+/boss encounter.
@@ -1268,6 +1471,7 @@ function addon:RunRegressionTest()
         minQualityOther = LootProConfig.minQualityOther,
         framedLoot = LootProConfig.framedLoot,
         framedCombat = LootProConfig.framedCombat,
+        questColor = LootProConfig.questColor.enabled,
         lootFilters = {},
     }
     for k, v in pairs(n) do snapshot.notifications[k] = v end
@@ -1285,6 +1489,8 @@ function addon:RunRegressionTest()
     LootProConfig.showMoneyIcons = true
     LootProConfig.minQualityOwn = 0
     LootProConfig.minQualityOther = 0
+    -- Quest coloring rewrites the line's own color escape, which the expected-output comparison would read as a mismatch.
+    LootProConfig.questColor.enabled = false
     for k in pairs(LootProConfig.lootFilters) do LootProConfig.lootFilters[k] = false end
     LootProConfig.lootBlacklist = { items = {} }
 
@@ -1348,6 +1554,7 @@ function addon:RunRegressionTest()
     LootProConfig.minQualityOther = snapshot.minQualityOther
     LootProConfig.framedLoot = snapshot.framedLoot
     LootProConfig.framedCombat = snapshot.framedCombat
+    LootProConfig.questColor.enabled = snapshot.questColor
     for k, v in pairs(snapshot.lootFilters) do LootProConfig.lootFilters[k] = v end
     LootProConfig.lootBlacklist = blSnapshot
 
@@ -1356,7 +1563,6 @@ function addon:RunRegressionTest()
 end
 
 -- Speedy AutoLoot: loot one slot per timer tick (~30/s), highest slot first. A tight full-loop loot can trip the server's rapid-loot disconnect on big AoE piles, and clearing low slots first would shift higher indices.
-local _GetNumLootItems = GetNumLootItems
 local _LootSlot        = LootSlot
 local _LootSlotHasItem = LootSlotHasItem
 local _IsModifiedClick = IsModifiedClick
@@ -1409,8 +1615,10 @@ speedyLootFrame:RegisterEvent("LOOT_OPENED")
 speedyLootFrame:RegisterEvent("LOOT_CLOSED")
 speedyLootFrame:SetScript("OnEvent", function(_, event)
     if event == "LOOT_CLOSED" then
+        questScanned = 0
         SpeedyLootClosed()
     else
+        ScanQuestLoot()
         SpeedyLootReady()
     end
 end)
@@ -1655,6 +1863,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local isNotable = false
             local isUpgrade = false
             local isValuable = false
+            local isQuest = false
             local tertiaryTag = nil
             if isSelf then
                 if LootProConfig.recapEnabled and self.RecapAddItem then
@@ -1688,6 +1897,9 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if LootProConfig.tertiaryStat and self.TertiaryStatTag then
                     tertiaryTag = self:TertiaryStatTag(link)
                 end
+                if IsQuestColorOn() then
+                    isQuest = IsQuestLoot(itemID)
+                end
             end
 
             -- Hidden items were still tallied above; only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
@@ -1710,12 +1922,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 hidden = true
             end
 
-            if n.loot and q >= threshold and not hidden then
+            -- Quest items are nearly always Common or Poor, so a raised threshold would hide the very drops the feature exists to highlight.
+            if n.loot and (q >= threshold or isQuest) and not hidden then
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
                 if ra and ra.color and (q >= ra.threshold or isNotable or isValuable) then
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
+                end
+                local fQuality = q
+                if isQuest then
+                    lr, lg, lb = QuestRGB()
+                    fQuality = nil
                 end
                 local ilvlTag = ""
                 if LootProConfig.lootIlvl and self.LootItemLevel then
@@ -1731,16 +1949,19 @@ addon:SetScript("OnEvent", function(self, event, ...)
                     fCat = LootCategory(link, itemID)
                     fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
                     if LootProConfig.mergeRows then
-                        if q == 0 then
+                        -- A gray quest item must keep its own row, or the junk pile would swallow the thing being highlighted.
+                        if q == 0 and not isQuest then
                             fMergeKey, fName, fCat = "junk", "Junk Items", nil
                         elseif itemID then
-                            fMergeKey = itemID
+                            -- Merging never repaints a row, so a quest drop needs its own key or it inherits an earlier unflagged drop's color.
+                            fMergeKey = isQuest and ("quest:" .. itemID) or itemID
                         end
                     end
                 end
                 if LootProConfig.cleanMode then
                     local cleaned = CleanMessage(msg, event)
                     local noCount = IsNoCountItem(cleaned)
+                    if isQuest then cleaned = RecolorItemLink(cleaned, lr, lg, lb) end
 
                     if itemID and LootProConfig.showLootCounts and _GetItemNameByID then
                         -- The running total is only trustworthy once BAG_UPDATE has landed, so every counted line defers and reads it live.
@@ -1757,7 +1978,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
                         lp.cR, lp.cG, lp.cB = lr, lg, lb
                         lp.marker  = marker
-                        lp.fIcon = fIcon; lp.fQuality = q; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
+                        lp.fIcon = fIcon; lp.fQuality = fQuality; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
                         if _After and not addon._regressionTest then
                             _After(0.1, _lootFns[_lootSlot])
                         else
@@ -1769,17 +1990,18 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         p.amt = amt; p.noCount = noCount
                         p.cR, p.cG, p.cB = lr, lg, lb
                         p.marker = marker
-                        p.fIcon = fIcon; p.fQuality = q; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
+                        p.fIcon = fIcon; p.fQuality = fQuality; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
                         p.itemID = itemID
                         ShowLoot(p, "")
                     end
                 else
-                    local line = GetIconString(msg, itemID) .. msg .. marker
+                    local body = isQuest and RecolorItemLink(msg, lr, lg, lb) or msg
+                    local line = GetIconString(msg, itemID) .. body .. marker
                     local salt = itemID and _GetItemCount and _GetItemCount(itemID, true)
                     if not IsDuplicateDisplay(line, salt) then
                         if LootProConfig.framedLoot then
                             local nm = fName or lname or CleanMessage(msg, event)
-                            RowItem(self.lootFrame, fIcon, q, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey, marker)
+                            RowItem(self.lootFrame, fIcon, fQuality, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey, marker)
                         else
                             self.lootFrame.display:AddMessage(line, lr, lg, lb)
                         end
