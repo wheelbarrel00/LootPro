@@ -324,16 +324,16 @@ All three are configurable on the Custom tab, and each can be set to Nothing. Ho
 
 # Flavor differences
 
-Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic (2.5.6), and Mists of Pandaria Classic (5.5.4) from one install. The differences all come down to features the older clients do not have.
+Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic (2.5.6), Mists of Pandaria Classic (5.5.4), and WoW Forever (1.60) from one install. Forever support is a work in progress, so expect some bugs there for now. The differences all come down to features the older clients do not have.
 
 | Feature | Retail (Midnight) | Classic |
 |---|---|---|
 | Item level on gear | Yes | Yes |
+| Quest item coloring | Yes | Yes |
 | New transmog appearance marker | Yes | Not available, no appearance collection |
 | Gear upgrade marker | Yes | Not available |
 | Tertiary stat marker | Yes | Not available, no tertiary stats |
 | "Already owned" collectible tooltips | Yes | Not available, no shared journals |
-| Quest item coloring | Yes | Yes |
 | Notable-item alerts for uncollected mounts, pets, and toys | Yes | Fires for all mounts, pets, and toys |
 | Everything else | Yes | Yes |
 
@@ -351,14 +351,12 @@ Two things it leaves alone. Your current recap session keeps running, and Fast L
 
 # Dependencies
 
-**Required: none.** Loot Pro is standalone.
+**Required: none.** Loot Pro is standalone. LibStub, LibDataBroker-1.1, CallbackHandler-1.0, LibDBIcon-1.0, and LibSharedMedia-3.0 all ship inside it, so there is nothing to install alongside it.
 
-**Optional:**
+**Plays well with, but does not need:**
 
-- **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3.0)** adds every font from any font pack you have to the two font pickers.
-- **[Masque](https://www.curseforge.com/wow/addons/masque)** skins the item icons on framed loot rows.
-
-LibStub, LibDataBroker-1.1, CallbackHandler-1.0, and LibDBIcon-1.0 are bundled, so there is nothing else to install.
+- **A font pack** such as [SharedMedia](https://www.curseforge.com/wow/addons/sharedmedia). Loot Pro already bundles LibSharedMedia-3.0, so any font pack you install shows up in the two font pickers on its own.
+- **[Masque](https://www.curseforge.com/wow/addons/masque)** skins the item icons on framed loot rows. Without it, the icons keep a clean built-in border.
 
 ## Manual install
 

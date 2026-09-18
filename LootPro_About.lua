@@ -32,6 +32,14 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.19.0", date = "2026-09-17",
+            sections = {
+                { head = "New Features", items = {
+                    "Loot Pro now runs on WoW Forever. Forever support is a work in progress, so expect some bugs while it settles in. Please report anything that looks off.",
+                } },
+            },
+        },
+        {
             version = "2.18.0", date = "2026-09-13",
             sections = {
                 { head = "New Features", items = {
