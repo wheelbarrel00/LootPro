@@ -38,8 +38,8 @@ addon.DEFAULTS = {
     lootIlvl = false,
     tertiaryStat = false,
     vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
-    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4 },
-    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4 },
+    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4, scale = 1.0 },
+    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4, scale = 1.0 },
     colors = {
         money = {r = 1.0, g = 0.82, b = 0.0},
         currency = {r = 0.65, g = 0.85, b = 1.0},
@@ -83,7 +83,7 @@ local function validate(src, dst)
     end
 end
 
--- An empty table in DEFAULTS (e.g. watchlist.items) is free-form user data; the next()~=nil guard keeps prune from wiping it.
+-- An empty table in DEFAULTS (e.g. watchlist.items) is free-form user data. The next()~=nil guard keeps prune from wiping it.
 local function prune(src, dst)
     for k, v in pairs(dst) do
         if src[k] == nil then

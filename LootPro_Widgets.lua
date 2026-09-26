@@ -305,6 +305,48 @@ function U.CreateSlider(name, title, parent, minVal, maxVal, step, settingKey, c
     return s
 end
 
+local function RoundScale(v) return math.floor(v * 20 + 0.5) / 20 end
+
+function U.CreateScaleSlider(name, title, parent, configKey, tooltip)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    l:SetText(title)
+    l:Hide()
+
+    local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    s:SetPoint("TOP", l, "BOTTOM", 0, -10)
+    s:SetMinMaxValues(0.5, 2)
+    s:SetValueStep(0.05)
+    s:SetObeyStepOnDrag(true)
+    _G[name.."Low"]:SetText("50%")
+    _G[name.."High"]:SetText("200%")
+
+    local valText = _G[name.."Text"]
+    valText:SetFontObject("GameFontNormal")
+    local valFmt = title .. ": %d%%"
+
+    s:SetScript("OnValueChanged", function(_, value)
+        if not addon:IsReady() then return end
+        local val = RoundScale(value)
+        valText:SetText(valFmt:format(math.floor(val * 100 + 0.5)))
+        addon:SetReadoutScale(configKey, val)
+    end)
+
+    s:HookScript("OnShow", function(self)
+        valText:SetText(valFmt:format(math.floor(RoundScale(self:GetValue()) * 100 + 0.5)))
+    end)
+
+    s:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title, 1, 1, 1)
+        GameTooltip:AddLine(tooltip, 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    s:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    s.label = l
+    return s
+end
+
 function U.CreateEditBox(name, title, parent, settingKey)
     local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     l:SetText(title)

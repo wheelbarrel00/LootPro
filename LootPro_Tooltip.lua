@@ -77,7 +77,7 @@ local function AddInfo(tooltip)
     end
 end
 
--- Retail uses TooltipDataProcessor; clients that predate it (e.g. BCC) use the OnTooltipSetItem hook.
+-- Retail uses TooltipDataProcessor. Clients that predate it (e.g. BCC) use the OnTooltipSetItem hook.
 local TDP = _G.TooltipDataProcessor
 if TDP and TDP.AddTooltipPostCall and _G.Enum and _G.Enum.TooltipDataType and _G.Enum.TooltipDataType.Item then
     TDP.AddTooltipPostCall(_G.Enum.TooltipDataType.Item, function(tooltip)

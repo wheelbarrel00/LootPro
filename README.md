@@ -60,7 +60,7 @@ The settings window has nine tabs: Layout, Colors, Notifications, Custom, Recap,
 
 # Layout: sizing and placing the two readouts
 
-**Options > Layout.** Ten sliders, five for each readout, plus a sync button.
+**Options > Layout.** Twelve sliders, six for each readout, plus a sync button.
 
 | Slider | Range | Default | What it does |
 |---|---|---|---|
@@ -69,15 +69,19 @@ The settings window has nine tabs: Layout, Colors, Notifications, Custom, Recap,
 | Combat Frame Width | 200 to 1200 | 200 | |
 | Combat Frame Height | 50 to 800 | 200 | |
 | Max Combat Lines | 1 to 20 | 4 | How many lines can be on screen at once |
+| Combat Frame Scale | 50% to 200% | 100% | Makes the whole readout bigger or smaller |
 | Loot Text Size | 10 to 50 | 22 | |
 | Loot Fade (sec) | 1 to 30 | 6 | |
 | Loot Frame Width | 200 to 1200 | 200 | |
 | Loot Frame Height | 50 to 800 | 200 | |
 | Max Loot Lines | 1 to 20 | 4 | |
+| Loot Frame Scale | 50% to 200% | 100% | |
 
-**Sync Combat Layout to Loot** copies the five combat values onto the loot readout. It goes one way only, from combat to loot, and it overwrites whatever the loot readout had. There is no button for the other direction, so set up combat first if you plan to use it.
+**Sync Combat Layout to Loot** copies the six combat values onto the loot readout. It goes one way only, from combat to loot, and it overwrites whatever the loot readout had. There is no button for the other direction, so set up combat first if you plan to use it.
 
 Frame width and height set the area a readout occupies, which decides where long lines wrap. To move a readout, use **Unlock Windows** at the top of the settings panel and drag it.
+
+Text Size changes only the font. Frame Scale grows or shrinks everything in the readout together, including icons, framed row borders, and spacing, and the readout stays where you placed it while it scales.
 
 ***
 
@@ -187,7 +191,7 @@ Three dropdowns set what left, right, and middle click do. Each offers Open Sett
 
 ## Options Window Scale
 
-A slider from 75% to 125% that resizes the settings window and nothing else. Your readouts, the minimap icon, and the alert banner are unaffected. The percentage updates as you drag and the new size applies when you let go.
+A slider from 75% to 125% that resizes the settings window and nothing else. Your readouts, the minimap icon, and the alert banner are unaffected. To resize a readout, use Frame Scale on the Layout tab. The percentage updates as you drag and the new size applies when you let go.
 
 ## Combat text
 

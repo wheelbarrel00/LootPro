@@ -32,6 +32,21 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.20.0", date = "2026-09-26",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "XP lines no longer show a double space after the plus sign. \"+  1500 XP\" now reads \"+ 1500 XP\".",
+                    "The Lock Windows button now keeps up when you lock or unlock the windows from the minimap button. It could be left describing the opposite of what it would do.",
+                    "Vendor income in the session recap is accurate again. Gold from a party loot split that arrived while a merchant window was open was counted twice, once as looted gold and once as vendor income, which inflated your gold per hour. A sale that went through just as you closed the merchant window was also lost, and now counts.",
+                    "The notable item alert no longer goes off for a mount, pet, or toy you already own when the game has not loaded that item's details yet. An uncollected one still alerts, a moment later, once its details arrive.",
+                    "Toys outside the Miscellaneous item class, such as many older toys listed as consumables, are now recognized as toys. They can set off the notable item alert, and on Retail they show \"You already own this toy\" on their tooltip.",
+                } },
+                { head = "New Features", items = {
+                    "Frame Scale sliders on the Layout tab, one for the combat readout and one for the loot readout. Each makes its whole readout bigger or smaller, text, icons, and framed rows together, from 50% to 200%. The readout stays where you placed it while it scales, and Sync Combat Layout to Loot copies the scale along with the rest.",
+                } },
+            },
+        },
+        {
             version = "2.19.0", date = "2026-09-17",
             sections = {
                 { head = "New Features", items = {

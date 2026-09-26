@@ -113,7 +113,7 @@ local function MoneyAmount(s)
     return _tonumber((_gsub(s, "%D", ""))) or 0
 end
 
--- Map link RGB -> quality. The link color is the ACTUAL (bonus-adjusted) quality; GetItemQualityByID returns BASE quality (a downscaled epic-base green would wrongly trip the rare alert) and needs the item cache.
+-- Map link RGB -> quality. The link color is the ACTUAL (bonus-adjusted) quality. GetItemQualityByID returns BASE quality (a downscaled epic-base green would wrongly trip the rare alert) and needs the item cache.
 local QUALITY_BY_RGB = {}
 do
     local qc = _G.ITEM_QUALITY_COLORS
@@ -189,7 +189,8 @@ local function CleanMessage(msg, event)
 
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         local amount = _match(msg, "([%d%p%s]*%d)")
-        if amount then return "+ " .. amount .. " XP" end
+        -- The leftmost match starts on the space or colon before the number, so trim it or the line reads "+  1500 XP".
+        if amount then return "+ " .. (_gsub(amount, "^%D+", "")) .. " XP" end
 
     elseif _find(event, "CHAT_MSG_LOOT") or _find(event, "CHAT_MSG_CURRENCY") then
         local cleaned = msg
@@ -198,7 +199,7 @@ local function CleanMessage(msg, event)
             cleaned, n = _gsub(cleaned, pat, "")
             if n > 0 then break end
         end
-        -- Retail loot messages embed their own |T..|t icon; strip it since GetIconString prepends ours (else double icons).
+        -- Retail loot messages embed their own |T..|t icon. Strip it since GetIconString prepends ours (else double icons).
         cleaned = _gsub(cleaned, "|T[^|]-|t%s*", "")
         cleaned = _gsub(cleaned, "[%[%]]", "")
         cleaned = _gsub(cleaned, "x?%d*%s*%.?%s*$", TrailerRepl)
@@ -222,7 +223,7 @@ local function IsNoCountItem(cleanName)
     return false
 end
 
--- Some items fire both CHAT_MSG_LOOT and CHAT_MSG_CURRENCY (vendor buys), or CURRENCY twice (delve events); dedup by name within a tight window so the line shows once.
+-- Some items fire both CHAT_MSG_LOOT and CHAT_MSG_CURRENCY (vendor buys), or CURRENCY twice (delve events). Dedup by name within a tight window so the line shows once.
 local recentLoot = {}
 local recentCurrency = {}
 local DEDUP_WINDOW = 0.25
@@ -260,7 +261,7 @@ local function IsRecentCurrency(name)
     return true
 end
 
--- Final dedup on the fully-rendered line (count included) catches doubled LOOT lines the name dedup misses; a real second drop differs by count, so it still shows.
+-- Final dedup on the fully-rendered line (count included) catches doubled LOOT lines the name dedup misses. A real second drop differs by count, so it still shows.
 -- Lines that render no count are identical for two same-tick drops, so those callers pass the live bag count as a salt on its own ring.
 local DISPLAY_DEDUP_WINDOW = 0.3
 local DISP_RING = 8
@@ -279,7 +280,7 @@ local function IsDuplicateDisplay(line, salt)
     return false
 end
 
--- Lazy expiry-on-read leaks entries for items looted once and never seen again; this sweep clears stale dedup entries every 60s.
+-- Lazy expiry-on-read leaks entries for items looted once and never seen again. This sweep clears stale dedup entries every 60s.
 local function _SweepDedup()
     local now = _GetTime()
     for name, t in pairs(recentLoot) do
@@ -1117,7 +1118,7 @@ end
 
 local _lootSync = {}
 
--- Hover-pause calls SetFading(false), which snaps every buffered (faded) line back to full alpha; clear the buffer once the feed has fully faded so a later mouse-over can't resurrect old lines.
+-- Hover-pause calls SetFading(false), which snaps every buffered (faded) line back to full alpha. Clear the buffer once the feed has fully faded so a later mouse-over can't resurrect old lines.
 local FADE_OUT  = 1     -- must match SetFadeDuration below
 local SWEEP_PAD = 0.3
 
@@ -1251,6 +1252,7 @@ function addon:DoMinimapAction(action)
         if self:IsReady() then
             LootProConfig.locked = not LootProConfig.locked
             self:UpdateAllVisuals()
+            if ns.UI and ns.UI.RefreshLockButton then ns.UI.RefreshLockButton() end
         end
     end
 end
@@ -1286,6 +1288,18 @@ addon.lootFrame = CreateReadoutFrame("LootProLoot", "LOOT & MONEY", 50, "loot")
 
 local _updateConfigsBuf = { {}, {} }
 
+-- The saved offsets are in the frame's own scaled units, so rescale them or the readout slides across the screen as it resizes.
+function addon:SetReadoutScale(configKey, scale)
+    if not self:IsReady() then return end
+    local s = LootProConfig[configKey]
+    local old = s.scale or 1
+    if old == scale then return end
+    local ratio = old / scale
+    s.x, s.y = (s.x or 0) * ratio, (s.y or 0) * ratio
+    s.scale = scale
+    self:UpdateAllVisuals()
+end
+
 function addon:UpdateAllVisuals()
     if not self:IsReady() then return end
 
@@ -1298,7 +1312,7 @@ function addon:UpdateAllVisuals()
     _updateConfigsBuf[1].f, _updateConfigsBuf[1].s = self.combatFrame, LootProConfig.combat
     _updateConfigsBuf[2].f, _updateConfigsBuf[2].s = self.lootFrame,   LootProConfig.loot
 
-    -- Guard each expensive setter with a cache key; UpdateAllVisuals fires on every slider tick, and re-applying SetMaxLines visibly clears the message buffer.
+    -- Guard each expensive setter with a cache key. UpdateAllVisuals fires on every slider tick, and re-applying SetMaxLines visibly clears the message buffer.
     for _, cfg in ipairs(_updateConfigsBuf) do
         local f, s = cfg.f, cfg.s
 
@@ -1306,6 +1320,12 @@ function addon:UpdateAllVisuals()
         if f._w ~= width or f._h ~= height then
             f:SetSize(width, height)
             f._w, f._h = width, height
+        end
+
+        local scale = s.scale or 1
+        if f._scale ~= scale then
+            f:SetScale(scale)
+            f._scale = scale
         end
 
         local point = s.point or "CENTER"
@@ -1338,7 +1358,7 @@ function addon:UpdateAllVisuals()
         if LootProConfig.locked then
             f:SetBackdropColor(0,0,0,0)
             f:SetBackdropBorderColor(0,0,0,0)
-            -- hover-pause: motion-only mouse so OnEnter/OnLeave fire while clicks pass through the locked readout (retail-era API; else fully disabled).
+            -- hover-pause: motion-only mouse so OnEnter/OnLeave fire while clicks pass through the locked readout (retail-era API, otherwise fully disabled).
             if LootProConfig.hoverPause and f.SetMouseMotionEnabled and f.SetMouseClickEnabled then
                 f:SetMouseClickEnabled(false)
                 f:SetMouseMotionEnabled(true)
@@ -1446,7 +1466,7 @@ function addon:PostTestMessages()
     end
 end
 
--- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string); verify that in-game in an active Mythic+/boss encounter.
+-- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string). Verify that in-game in an active Mythic+/boss encounter.
 function addon:RunRegressionTest()
     if not self:IsReady() then
         print("|cFFFF6060[LootPro]|r Cannot run test: addon not initialized.")
@@ -1702,7 +1722,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         local msg = arg1
 
-        -- 12.0 secret values: the CHAT_MSG payload is a secret string in active encounters; any string op throws, so skip the line.
+        -- 12.0 secret values: the CHAT_MSG payload is a secret string in active encounters. Any string op throws, so skip the line.
         if _issecret and _issecret(msg) then return end
 
         if event == "CHAT_MSG_COMBAT_XP_GAIN" then
@@ -1757,6 +1777,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if LootProConfig.recapEnabled and self.RecapAddMoney then
                 self:RecapAddMoney(copper)
             end
+            if self.VendorNoteLootMoney and not self._regressionTest then self:VendorNoteLootMoney(copper) end
 
             if n.money then
                 if LootProConfig.framedLoot and LootProConfig.mergeRows then
@@ -1774,7 +1795,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             end
 
         elseif event == "CHAT_MSG_CURRENCY" then
-            -- Currency uses |Hcurrency: links (not item:), so GetIconString can't make an icon; pull icon + total from C_CurrencyInfo.
+            -- Currency uses |Hcurrency: links (not item:), so GetIconString can't make an icon. Pull icon + total from C_CurrencyInfo.
             local currencyName = ExtractItemName(msg)
             local currencyID = _tonumber(_match(msg, "currency:(%d+)"))
             local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
@@ -1902,7 +1923,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            -- Hidden items were still tallied above; only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
+            -- Hidden items were still tallied above. Only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
             local hidden = false
             local lfil = LootProConfig.lootFilters
             if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe

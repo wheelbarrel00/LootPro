@@ -253,10 +253,11 @@ function ns.UI:Initialize()
 
     local lockBtn = CreateStyledButton(gui, 140, 26, LootProConfig.locked and "Unlock Windows" or "Lock Windows")
     lockBtn:SetPoint("TOPLEFT", 25, -100)
+    ns.UI.RefreshLockButton = function() lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows") end
     lockBtn:SetScript("OnClick", function()
         LootProConfig.locked = not LootProConfig.locked
         addon:UpdateAllVisuals()
-        lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows")
+        ns.UI.RefreshLockButton()
     end)
 
     local testBtn = CreateStyledButton(gui, 140, 26, "Start Test Mode")
@@ -281,7 +282,7 @@ function ns.UI:Initialize()
         if not LootProConfig.locked then
             LootProConfig.locked = true
             addon:UpdateAllVisuals()
-            lockBtn:SetText("Unlock Windows")
+            ns.UI.RefreshLockButton()
         end
         if addon.isTesting then
             addon.isTesting = false
@@ -305,6 +306,9 @@ function ns.UI:Initialize()
     cHeight.label:SetPoint("TOPLEFT", cWidth, "BOTTOMLEFT", 0, -20); cHeight:ClearAllPoints(); cHeight:SetPoint("TOPLEFT", cHeight.label, "BOTTOMLEFT", 0, -10); cHeight:SetValue(LootProConfig.combat.height)
     local cMaxLines = U.CreateSlider("LPRO_CML", "Max Combat Lines", pages.layout, 1, 20, 1, "maxLines", "combat")
     cMaxLines.label:SetPoint("TOPLEFT", cHeight, "BOTTOMLEFT", 0, -20); cMaxLines:ClearAllPoints(); cMaxLines:SetPoint("TOPLEFT", cMaxLines.label, "BOTTOMLEFT", 0, -10); cMaxLines:SetValue(LootProConfig.combat.maxLines)
+    local cScale = U.CreateScaleSlider("LPRO_CSC", "Combat Frame Scale", pages.layout, "combat",
+        "Resizes the whole combat readout, text and framed rows together. 100% is the normal size. The readout keeps its place on screen as it scales.")
+    cScale.label:SetPoint("TOPLEFT", cMaxLines, "BOTTOMLEFT", 0, -20); cScale:ClearAllPoints(); cScale:SetPoint("TOPLEFT", cScale.label, "BOTTOMLEFT", 0, -10); cScale:SetValue(LootProConfig.combat.scale)
 
     local lSize = U.CreateSlider("LPRO_LS", "Loot Text Size", pages.layout, 10, 50, 1, "size", "loot")
     lSize.label:SetPoint("TOPRIGHT", -50, 0); lSize:ClearAllPoints(); lSize:SetPoint("TOPRIGHT", lSize.label, "BOTTOMRIGHT", 0, -10); lSize:SetValue(LootProConfig.loot.size)
@@ -316,6 +320,9 @@ function ns.UI:Initialize()
     lHeight.label:SetPoint("TOPRIGHT", lWidth, "BOTTOMRIGHT", 0, -20); lHeight:ClearAllPoints(); lHeight:SetPoint("TOPRIGHT", lHeight.label, "BOTTOMRIGHT", 0, -10); lHeight:SetValue(LootProConfig.loot.height)
     local lMaxLines = U.CreateSlider("LPRO_LML", "Max Loot Lines", pages.layout, 1, 20, 1, "maxLines", "loot")
     lMaxLines.label:SetPoint("TOPRIGHT", lHeight, "BOTTOMRIGHT", 0, -20); lMaxLines:ClearAllPoints(); lMaxLines:SetPoint("TOPRIGHT", lMaxLines.label, "BOTTOMRIGHT", 0, -10); lMaxLines:SetValue(LootProConfig.loot.maxLines)
+    local lScale = U.CreateScaleSlider("LPRO_LSC", "Loot Frame Scale", pages.layout, "loot",
+        "Resizes the whole loot readout, text, icons and framed rows together. 100% is the normal size. The readout keeps its place on screen as it scales.")
+    lScale.label:SetPoint("TOPRIGHT", lMaxLines, "BOTTOMRIGHT", 0, -20); lScale:ClearAllPoints(); lScale:SetPoint("TOPRIGHT", lScale.label, "BOTTOMRIGHT", 0, -10); lScale:SetValue(LootProConfig.loot.scale)
 
     local syncLayout = CreateStyledButton(pages.layout, 220, 25, "Sync Combat Layout to Loot")
     syncLayout:SetPoint("BOTTOM", 0, 80)
@@ -325,7 +332,8 @@ function ns.UI:Initialize()
         LootProConfig.loot.width = LootProConfig.combat.width
         LootProConfig.loot.height = LootProConfig.combat.height
         LootProConfig.loot.maxLines = LootProConfig.combat.maxLines
-        lSize:SetValue(LootProConfig.combat.size); lFade:SetValue(LootProConfig.combat.fade); lWidth:SetValue(LootProConfig.combat.width); lHeight:SetValue(LootProConfig.combat.height); lMaxLines:SetValue(LootProConfig.combat.maxLines)
+        addon:SetReadoutScale("loot", LootProConfig.combat.scale)
+        lSize:SetValue(LootProConfig.combat.size); lFade:SetValue(LootProConfig.combat.fade); lWidth:SetValue(LootProConfig.combat.width); lHeight:SetValue(LootProConfig.combat.height); lMaxLines:SetValue(LootProConfig.combat.maxLines); lScale:SetValue(LootProConfig.combat.scale)
         addon:UpdateAllVisuals()
     end)
 
@@ -705,7 +713,7 @@ function ns.UI:Initialize()
     scaleSlider:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Options Window Scale", 1, 1, 1)
-        GameTooltip:AddLine("Resizes this settings window only. It does not change the loot or combat feeds, or anything the addon shows in the world.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Resizes this settings window only. To resize the loot or combat feeds, use the Frame Scale sliders on the Layout tab.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     scaleSlider:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1545,13 +1553,11 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.18.0:|r",
+        "|cFFEBB706What's new in 2.20.0:|r",
         " ",
-        "|cFFEBB706Color your quest items|r  New on the Colors tab. Turn on \"Color quest items\" and your own quest drops are painted in a color you pick instead of their item quality color, so they stand out in a busy feed. Framed rows take the color on the item name and the borders, plain text lines take it on the whole line. It is off by default.",
+        "|cFFEBB706Resize your readouts|r  New Frame Scale sliders on the Layout tab, one for combat and one for loot. Each makes its whole readout bigger or smaller, text, icons, and framed rows together, from 50% to 200%. The readout stays where you placed it while it scales.",
         " ",
-        "|cFFEBB706Or use your class color|r  Tick \"Use my class color\" and quest items take your own class color rather than the swatch, for anyone whose color picker does not already offer one.",
-        " ",
-        "|cFFEBB706It catches the ones that are easy to miss|r  Coloring covers both quest-type items and the ordinary cloth or meat an active quest asks you to collect. Those are shown even when they fall below your Minimum Loot Quality, since most of them are white or gray and would never reach the feed otherwise. A gray quest item also keeps its own framed row instead of collapsing into Junk Items.",
+        "|cFFEBB706Also fixed|r  Vendor income no longer counts a party gold split twice, XP lines lost a stray space, and the notable item alert no longer goes off for collectibles you already own.",
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1749,8 +1755,8 @@ function ns.UI:Initialize()
     end
 
     function ns.UI:RefreshAllWidgets()
-        cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines)
-        lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines)
+        cSize:SetValue(LootProConfig.combat.size); cFade:SetValue(LootProConfig.combat.fade); cWidth:SetValue(LootProConfig.combat.width); cHeight:SetValue(LootProConfig.combat.height); cMaxLines:SetValue(LootProConfig.combat.maxLines); cScale:SetValue(LootProConfig.combat.scale)
+        lSize:SetValue(LootProConfig.loot.size); lFade:SetValue(LootProConfig.loot.fade); lWidth:SetValue(LootProConfig.loot.width); lHeight:SetValue(LootProConfig.loot.height); lMaxLines:SetValue(LootProConfig.loot.maxLines); lScale:SetValue(LootProConfig.loot.scale)
         cFont:Refresh(); cOut:Refresh(); lFont:Refresh(); lOut:Refresh()
         mmLeft:Refresh(); mmRight:Refresh(); mmMid:Refresh(); capCheck:SetChecked(LootProConfig.currencyCap)
         scaleSlider:SetValue(LootProConfig.uiScale or 1); gui:SetScale(LootProConfig.uiScale or 1)
@@ -1774,7 +1780,7 @@ function ns.UI:Initialize()
                 if fs then fs:SetTextColor(c.r, c.g, c.b) end
             end
         end
-        lockBtn:SetText(LootProConfig.locked and "Unlock Windows" or "Lock Windows")
+        ns.UI.RefreshLockButton()
         -- Recap/Alerts/Block/Vendor sync their widgets in OnShow, and Show() never re-fires it on the page that is already visible.
         local shownPage = currentActiveTab and pages[currentActiveTab]
         local onShow = shownPage and shownPage:GetScript("OnShow")

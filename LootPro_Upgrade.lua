@@ -12,7 +12,7 @@ local _format = string.format
 local CLASS_WEAPON, CLASS_ARMOR = 2, 4
 local ARMOR_COSMETIC = 5
 
--- Equip location -> the inventory slot(s) it competes with; multi-slot types (rings/trinkets/one-hand weapons) win if they beat any one of them.
+-- Equip location -> the inventory slot(s) it competes with. Multi-slot types (rings/trinkets/one-hand weapons) win if they beat any one of them.
 local SLOTS = {
     INVTYPE_HEAD            = { INVSLOT_HEAD },
     INVTYPE_NECK            = { INVSLOT_NECK },
@@ -111,7 +111,7 @@ function addon:IsUpgrade(itemID, link)
 
     local lootedIlvl = _GetDetailedItemLevelInfo(link)
     if not lootedIlvl or lootedIlvl == 0 then
-        -- ilvl not cached yet; warm it and skip this time (better to miss a tag than show a wrong one).
+        -- ilvl is not cached yet. Warm it and skip this time (better to miss a tag than show a wrong one).
         if itemID and _RequestItemData then _RequestItemData(itemID) end
         return false
     end

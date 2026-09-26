@@ -9,7 +9,7 @@ local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _GetMoney = GetMoney
 local _After = C_Timer and C_Timer.After
--- 12.0 "secret value" probe (nil pre-12.0). Container links can be secret inside active instances; guard before any string op.
+-- 12.0 "secret value" probe (nil pre-12.0). Container links can be secret inside active instances. Guard before any string op.
 local _issecret = issecretvalue
 
 local _Container = C_Container
@@ -20,7 +20,7 @@ local _UseContainer = (_Container and _Container.UseContainerItem)      or UseCo
 
 local NUM_BAGS = (NUM_BAG_SLOTS or 4)
 
--- Quest items can be poor quality; never auto-sell them. classID 12 == Enum.ItemClass.Questitem.
+-- Quest items can be poor quality, so never auto-sell them. classID 12 == Enum.ItemClass.Questitem.
 local CLASS_QUEST = 12
 
 local function ReadSlot(bag, slot)
@@ -60,7 +60,7 @@ local function BuildGrayList(collect)
                 local classID = itemID and _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
                 if classID ~= CLASS_QUEST then
                     stackCount = stackCount or 1
-                    -- GetItemInfo's sell price is nil until the item is cached (first vendor visit after login); warm it so the next scan reports the real value.
+                    -- GetItemInfo's sell price is nil until the item is cached (first vendor visit after login). Warm it so the next scan reports the real value.
                     local sellPrice = _select(11, _GetItemInfo(link))
                     if not sellPrice then
                         if itemID and _RequestItemData then _RequestItemData(itemID) end
@@ -189,7 +189,7 @@ sellFrame:SetScript("OnUpdate", function(_, elapsed)
     local e = entryPool[info.cursor]
     info.cursor = info.cursor + 1
 
-    -- Re-read the slot and only sell if it still holds the exact gray we listed; a different/moved/locked item is skipped, never sold.
+    -- Re-read the slot and only sell if it still holds the exact gray we listed. A different, moved, or locked item is skipped, never sold.
     local link, _, _, locked = ReadSlot(e.bag, e.slot)
     if not (_issecret and _issecret(link)) and link == e.link and not locked then
         -- Re-read the price at sell time: the cache is reliably warm by now, so this corrects any 0 from the snapshot scan.
@@ -252,14 +252,53 @@ local function OnMerchantShow()
     addon:VendorStart(false)
 end
 
--- Money gained while a merchant is open is vendor income (sales raise it; buying/repairing lowers it and is ignored). Listen for PLAYER_MONEY only while the window is open. Captures manual sales and the gray auto-seller alike.
+-- PLAYER_MONEY also fires for spending, so only positive deltas count as vendor income.
 local lastMoney = 0
+local pendingGain, lootCredit, flushPending, flushSession = 0, 0, false, nil
+local merchantOpen, tracking = false, false
+local closeCount, graceCount = 0, 0
+local FLUSH_DELAY, CLOSE_GRACE = 0.5, 1
 
 local evf = CreateFrame("Frame", "LootProVendorEvents")
+
+local function FlushVendorGain()
+    flushPending = false
+    local gain = pendingGain - lootCredit
+    local owner = flushSession
+    pendingGain, lootCredit, flushSession = 0, 0, nil
+    if gain > 0 and LootProConfig.recapEnabled and addon.RecapAddVendorGold and addon:RecapGetSession() == owner then
+        addon:RecapAddVendorGold(gain)
+    end
+end
+
+-- Coin looted with a merchant open (a party split) raises PLAYER_MONEY too, and the loot feed already books it. Hold each gain briefly so the two net out whichever event lands first.
+local function ScheduleFlush()
+    if flushPending then return end
+    flushPending = true
+    flushSession = addon.RecapGetSession and addon:RecapGetSession()
+    if _After then _After(FLUSH_DELAY, FlushVendorGain) else FlushVendorGain() end
+end
+
+function addon.VendorNoteLootMoney(_, copper)
+    if not tracking or not copper or copper <= 0 then return end
+    lootCredit = lootCredit + copper
+    ScheduleFlush()
+end
+
+-- A sale confirmed just after a fast close still reports its money, so tracking outlives the close. Grace timers fire in close order, so only the latest may end it, and a reopen cancels it.
+local function EndTracking()
+    graceCount = graceCount + 1
+    if merchantOpen or graceCount ~= closeCount then return end
+    tracking = false
+    evf:UnregisterEvent("PLAYER_MONEY")
+end
+
 evf:RegisterEvent("MERCHANT_SHOW")
 evf:RegisterEvent("MERCHANT_CLOSED")
+evf:RegisterEvent("PLAYER_LOGOUT")
 evf:SetScript("OnEvent", function(_, event)
     if event == "MERCHANT_SHOW" then
+        merchantOpen, tracking = true, true
         lastMoney = _GetMoney()
         evf:RegisterEvent("PLAYER_MONEY")
         if _After then _After(0.3, OnMerchantShow) else OnMerchantShow() end
@@ -267,12 +306,17 @@ evf:SetScript("OnEvent", function(_, event)
         local now = _GetMoney()
         local delta = now - lastMoney
         lastMoney = now
-        if delta > 0 and LootProConfig.recapEnabled and addon.RecapAddVendorGold then
-            addon:RecapAddVendorGold(delta)
+        if delta > 0 then
+            pendingGain = pendingGain + delta
+            ScheduleFlush()
         end
     elseif event == "MERCHANT_CLOSED" then
-        evf:UnregisterEvent("PLAYER_MONEY")
+        merchantOpen = false
+        closeCount = closeCount + 1
+        if _After then _After(CLOSE_GRACE, EndTracking) else EndTracking() end
         -- Use FinishRun, not a bare reset, so closing the merchant mid-run still records the partial tally.
         FinishRun()
+    elseif event == "PLAYER_LOGOUT" then
+        if flushPending then FlushVendorGain() end
     end
 end)

@@ -46,14 +46,14 @@ local function NewSession()
         notable = {},
         byItem = {},
         byItemKeys = 0,
-        -- version bumps on every change; the GUI tab rebuilds its text only when it moves (avoids per-frame churn).
+        -- version bumps on every change. The GUI tab rebuilds its text only when it moves (avoids per-frame churn).
         version = 0,
     }
 end
 
 session = NewSession()
 
--- isReloadingUi misfires on a true login (12.0); detect a /reload directly so only a real reload restores the session.
+-- isReloadingUi misfires on a true login (12.0). Detect a /reload directly so only a real reload restores the session.
 local recapLoaded = false
 local reloadIntent = false
 if type(_G.ReloadUI) == "function" then
@@ -261,7 +261,7 @@ function addon:RecapFormatMoney(copper)
     return _format("%dc", c)
 end
 
--- Returns a scratch list reused across calls; do NOT hold it across another RecapRarityList() call.
+-- Returns a scratch list reused across calls. Do NOT hold it across another RecapRarityList() call.
 local _rarityOut = {}
 local _rarityPool = {}
 local function ByQualityDesc(a, b) return a.quality > b.quality end

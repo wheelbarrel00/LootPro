@@ -17,6 +17,14 @@ local _GetMountFromItem = C_MountJournal and C_MountJournal.GetMountFromItem
 local _GetMountInfoByID = C_MountJournal and C_MountJournal.GetMountInfoByID
 local _GetPetInfoByItemID = C_PetJournal and C_PetJournal.GetPetInfoByItemID
 local _GetNumCollectedInfo = C_PetJournal and C_PetJournal.GetNumCollectedInfo
+local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
+local _IsItemDataCached = C_Item and C_Item.IsItemDataCachedByID
+local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
+local HAS_JOURNAL = {
+    mount = (_GetMountFromItem and _GetMountInfoByID) and true or false,
+    pet = (_GetNumCollectedInfo and _GetPetInfoByItemID) and true or false,
+    toy = _PlayerHasToy and true or false,
+}
 
 local WATCH_CAP = 30
 
@@ -280,27 +288,62 @@ local function ToyOwned(itemID)
     return _PlayerHasToy(itemID) and true or false
 end
 
--- owned is true/false, or nil when unknown (no journal API). kind is nil for a non-collectible.
+-- owned is true/false, or nil when unknown (no journal API, or one that cannot answer yet). kind is nil for a non-collectible.
 function addon:CollectibleOwned(itemID, link)
     -- GetItemInfoInstant reports no classID for a caged pet, so classify the battlepet link first.
     if link and link:match("|Hbattlepet:") then return PetOwned(nil, link), "pet" end
     if not _GetItemInfoInstant or (not itemID and not link) then return nil, nil end
-    local _, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
+    local id, _, _, _, _, classID, subclassID = _GetItemInfoInstant(itemID or link)
+    itemID = itemID or id
     if classID == CLASS_BATTLEPET then
         return PetOwned(itemID, link), "pet"
     elseif classID == CLASS_MISC then
         if subclassID == SUBCLASS_MOUNT then return MountOwned(itemID), "mount" end
         if subclassID == SUBCLASS_PET then return PetOwned(itemID, link), "pet" end
-        if _GetToyInfo and itemID and _GetToyInfo(itemID) ~= nil then return ToyOwned(itemID), "toy" end
     end
+    -- Older toys can carry other item classes, often Consumable, so check the toy box no matter the item class.
+    if _GetToyInfo and itemID and _GetToyInfo(itemID) ~= nil then return ToyOwned(itemID), "toy" end
     return nil, nil
 end
 
--- Notable = an uncollected mount, pet, or toy.
+local lateNotable = {}
+local lateFrame
+
+local function LateNotable_OnEvent(_, _, itemID, success)
+    if not lateNotable[itemID] then return end
+    lateNotable[itemID] = nil
+    if next(lateNotable) == nil then lateFrame:UnregisterEvent("ITEM_DATA_LOAD_RESULT") end
+    if not success then return end
+    local owned, kind = addon:CollectibleOwned(itemID)
+    if not kind or owned ~= false then return end
+    local q = _GetItemQualityByID and _GetItemQualityByID(itemID)
+    local ra = LootProConfig and LootProConfig.rareAlert
+    -- The loot line already alerted on quality for anything at or above the threshold.
+    if q and ra and q >= (ra.threshold or 5) then return end
+    addon:RareOnLoot(q, true, false)
+end
+
+local function RecheckWhenLoaded(itemID)
+    if not (itemID and _RequestItemData and _IsItemDataCached) or _IsItemDataCached(itemID) then return end
+    if not lateFrame then
+        lateFrame = CreateFrame("Frame")
+        lateFrame:SetScript("OnEvent", LateNotable_OnEvent)
+    end
+    if not pcall(lateFrame.RegisterEvent, lateFrame, "ITEM_DATA_LOAD_RESULT") then return end
+    lateNotable[itemID] = true
+    _RequestItemData(itemID)
+end
+
+-- Notable = an uncollected mount, pet, or toy. An unloaded item cannot answer ownership yet, so it is re-checked when its data arrives instead of guessed now.
 function addon:IsNotableItem(itemID, link)
     local owned, kind = self:CollectibleOwned(itemID, link)
     if not kind then return false end
-    return owned ~= true
+    if owned == nil then
+        if not HAS_JOURNAL[kind] then return true end
+        RecheckWhenLoaded(itemID)
+        return false
+    end
+    return not owned
 end
 
 function addon:RareOnLoot(quality, isNotable, isValuable)
