@@ -608,7 +608,7 @@ function ns.UI:Initialize()
         addon:UpdateAllVisuals()
     end)
 
-    -- Fast Loot is the game's autoLootDefault CVar (persists on its own). NOTE: "enableQuickLoot" is not a real CVar -- the prior build wrote it and the toggle never stuck.
+    -- Fast Loot is the game's autoLootDefault CVar, which persists on its own. "enableQuickLoot" is not a real CVar, which is why an older build's toggle never stuck.
     local function LP_GetAutoLoot()
         if C_CVar and C_CVar.GetCVarBool then return C_CVar.GetCVarBool("autoLootDefault") end
         if GetCVarBool then return GetCVarBool("autoLootDefault") end

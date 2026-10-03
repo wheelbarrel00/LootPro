@@ -1,11 +1,12 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.20.0"
+ns.addon.VERSION = "2.20.1"
 -- Bump on each new What's New popup. It shows once per revision (LootProConfig.whatsNewSeen).
 ns.addon.WHATS_NEW = 13
 ns.addon.isTesting = false
-ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+-- Forever reports WOW_PROJECT_CAMELOT (18) since build 70170 but runs the retail engine.
+ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
 ns.U = {}

@@ -5,6 +5,12 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.1] - 2026-10-03
+
+### Bug Fixes
+- Loot Pro works properly on WoW Forever again. Forever's latest client update changed how the game identifies itself, and Loot Pro began treating it as Classic, so the gear upgrade and tertiary stat tags stopped appearing.
+- On WoW Forever, the settings for gear upgrades, tertiary stats, new transmog appearances, and "already owned" tooltips are back in the options window. They disappeared after the same update, which left the new appearance marker and the "already owned" tooltip line running for anyone who had them turned on, with no way to turn them off.
+
 ## [2.20.0] - 2026-09-26
 
 ### Bug Fixes

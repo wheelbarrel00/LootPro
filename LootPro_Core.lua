@@ -113,7 +113,7 @@ local function MoneyAmount(s)
     return _tonumber((_gsub(s, "%D", ""))) or 0
 end
 
--- Map link RGB -> quality. The link color is the ACTUAL (bonus-adjusted) quality. GetItemQualityByID returns BASE quality (a downscaled epic-base green would wrongly trip the rare alert) and needs the item cache.
+-- The link color is the ACTUAL (bonus-adjusted) quality. GetItemQualityByID returns BASE quality (a downscaled epic-base green would wrongly trip the rare alert) and needs the item cache.
 local QUALITY_BY_RGB = {}
 do
     local qc = _G.ITEM_QUALITY_COLORS
@@ -1466,7 +1466,7 @@ function addon:PostTestMessages()
     end
 end
 
--- NOTE: synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string). Verify that in-game in an active Mythic+/boss encounter.
+-- Synthetic args are plain strings, so this can't exercise the 12.0 secret-value guard (no API mints a secret string). Verify that in-game in an active Mythic+/boss encounter.
 function addon:RunRegressionTest()
     if not self:IsReady() then
         print("|cFFFF6060[LootPro]|r Cannot run test: addon not initialized.")

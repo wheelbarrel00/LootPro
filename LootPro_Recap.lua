@@ -78,8 +78,8 @@ end
 
 local function RestoreSession(saved)
     local s = NewSession()
+    -- GetTime() is continuous across a /reload, so the saved startTime and pause stamp stay valid on restore.
     s.startTime     = tonumber(saved.startTime) or s.startTime
-    -- GetTime() is continuous across a /reload, so the pause stamp stays valid on restore.
     s.pausedTotal   = tonumber(saved.pausedTotal) or 0
     s.pauseStart    = tonumber(saved.pauseStart) or nil
     s.copper        = tonumber(saved.copper) or 0
@@ -94,7 +94,6 @@ local function RestoreSession(saved)
     s.notable       = type(saved.notable) == "table" and saved.notable or {}
     s.byItem        = type(saved.byItem) == "table" and saved.byItem or {}
     s.byItemKeys    = tonumber(saved.byItemKeys) or 0
-    -- GetTime() is continuous across a /reload, so the saved startTime stays valid on restore.
     s.version       = (tonumber(saved.version) or 0) + 1
     return s
 end
