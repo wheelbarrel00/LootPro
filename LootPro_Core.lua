@@ -1777,7 +1777,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if LootProConfig.recapEnabled and self.RecapAddMoney then
                 self:RecapAddMoney(copper)
             end
-            if self.VendorNoteLootMoney and not self._regressionTest then self:VendorNoteLootMoney(copper) end
+            if self.RecapNoteOtherMoney and not self._regressionTest then self:RecapNoteOtherMoney(copper) end
 
             if n.money then
                 if LootProConfig.framedLoot and LootProConfig.mergeRows then
@@ -1884,6 +1884,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             local isNotable = false
             local isUpgrade = false
             local isValuable = false
+            local rareTriggered = false
             local isQuest = false
             local tertiaryTag = nil
             if isSelf then
@@ -1906,14 +1907,20 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         _RequestItemData(itemID)
                     end
                 end
+                if (LootProConfig.lootUpgrade or (ra and ra.upgrade)) and self.IsUpgrade then
+                    isUpgrade = self:IsUpgrade(itemID, link)
+                end
+                local highIlvl = false
+                if ra and ra.ilvl and ra.ilvl > 0 and self.GearItemLevel then
+                    local ilvl = self:GearItemLevel(itemID, link)
+                    highIlvl = ilvl ~= nil and ilvl >= ra.ilvl
+                end
+                rareTriggered = isNotable or isValuable or highIlvl or (isUpgrade and ra and ra.upgrade) or false
                 if self.RareOnLoot then
-                    self:RareOnLoot(q, isNotable, isValuable)
+                    self:RareOnLoot(q, rareTriggered)
                 end
                 if LootProConfig.newAppearance and self.IsNewAppearance then
                     isNewApp = self:IsNewAppearance(link)
-                end
-                if LootProConfig.lootUpgrade and self.IsUpgrade then
-                    isUpgrade = self:IsUpgrade(itemID, link)
                 end
                 if LootProConfig.tertiaryStat and self.TertiaryStatTag then
                     tertiaryTag = self:TertiaryStatTag(link)
@@ -1947,7 +1954,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
             if n.loot and (q >= threshold or isQuest) and not hidden then
                 local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
                 local ra = LootProConfig.rareAlert
-                if ra and ra.color and (q >= ra.threshold or isNotable or isValuable) then
+                if ra and ra.color and (q >= ra.threshold or rareTriggered) then
                     local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
                     if qc then lr, lg, lb = qc.r, qc.g, qc.b end
                 end
@@ -1960,7 +1967,11 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 if LootProConfig.lootIlvl and self.LootItemLevel then
                     ilvlTag = self:LootItemLevel(itemID, link) or ""
                 end
-                local marker = ilvlTag .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and UPGRADE_TAG or "") .. (tertiaryTag or "")
+                local trackTag
+                if LootProConfig.upgradeTrack and (isSelf or LootProConfig.upgradeTrackGroup) and self.UpgradeTrackTag then
+                    trackTag = self:UpgradeTrackTag(itemID, link)
+                end
+                local marker = ilvlTag .. (trackTag or "") .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and LootProConfig.lootUpgrade and UPGRADE_TAG or "") .. (tertiaryTag or "")
                 -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
                 local fIcon, fCat, fName, fMergeKey
                 if LootProConfig.framedLoot then

@@ -7,6 +7,8 @@ local _format = string.format
 local _tremove = table.remove
 local _GetRealZoneText = GetRealZoneText
 local _time = time
+local _GetMoney = GetMoney
+local _After = C_Timer and C_Timer.After
 
 local NOTABLE_CAP = 10
 local NOTABLE_QUALITY = 4
@@ -36,6 +38,9 @@ local function NewSession()
         pausedTotal = 0,
         copper = 0,
         vendorCopper = 0,
+        questCopper = 0,
+        mailCopper = 0,
+        tradeCopper = 0,
         graySold = 0,
         grayCopper = 0,
         zone = zone,
@@ -84,6 +89,9 @@ local function RestoreSession(saved)
     s.pauseStart    = tonumber(saved.pauseStart) or nil
     s.copper        = tonumber(saved.copper) or 0
     s.vendorCopper  = tonumber(saved.vendorCopper) or 0
+    s.questCopper   = tonumber(saved.questCopper) or 0
+    s.mailCopper    = tonumber(saved.mailCopper) or 0
+    s.tradeCopper   = tonumber(saved.tradeCopper) or 0
     s.graySold      = tonumber(saved.graySold) or 0
     s.grayCopper    = tonumber(saved.grayCopper) or 0
     s.zone          = saved.zone or s.zone
@@ -168,12 +176,26 @@ function addon:RecapAddMoney(copper)
     session.version = session.version + 1
 end
 
-function addon:RecapAddVendorGold(copper)
+local INCOME_FIELD = { vendor = "vendorCopper", quest = "questCopper", mail = "mailCopper", trade = "tradeCopper" }
+
+function addon:RecapAddIncome(kind, copper)
+    local field = INCOME_FIELD[kind]
     copper = tonumber(copper)
-    if not copper or copper <= 0 then return end
+    if not field or not copper or copper <= 0 then return end
     EnsureZone(session)
-    session.vendorCopper = session.vendorCopper + copper
+    session[field] = (session[field] or 0) + copper
     session.version = session.version + 1
+end
+
+-- Mail and trade are transfers (auction payouts, alts), so they count toward the total but not the per-hour rate.
+function addon.RecapGoldTotals()
+    local s = session
+    local quest, vendor = s.questCopper or 0, s.vendorCopper or 0
+    local mail, trade = s.mailCopper or 0, s.tradeCopper or 0
+    local earned = s.copper + quest + vendor
+    local sources = (s.copper > 0 and 1 or 0) + (quest > 0 and 1 or 0) + (vendor > 0 and 1 or 0)
+        + (mail > 0 and 1 or 0) + (trade > 0 and 1 or 0)
+    return earned, earned + mail + trade, sources
 end
 
 -- Vendor-tab tally only. grayCopper is a subset of vendorCopper, so it must not feed the recap totals or bump version.
@@ -183,6 +205,98 @@ function addon:RecapAddGraySale(count, copper)
     session.graySold = (session.graySold or 0) + count
     session.grayCopper = (session.grayCopper or 0) + (tonumber(copper) or 0)
 end
+
+-- PLAYER_MONEY also fires for spending, so only positive deltas count as income.
+local WINDOW_OPEN = { MERCHANT_SHOW = "vendor", MAIL_SHOW = "mail", TRADE_SHOW = "trade" }
+local WINDOW_CLOSE = { MERCHANT_CLOSED = "vendor", MAIL_CLOSED = "mail", TRADE_CLOSED = "trade" }
+local lastMoney = 0
+local pendingGain, otherCredit, flushPending, flushSession, flushKind = 0, 0, false, nil, nil
+local openKind, trackKind = nil, nil
+local closeCount, graceCount = 0, 0
+local flushScheduled, flushFired = 0, 0
+local FLUSH_DELAY, CLOSE_GRACE = 0.5, 1
+
+local incomeEvents = CreateFrame("Frame")
+
+local function FlushIncome()
+    flushPending = false
+    local gain = pendingGain - otherCredit
+    local owner, kind = flushSession, flushKind
+    pendingGain, otherCredit, flushSession, flushKind = 0, 0, nil, nil
+    if gain > 0 and LootProConfig.recapEnabled and session == owner then
+        addon:RecapAddIncome(kind, gain)
+    end
+end
+
+-- Opening a different window books the pending batch early, so a timer left over from that batch must not flush the next one before its netting delay.
+local function FlushOnTimer()
+    flushFired = flushFired + 1
+    if flushFired ~= flushScheduled or not flushPending then return end
+    FlushIncome()
+end
+
+-- Coin looted (a party split) or a quest finished while a window is open raises PLAYER_MONEY too, and both are booked on their own. Hold each gain briefly so the two net out whichever event lands first.
+local function ScheduleFlush()
+    if flushPending then return end
+    flushPending = true
+    flushSession, flushKind = session, trackKind
+    flushScheduled = flushScheduled + 1
+    if _After then _After(FLUSH_DELAY, FlushOnTimer) else FlushIncome() end
+end
+
+function addon.RecapNoteOtherMoney(_, copper)
+    if not trackKind or not copper or copper <= 0 then return end
+    otherCredit = otherCredit + copper
+    ScheduleFlush()
+end
+
+-- A sale or trade that settles just after a fast close still reports its money, so tracking outlives the close. Grace timers fire in close order, so only the latest may end it, and a reopen cancels it.
+local function EndTracking()
+    graceCount = graceCount + 1
+    if openKind or graceCount ~= closeCount then return end
+    trackKind = nil
+    incomeEvents:UnregisterEvent("PLAYER_MONEY")
+end
+
+incomeEvents:RegisterEvent("MERCHANT_SHOW")
+incomeEvents:RegisterEvent("MERCHANT_CLOSED")
+incomeEvents:RegisterEvent("MAIL_SHOW")
+incomeEvents:RegisterEvent("MAIL_CLOSED")
+incomeEvents:RegisterEvent("TRADE_SHOW")
+incomeEvents:RegisterEvent("TRADE_CLOSED")
+incomeEvents:RegisterEvent("QUEST_TURNED_IN")
+incomeEvents:RegisterEvent("PLAYER_LOGOUT")
+incomeEvents:SetScript("OnEvent", function(_, event, ...)
+    if event == "PLAYER_MONEY" then
+        local now = _GetMoney()
+        local delta = now - lastMoney
+        lastMoney = now
+        if delta > 0 then
+            pendingGain = pendingGain + delta
+            ScheduleFlush()
+        end
+    elseif event == "QUEST_TURNED_IN" then
+        local money = tonumber((select(3, ...)))
+        if money and money > 0 and LootProConfig.recapEnabled then
+            addon:RecapAddIncome("quest", money)
+        end
+        addon:RecapNoteOtherMoney(money)
+    elseif WINDOW_OPEN[event] then
+        local kind = WINDOW_OPEN[event]
+        if flushPending and flushKind ~= kind then FlushIncome() end
+        openKind, trackKind = kind, kind
+        lastMoney = _GetMoney()
+        incomeEvents:RegisterEvent("PLAYER_MONEY")
+    elseif WINDOW_CLOSE[event] then
+        -- MAIL_CLOSED and MERCHANT_CLOSED can fire twice, so only the close that matches the open window counts.
+        if WINDOW_CLOSE[event] ~= openKind then return end
+        openKind = nil
+        closeCount = closeCount + 1
+        if _After then _After(CLOSE_GRACE, EndTracking) else EndTracking() end
+    elseif event == "PLAYER_LOGOUT" then
+        if flushPending then FlushIncome() end
+    end
+end)
 
 function addon:RecapAddItem(itemID, amt, quality, link)
     amt = tonumber(amt) or 1
@@ -300,15 +414,28 @@ function addon:RecapPrint()
         print(_format("  |cFFAAAAAAZone:|r %s", s.zone))
     end
 
-    print(_format("  |cFFFFD700Gold:|r +%s", self:RecapFormatMoney(s.copper)))
-
-    if s.vendorCopper and s.vendorCopper > 0 then
-        print(_format("  |cFFFFD700Vendor:|r +%s", self:RecapFormatMoney(s.vendorCopper)))
+    print(_format("  |cFFFFD700Gold looted:|r +%s", self:RecapFormatMoney(s.copper)))
+    if s.questCopper > 0 then
+        print(_format("  |cFFFFD700Quest rewards:|r +%s", self:RecapFormatMoney(s.questCopper)))
+    end
+    if s.vendorCopper > 0 then
+        print(_format("  |cFFFFD700Vendor income:|r +%s", self:RecapFormatMoney(s.vendorCopper)))
+    end
+    if s.mailCopper > 0 then
+        print(_format("  |cFFFFD700Mailbox:|r +%s", self:RecapFormatMoney(s.mailCopper)))
+    end
+    if s.tradeCopper > 0 then
+        print(_format("  |cFFFFD700Trade:|r +%s", self:RecapFormatMoney(s.tradeCopper)))
+    end
+    local earned, total, sources = self:RecapGoldTotals()
+    if sources > 1 then
+        print(_format("  |cFFFFD700Total gold:|r +%s", self:RecapFormatMoney(total)))
     end
 
     if elapsed >= 60 then
-        local gph = self:RecapFormatMoney(_floor((s.copper + (s.vendorCopper or 0)) / elapsed * 3600))
-        print(_format("  |cFFB0E0E6Per hour:|r %s, %d items", gph, _floor(s.itemTotal / elapsed * 3600)))
+        local gph = self:RecapFormatMoney(_floor(earned / elapsed * 3600))
+        local note = (total > earned) and " (loot, quests and vendor)" or ""
+        print(_format("  |cFFB0E0E6Per hour:|r %s, %d items%s", gph, _floor(s.itemTotal / elapsed * 3600), note))
     end
 
     if s.itemTotal > 0 then

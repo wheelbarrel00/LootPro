@@ -320,7 +320,7 @@ local function LateNotable_OnEvent(_, _, itemID, success)
     local ra = LootProConfig and LootProConfig.rareAlert
     -- The loot line already alerted on quality for anything at or above the threshold.
     if q and ra and q >= (ra.threshold or 5) then return end
-    addon:RareOnLoot(q, true, false)
+    addon:RareOnLoot(q, true)
 end
 
 local function RecheckWhenLoaded(itemID)
@@ -346,10 +346,10 @@ function addon:IsNotableItem(itemID, link)
     return not owned
 end
 
-function addon:RareOnLoot(quality, isNotable, isValuable)
+function addon:RareOnLoot(quality, triggered)
     local ra = LootProConfig and LootProConfig.rareAlert
     if not ra then return end
-    if not ((quality and quality >= (ra.threshold or 5)) or isNotable or isValuable) then return end
+    if not ((quality and quality >= (ra.threshold or 5)) or triggered) then return end
     if ra.flash then RareFlash(quality or 0) end
     if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
 end

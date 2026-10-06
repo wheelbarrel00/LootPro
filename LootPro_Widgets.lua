@@ -376,6 +376,42 @@ function U.CreateEditBox(name, title, parent, settingKey)
     return eb
 end
 
+function U.CreateNumberBox(name, title, parent, maxLetters, get, set, tipTitle, tipText)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    l:SetText(title)
+
+    local eb = CreateFrame("EditBox", name, parent, "InputBoxTemplate")
+    eb:SetSize(90, 22)
+    eb:SetPoint("TOPLEFT", l, "BOTTOMLEFT", 5, -6)
+    eb:SetAutoFocus(false)
+    eb:SetNumeric(true)
+    eb:SetMaxLetters(maxLetters)
+
+    function eb:Refresh()
+        self:SetText(tostring(get()))
+    end
+
+    eb:SetScript("OnEnterPressed", function(self)
+        set(tonumber(self:GetText()) or 0)
+        self:Refresh()
+        self:ClearFocus()
+    end)
+    eb:SetScript("OnEscapePressed", function(self)
+        self:Refresh()
+        self:ClearFocus()
+    end)
+    eb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(tipTitle, 1, 1, 1)
+        GameTooltip:AddLine(tipText, 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    eb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    eb.label = l
+    return eb
+end
+
 -- The color wheel fires this continuously while dragging, and each rebuild clears and repopulates both frames.
 local testFeedPending
 local function FlushTestFeed()

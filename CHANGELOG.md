@@ -5,6 +5,17 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.21.0] - 2026-10-06
+
+### New Features
+- The session recap splits your gold by where it came from: Gold looted, Quest rewards, Vendor income, Mailbox, and Trade, plus a Total gold line once more than one of them has paid out. Quest reward gold is counted for the first time and joins your gold per hour. Mailbox and trade gold, such as auction sales or gold sent from an alt, count toward the total but stay out of the hourly rate, so one big payout cannot inflate it.
+- Two new Rare Drop Alert triggers. "Alert on item level" goes off when a weapon or armor piece you loot is at least the item level you set, whatever its quality. "Also alert on gear upgrades" goes off when you loot a weapon or armor piece with a higher item level than what you have equipped in that slot, whether or not the upgrade marker is turned on. (Retail)
+- Show upgrade track on gear, a new gear marker. Looted weapons and armor show their upgrade track and level, as (Hero 4/6), so you can tell at a glance how far a piece can be upgraded. Tick "Include the group's loot" to tag gear other players loot too. (Retail)
+
+### Improvements
+- The Alerts tab is now two tabs. Watch holds the watch list, which now shows more items at once. Rare Drops holds the rare drop alerts, with the gear markers (item level, new appearance, upgrade, tertiary stat, and upgrade track) in their own section below. Your settings carry over unchanged.
+- "Gold gained" in the session recap is now "Gold looted", since looted coin is no longer the only gold it shows.
+
 ## [2.20.1] - 2026-10-03
 
 ### Bug Fixes

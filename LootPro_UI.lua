@@ -135,6 +135,7 @@ function ns.UI:Initialize()
         customization = CreateFrame("Frame", nil, gui),
         recap = CreateFrame("Frame", nil, gui),
         watchlist = CreateFrame("Frame", nil, gui),
+        rare = CreateFrame("Frame", nil, gui),
         blocklist = CreateFrame("Frame", nil, gui),
         vendor = CreateFrame("Frame", nil, gui),
         about = CreateFrame("Frame", nil, gui)
@@ -236,7 +237,8 @@ function ns.UI:Initialize()
     CreateTab("notifications", "Notifications")
     CreateTab("customization", "Custom")
     CreateTab("recap", "Recap")
-    CreateTab("watchlist", "Alerts")
+    CreateTab("watchlist", "Watch")
+    CreateTab("rare", "Rare Drops")
     CreateTab("blocklist", "Block")
     CreateTab("vendor", "Vendor")
     CreateTab("about", "About")
@@ -838,14 +840,30 @@ function ns.UI:Initialize()
             if s.zone then
                 lines[#lines + 1] = "|cFFAAAAAAZone:|r  " .. s.zone
             end
-            lines[#lines + 1] = "|cFFFFD700Gold gained:|r  +" .. addon:RecapFormatMoney(s.copper)
-            if s.vendorCopper and s.vendorCopper > 0 then
+            lines[#lines + 1] = "|cFFFFD700Gold looted:|r  +" .. addon:RecapFormatMoney(s.copper)
+            if s.questCopper > 0 then
+                lines[#lines + 1] = "|cFFFFD700Quest rewards:|r  +" .. addon:RecapFormatMoney(s.questCopper)
+            end
+            if s.vendorCopper > 0 then
                 lines[#lines + 1] = "|cFFFFD700Vendor income:|r  +" .. addon:RecapFormatMoney(s.vendorCopper)
+            end
+            if s.mailCopper > 0 then
+                lines[#lines + 1] = "|cFFFFD700Mailbox:|r  +" .. addon:RecapFormatMoney(s.mailCopper)
+            end
+            if s.tradeCopper > 0 then
+                lines[#lines + 1] = "|cFFFFD700Trade:|r  +" .. addon:RecapFormatMoney(s.tradeCopper)
+            end
+            local earned, total, sources = addon:RecapGoldTotals()
+            if sources > 1 then
+                lines[#lines + 1] = "|cFFFFD700Total gold:|r  +" .. addon:RecapFormatMoney(total)
             end
             local elapsed = addon:RecapElapsed()
             if elapsed >= 60 then
-                local gph = addon:RecapFormatMoney(math.floor((s.copper + (s.vendorCopper or 0)) / elapsed * 3600))
+                local gph = addon:RecapFormatMoney(math.floor(earned / elapsed * 3600))
                 lines[#lines + 1] = "|cFFB0E0E6Per hour:|r  +" .. gph .. ", " .. math.floor(s.itemTotal / elapsed * 3600) .. " items"
+                if total > earned then
+                    lines[#lines + 1] = "    |cFF888888(loot, quests and vendor)|r"
+                end
             end
 
             if s.itemTotal > 0 then
@@ -995,7 +1013,7 @@ function ns.UI:Initialize()
 
         local scroll = CreateFrame("ScrollFrame", "LPRO_WatchScroll", page, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 30, -92)
-        scroll:SetSize(430, 162)
+        scroll:SetSize(430, 290)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(410, 1)
         scroll:SetScrollChild(content)
@@ -1072,18 +1090,22 @@ function ns.UI:Initialize()
         watchHint:SetJustifyH("LEFT")
         watchHint:SetText("Alerts fire when YOU loot a watched item. Name entries match any item containing that text; links and IDs match exactly.")
 
-        local rareDivider = page:CreateTexture(nil, "ARTWORK")
-        rareDivider:SetHeight(1)
-        rareDivider:SetPoint("TOPLEFT", 30, -296)
-        rareDivider:SetPoint("TOPRIGHT", -30, -296)
-        rareDivider:SetColorTexture(0.427, 0.020, 0.004, 0.7)
+        page:SetScript("OnShow", function()
+            enableCheck:SetChecked(LootProConfig.watchlist.enabled)
+            soundCheck:SetChecked(LootProConfig.watchlist.sound)
+            RefreshList()
+        end)
+    end
+
+    do
+        local page = pages.rare
 
         local rareHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        rareHeader:SetPoint("TOPLEFT", 30, -304)
+        rareHeader:SetPoint("TOPLEFT", 30, -12)
         rareHeader:SetText("|cFFFF2222Rare Drop Alerts|r")
 
         local rareColor = CreateFrame("CheckButton", "LPRO_RareColor", page, "InterfaceOptionsCheckButtonTemplate")
-        rareColor:SetPoint("TOPLEFT", 26, -326)
+        rareColor:SetPoint("TOPLEFT", 26, -34)
         _G[rareColor:GetName().."Text"]:SetText("Color loot line by rarity")
         rareColor:SetScript("OnClick", function(self)
             LootProConfig.rareAlert.color = self:GetChecked() and true or false
@@ -1118,6 +1140,24 @@ function ns.UI:Initialize()
         notableCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
         ExpandCheckHover(notableCheck)
 
+        local upgradeAlertCheck
+        if addon.IS_RETAIL then
+            upgradeAlertCheck = CreateFrame("CheckButton", "LPRO_RareUpgrade", page, "InterfaceOptionsCheckButtonTemplate")
+            upgradeAlertCheck:SetPoint("TOPLEFT", notableCheck, "BOTTOMLEFT", 0, -2)
+            _G[upgradeAlertCheck:GetName().."Text"]:SetText("Also alert on gear upgrades")
+            upgradeAlertCheck:SetScript("OnClick", function(cb)
+                LootProConfig.rareAlert.upgrade = cb:GetChecked() and true or false
+            end)
+            upgradeAlertCheck:SetScript("OnEnter", function(cb)
+                GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Gear upgrades", 1, 1, 1)
+                GameTooltip:AddLine("Weapons and armor with a higher item level than what you have equipped in that slot trigger the alert, even below the quality threshold. Uses the same check as the (upgrade) marker, whether or not the marker is on.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            upgradeAlertCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(upgradeAlertCheck)
+        end
+
         local rareQualList = {
             { val = 2, lbl = "Uncommon+" },
             { val = 3, lbl = "Rare+" },
@@ -1126,49 +1166,66 @@ function ns.UI:Initialize()
         }
         local rareThresh = U.CreateGenericCycler("LPRO_RareThresh", "Alert on quality", page, rareQualList, "threshold", "rareAlert")
         rareThresh.label:ClearAllPoints()
-        rareThresh.label:SetPoint("TOPLEFT", 280, -320)
+        rareThresh.label:SetPoint("TOPLEFT", 280, -28)
         rareThresh:ClearAllPoints()
         rareThresh:SetPoint("TOPLEFT", rareThresh.label, "BOTTOMLEFT", 0, -6)
 
         local rareTestBtn = CreateStyledButton(page, 110, 22, "Test Rare Drop")
-        rareTestBtn:SetPoint("TOPLEFT", 280, -392)
+        rareTestBtn:SetPoint("TOPLEFT", 280, -100)
         rareTestBtn:SetScript("OnClick", function()
             if addon.RareTest then addon:RareTest() end
         end)
 
-        local valueLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        valueLabel:SetPoint("TOPLEFT", rareTestBtn, "BOTTOMLEFT", 0, -18)
-        valueLabel:SetText("Alert on value (gold, 0 = off)")
+        local valueBox = U.CreateNumberBox("LPRO_RareValue", "Alert on value (gold, 0 = off)", page, 9,
+            function() return math.floor((LootProConfig.rareAlert.value or 0) / 10000) end,
+            function(gold) LootProConfig.rareAlert.value = gold * 10000 end,
+            "Alert on value",
+            "Fires the rare-drop alert when a single drop's sell value is at least this many gold. Set 0 to turn it off. Press Enter to save.")
+        valueBox.label:SetPoint("TOPLEFT", rareTestBtn, "BOTTOMLEFT", 0, -18)
 
-        local valueBox = CreateFrame("EditBox", "LPRO_RareValue", page, "InputBoxTemplate")
-        valueBox:SetSize(90, 22)
-        valueBox:SetPoint("TOPLEFT", valueLabel, "BOTTOMLEFT", 5, -6)
-        valueBox:SetAutoFocus(false)
-        valueBox:SetNumeric(true)
-        valueBox:SetMaxLetters(9)
-        local function ValueGoldText()
-            return tostring(math.floor((LootProConfig.rareAlert.value or 0) / 10000))
-        end
-        local function SaveRareValue()
-            LootProConfig.rareAlert.value = (tonumber(valueBox:GetText()) or 0) * 10000
-            valueBox:SetText(ValueGoldText())
-            valueBox:ClearFocus()
-        end
-        valueBox:SetScript("OnEnterPressed", SaveRareValue)
-        valueBox:SetScript("OnEscapePressed", function(self) self:SetText(ValueGoldText()); self:ClearFocus() end)
-        valueBox:SetScript("OnEnter", function(self)
+        local ilvlAlertBox = U.CreateNumberBox("LPRO_RareIlvl", "Alert on item level (0 = off)", page, 4,
+            function() return LootProConfig.rareAlert.ilvl or 0 end,
+            function(ilvl) LootProConfig.rareAlert.ilvl = ilvl end,
+            "Alert on item level",
+            "Fires the rare-drop alert when a weapon or armor piece you loot is at least this item level, whatever its quality. Set 0 to turn it off. Press Enter to save.")
+        ilvlAlertBox.label:SetPoint("TOPLEFT", valueBox, "BOTTOMLEFT", -5, -14)
+
+        local MARK_Y = -252
+        local markDivider = page:CreateTexture(nil, "ARTWORK")
+        markDivider:SetHeight(1)
+        markDivider:SetPoint("TOPLEFT", 30, MARK_Y)
+        markDivider:SetPoint("TOPRIGHT", -30, MARK_Y)
+        markDivider:SetColorTexture(0.427, 0.020, 0.004, 0.7)
+
+        local markHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        markHeader:SetPoint("TOPLEFT", 30, MARK_Y - 8)
+        markHeader:SetText("|cFFFF2222Gear Markers|r")
+
+        local markHint = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        markHint:SetPoint("TOPLEFT", markHeader, "BOTTOMLEFT", 0, -4)
+        markHint:SetWidth(430)
+        markHint:SetJustifyH("LEFT")
+        markHint:SetText("Tags added to gear lines in the loot feed. They mark a drop without firing an alert.")
+
+        local ilvlCheck = CreateFrame("CheckButton", "LPRO_LootIlvl", page, "InterfaceOptionsCheckButtonTemplate")
+        ilvlCheck:SetPoint("TOPLEFT", 26, MARK_Y - 46)
+        _G[ilvlCheck:GetName().."Text"]:SetText("Show item level on gear")
+        ilvlCheck:SetScript("OnClick", function(self)
+            LootProConfig.lootIlvl = self:GetChecked() and true or false
+        end)
+        ilvlCheck:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Alert on value", 1, 1, 1)
-            GameTooltip:AddLine("Fires the rare-drop alert when a single drop's sell value is at least this many gold. Set 0 to turn it off. Press Enter to save.", 0.8, 0.8, 0.8, true)
+            GameTooltip:SetText("Item level on gear", 1, 1, 1)
+            GameTooltip:AddLine("Adds the item level in the loot feed, as [485], to every weapon or armor piece looted. Applies to your own drops and the group's.", 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end)
-        valueBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        ilvlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        ExpandCheckHover(ilvlCheck)
 
-        local newAppCheck
-        local upgradeCheck
+        local newAppCheck, upgradeCheck, tertiaryCheck, trackCheck, trackGroupCheck
         if addon.IS_RETAIL then
             newAppCheck = CreateFrame("CheckButton", "LPRO_NewAppearance", page, "InterfaceOptionsCheckButtonTemplate")
-            newAppCheck:SetPoint("TOPLEFT", notableCheck, "BOTTOMLEFT", 0, -2)
+            newAppCheck:SetPoint("TOPLEFT", ilvlCheck, "BOTTOMLEFT", 0, -2)
             _G[newAppCheck:GetName().."Text"]:SetText("Mark new transmog appearances")
             newAppCheck:SetScript("OnClick", function(self)
                 LootProConfig.newAppearance = self:GetChecked() and true or false
@@ -1196,30 +1253,9 @@ function ns.UI:Initialize()
             end)
             upgradeCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
             ExpandCheckHover(upgradeCheck)
-        end
 
-        local ilvlCheck
-        if addon.LootItemLevel then
-            ilvlCheck = CreateFrame("CheckButton", "LPRO_LootIlvl", page, "InterfaceOptionsCheckButtonTemplate")
-            ilvlCheck:SetPoint("TOPLEFT", upgradeCheck or notableCheck, "BOTTOMLEFT", 0, -2)
-            _G[ilvlCheck:GetName().."Text"]:SetText("Show item level on gear")
-            ilvlCheck:SetScript("OnClick", function(self)
-                LootProConfig.lootIlvl = self:GetChecked() and true or false
-            end)
-            ilvlCheck:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Item level on gear", 1, 1, 1)
-                GameTooltip:AddLine("Adds the item level in the loot feed, as [485], to every weapon or armor piece looted. Applies to your own drops and the group's.", 0.8, 0.8, 0.8, true)
-                GameTooltip:Show()
-            end)
-            ilvlCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
-            ExpandCheckHover(ilvlCheck)
-        end
-
-        local tertiaryCheck
-        if addon.IS_RETAIL then
             tertiaryCheck = CreateFrame("CheckButton", "LPRO_LootTertiary", page, "InterfaceOptionsCheckButtonTemplate")
-            tertiaryCheck:SetPoint("TOPLEFT", valueBox, "BOTTOMLEFT", -5, -14)
+            tertiaryCheck:SetPoint("TOPLEFT", 280, MARK_Y - 46)
             _G[tertiaryCheck:GetName().."Text"]:SetText("Mark gear with a tertiary stat")
             tertiaryCheck:SetScript("OnClick", function(self)
                 LootProConfig.tertiaryStat = self:GetChecked() and true or false
@@ -1232,22 +1268,57 @@ function ns.UI:Initialize()
             end)
             tertiaryCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
             ExpandCheckHover(tertiaryCheck)
+
+            trackCheck = CreateFrame("CheckButton", "LPRO_LootTrack", page, "InterfaceOptionsCheckButtonTemplate")
+            trackCheck:SetPoint("TOPLEFT", tertiaryCheck, "BOTTOMLEFT", 0, -2)
+            _G[trackCheck:GetName().."Text"]:SetText("Show upgrade track on gear")
+            trackCheck:SetScript("OnClick", function(cb)
+                LootProConfig.upgradeTrack = cb:GetChecked() and true or false
+                trackGroupCheck:SetAlpha(LootProConfig.upgradeTrack and 1 or 0.4)
+            end)
+            trackCheck:SetScript("OnEnter", function(cb)
+                GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Upgrade track on gear", 1, 1, 1)
+                GameTooltip:AddLine("Adds the upgrade track and level to looted weapons and armor in the loot feed, as (Hero 4/6). The track decides how far a piece can be upgraded. Gear that can't be upgraded gets no tag.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            trackCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(trackCheck)
+
+            trackGroupCheck = CreateFrame("CheckButton", "LPRO_LootTrackGroup", page, "InterfaceOptionsCheckButtonTemplate")
+            trackGroupCheck:SetPoint("TOPLEFT", trackCheck, "BOTTOMLEFT", 16, -2)
+            _G[trackGroupCheck:GetName().."Text"]:SetText("Include the group's loot")
+            trackGroupCheck:SetScript("OnClick", function(cb)
+                LootProConfig.upgradeTrackGroup = cb:GetChecked() and true or false
+            end)
+            trackGroupCheck:SetScript("OnEnter", function(cb)
+                GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Include the group's loot", 1, 1, 1)
+                GameTooltip:AddLine("Also tags the upgrade track on gear other players in your group loot. Off by default, so only your own drops are tagged.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            trackGroupCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(trackGroupCheck)
         end
 
         page:SetScript("OnShow", function()
-            enableCheck:SetChecked(LootProConfig.watchlist.enabled)
-            soundCheck:SetChecked(LootProConfig.watchlist.sound)
             rareColor:SetChecked(LootProConfig.rareAlert.color)
             rareFlash:SetChecked(LootProConfig.rareAlert.flash)
             rareSound:SetChecked(LootProConfig.rareAlert.sound)
             notableCheck:SetChecked(LootProConfig.rareAlert.notable)
-            if newAppCheck then newAppCheck:SetChecked(LootProConfig.newAppearance) end
-            if upgradeCheck then upgradeCheck:SetChecked(LootProConfig.lootUpgrade) end
-            if ilvlCheck then ilvlCheck:SetChecked(LootProConfig.lootIlvl) end
-            if tertiaryCheck then tertiaryCheck:SetChecked(LootProConfig.tertiaryStat) end
-            valueBox:SetText(ValueGoldText())
+            if upgradeAlertCheck then upgradeAlertCheck:SetChecked(LootProConfig.rareAlert.upgrade) end
+            ilvlCheck:SetChecked(LootProConfig.lootIlvl)
+            if newAppCheck then
+                newAppCheck:SetChecked(LootProConfig.newAppearance)
+                upgradeCheck:SetChecked(LootProConfig.lootUpgrade)
+                tertiaryCheck:SetChecked(LootProConfig.tertiaryStat)
+                trackCheck:SetChecked(LootProConfig.upgradeTrack)
+                trackGroupCheck:SetChecked(LootProConfig.upgradeTrackGroup)
+                trackGroupCheck:SetAlpha(LootProConfig.upgradeTrack and 1 or 0.4)
+            end
+            valueBox:Refresh()
+            ilvlAlertBox:Refresh()
             rareThresh:Refresh()
-            RefreshList()
         end)
     end
 
@@ -1553,11 +1624,16 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.20.0:|r",
+        "|cFFEBB706What's new in 2.21.0:|r",
         " ",
-        "|cFFEBB706Resize your readouts|r  New Frame Scale sliders on the Layout tab, one for combat and one for loot. Each makes its whole readout bigger or smaller, text, icons, and framed rows together, from 50% to 200%. The readout stays where you placed it while it scales.",
+        "|cFFEBB706Gold by source|r  The session recap now splits your gold into looted, quest rewards, vendor, mailbox, and trade, with a total. Quest gold is counted for the first time and joins your gold per hour.",
         " ",
-        "|cFFEBB706Also fixed|r  Vendor income no longer counts a party gold split twice, XP lines lost a stray space, and the notable item alert no longer goes off for collectibles you already own.",
+        addon.IS_RETAIL
+            and "|cFFEBB706New alert triggers|r  Rare Drop Alerts can now go off for gear upgrades, or for any gear at or above an item level you choose."
+            or "|cFFEBB706New alert trigger|r  Rare Drop Alerts can now go off for any gear at or above an item level you choose.",
+        " ",
+        "|cFFEBB706Watch and Rare Drops|r  The Alerts tab is now two tabs. Watch holds your watch list, and Rare Drops holds the rare drop alerts and the gear markers."
+            .. (addon.IS_RETAIL and " A new marker there shows a drop's upgrade track, as (Hero 4/6)." or ""),
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1781,7 +1857,7 @@ function ns.UI:Initialize()
             end
         end
         ns.UI.RefreshLockButton()
-        -- Recap/Alerts/Block/Vendor sync their widgets in OnShow, and Show() never re-fires it on the page that is already visible.
+        -- Recap/Watch/Rare Drops/Block/Vendor sync their widgets in OnShow, and Show() never re-fires it on the page that is already visible.
         local shownPage = currentActiveTab and pages[currentActiveTab]
         local onShow = shownPage and shownPage:GetScript("OnShow")
         if onShow then onShow(shownPage) end

@@ -15,17 +15,18 @@
 5. Notifications: what shows up at all
 6. Custom: fonts, framed rows, and behavior
 7. Recap: your session at a glance
-8. Alerts: watch list, rare drops, and gear markers
-9. Block: hiding loot by name
-10. Vendor: selling grays
-11. Item tooltips
-12. Slash commands
-13. Minimap button
-14. Flavor differences
-15. Reset to Defaults
-16. Dependencies
-17. Gallery
-18. Found a bug
+8. Watch: alerts for items you name
+9. Rare Drops: rare drop alerts and gear markers
+10. Block: hiding loot by name
+11. Vendor: selling grays
+12. Item tooltips
+13. Slash commands
+14. Minimap button
+15. Flavor differences
+16. Reset to Defaults
+17. Dependencies
+18. Gallery
+19. Found a bug
 
 ***
 
@@ -54,7 +55,7 @@ Loot Pro never equips, trades, or destroys anything. Two features do act for you
 
 That is enough to use it. Everything below is optional.
 
-The settings window has nine tabs: Layout, Colors, Notifications, Custom, Recap, Alerts, Block, Vendor, and About.
+The settings window has ten tabs: Layout, Colors, Notifications, Custom, Recap, Watch, Rare Drops, Block, Vendor, and About.
 
 ***
 
@@ -203,7 +204,9 @@ A slider from 75% to 125% that resizes the settings window and nothing else. You
 
 **Options > Recap.** Off by default. Tick **Enable Session Recap** to start tracking.
 
-Once on, the tab shows a live panel with your current zone, gold gained, vendor income, gold and items per hour once a minute has passed, a count of items looted broken down by rarity, every currency you have earned, and up to ten of your most recent Epic-or-better drops.
+Once on, the tab shows a live panel with your current zone, your gold broken down by where it came from, gold and items per hour once a minute has passed, a count of items looted broken down by rarity, every currency you have earned, and up to ten of your most recent Epic-or-better drops.
+
+Gold is split into **Gold looted**, **Quest rewards**, **Vendor income**, **Mailbox**, and **Trade**. Each line appears once it has something to show, and a **Total gold** line joins them when more than one source has paid out. Vendor income is what merchants paid you, not only for grays, and spending never counts against any of them. Gold per hour counts looted gold, quest rewards, and vendor income only. Mailbox and trade gold, such as auction sales or gold sent from an alt, show in the total but stay out of the hourly rate, so one big payout cannot inflate it.
 
 **Reset Session** starts a fresh session. **Pause Timer** stops the clock without stopping the tracking, so a trip to the mailbox or a long queue does not drag your per-hour numbers down. Loot is still counted while paused, and the pause survives a `/reload`.
 
@@ -213,11 +216,9 @@ You can print the same summary to chat at any time with **`/lp recap`**, which i
 
 ***
 
-# Alerts: watch list, rare drops, and gear markers
+# Watch: alerts for items you name
 
-**Options > Alerts.** Three groups of settings share this tab.
-
-## Watch list
+**Options > Watch.**
 
 Tick **Enable Watch Alerts** (off by default) and build a list of items you do not want to miss. When one drops, Loot Pro shows a banner in the center of your screen and plays a sound.
 
@@ -225,9 +226,15 @@ Add an item by typing its name, typing its item ID, or shift-clicking it straigh
 
 Alerts fire only for items **you** loot, not the group's. **Play Alert Sound** (on) controls the sound, and **Test Alert** fires a sample banner so you can check placement.
 
+***
+
+# Rare Drops: rare drop alerts and gear markers
+
+**Options > Rare Drops.** Two groups of settings share this tab.
+
 ## Rare Drop Alerts
 
-A separate alert for anything valuable, whether or not it is on your watch list. There are four triggers and three effects, and you mix them freely.
+A separate alert for anything valuable, whether or not it is on your watch list. There are five triggers and three effects, and you mix them freely.
 
 **Alert on quality** sets the rarity that fires the alert. It offers Uncommon+, Rare+, Epic+, and Legendary+, and defaults to Legendary+.
 
@@ -235,13 +242,17 @@ A separate alert for anything valuable, whether or not it is on your watch list.
 
 **Alert on value (gold, 0 = off)** fires when a single drop is worth at least the number of gold you enter. This catches the expensive trade goods that never reach epic quality. Worth knowing: the figure used is the item's **vendor sell price** multiplied by the stack, not its auction house value, so a soulbound item with no sell price can never trigger it. Press Enter to save.
 
+**Also alert on gear upgrades** (off, Retail only) fires when you loot a weapon or armor piece with a higher item level than what you have equipped in that slot, whatever its quality. It uses the same check as the **Mark gear upgrades** marker below, but works whether or not the marker is turned on.
+
+**Alert on item level (0 = off)** fires when a weapon or armor piece you loot is at least the item level you enter, whatever its quality. Shirts, tabards, and cosmetic armor never count. Press Enter to save.
+
 The three effects are **Color loot line by rarity**, **Flash the loot frame**, and **Play alert sound**, all off by default. Note that coloring by rarity is part of the alert rather than a general setting, so it applies to lines that trip one of the triggers above, not to every drop.
 
 **Test Rare Drop** fires the flash and sound so you can judge them without waiting for a real drop.
 
 ## Gear markers
 
-Four tags that get appended to a loot line so you can judge a drop without opening its tooltip. All are off by default.
+Five tags that get appended to a loot line so you can judge a drop without opening its tooltip. All are off by default.
 
 | Marker | Looks like | What it means |
 |---|---|---|
@@ -249,8 +260,9 @@ Four tags that get appended to a loot line so you can judge a drop without openi
 | **Mark new transmog appearances** | `(new look)` in blue | You have not collected this appearance from any source yet, so it is not safe to vendor. Retail only. |
 | **Mark gear upgrades** | `(upgrade)` in green | Higher item level than what you have equipped in that slot. It only fires when the drop is the same armor or weapon type you already wear, and when the primary stat matches, so an Intellect piece is never flagged for an Agility character. Retail only. |
 | **Mark gear with a tertiary stat** | `(Leech)` in teal | The piece rolled a bonus tertiary stat, named on the line. Leech, Avoidance, Speed, or Indestructible. Retail only. |
+| **Show upgrade track on gear** | `(Hero 4/6)` in lavender | The piece's upgrade track and how far it has been upgraded. The track decides how high the piece can go. Gear that cannot be upgraded gets no tag. Retail only. |
 
-The three Retail-only markers appear on your own drops. The item level tag is the one that also applies to loot the group picks up.
+The Retail-only markers appear on your own drops. The item level tag also applies to loot the group picks up, and so does the upgrade track when you tick **Include the group's loot** under it.
 
 ***
 
@@ -335,8 +347,9 @@ Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic 
 | Item level on gear | Yes | Yes |
 | Quest item coloring | Yes | Yes |
 | New transmog appearance marker | Yes | Not available, no appearance collection |
-| Gear upgrade marker | Yes | Not available |
+| Gear upgrade marker and alert | Yes | Not available |
 | Tertiary stat marker | Yes | Not available, no tertiary stats |
+| Upgrade track marker | Yes | Not available, no upgrade tracks |
 | "Already owned" collectible tooltips | Yes | Not available, no shared journals |
 | Notable-item alerts for uncollected mounts, pets, and toys | Yes | Fires for all mounts, pets, and toys |
 | Everything else | Yes | Yes |

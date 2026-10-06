@@ -6,6 +6,8 @@ local _GetDetailedItemLevelInfo = (C_Item and C_Item.GetDetailedItemLevelInfo) o
 local _GetInventoryItemLink = GetInventoryItemLink
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _GetItemStats = C_Item and C_Item.GetItemStats
+local _GetItemUpgradeInfo = C_Item and C_Item.GetItemUpgradeInfo
+local _IsItemDataCached = C_Item and C_Item.IsItemDataCachedByID
 local _select = select
 local _format = string.format
 
@@ -43,7 +45,7 @@ if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
     local ilvlTags = {}
     local ilvlTagCount = 0
 
-    function addon:LootItemLevel(itemID, link)
+    local function GearLevel(itemID, link)
         if not link then return nil end
 
         local _, _, _, equipLoc, _, classID, subclassID = _GetItemInfoInstant(link)
@@ -59,6 +61,16 @@ if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
             if itemID and _RequestItemData then _RequestItemData(itemID) end
             return nil
         end
+        return ilvl
+    end
+
+    function addon.GearItemLevel(_, itemID, link)
+        return GearLevel(itemID, link)
+    end
+
+    function addon:LootItemLevel(itemID, link)
+        local ilvl = GearLevel(itemID, link)
+        if not ilvl then return nil end
 
         local tag = ilvlTags[ilvl]
         if not tag then
@@ -74,11 +86,13 @@ if _GetDetailedItemLevelInfo and _GetItemInfoInstant then
     end
 else
     function addon.LootItemLevel() return nil end
+    function addon.GearItemLevel() return nil end
 end
 
 if not (addon.IS_RETAIL and _GetDetailedItemLevelInfo and _GetItemInfoInstant and _GetInventoryItemLink) then
     function addon:IsUpgrade() return false end
     function addon:TertiaryStatTag() return nil end
+    function addon.UpgradeTrackTag() return nil end
     return
 end
 
@@ -167,4 +181,34 @@ function addon:TertiaryStatTag(link)
         end
     end
     return nil
+end
+
+local trackTags = {}
+function addon.UpgradeTrackTag(_, itemID, link)
+    if not (_GetItemUpgradeInfo and link) then return nil end
+    local _, _, _, _, _, classID = _GetItemInfoInstant(link)
+    if classID ~= CLASS_WEAPON and classID ~= CLASS_ARMOR then return nil end
+    local info = _GetItemUpgradeInfo(link)
+    if not info then
+        -- Gear that can't be upgraded also returns nil, so only an uncached item is worth a load request.
+        if itemID and _RequestItemData and _IsItemDataCached and not _IsItemDataCached(itemID) then
+            _RequestItemData(itemID)
+        end
+        return nil
+    end
+    local track = info.trackString
+    local cur, max = info.currentLevel, info.maxLevel
+    if not track or track == "" or not cur or not max or max <= 0 then return nil end
+    local byTrack = trackTags[track]
+    if not byTrack then
+        byTrack = {}
+        trackTags[track] = byTrack
+    end
+    local slot = cur * 100 + max
+    local tag = byTrack[slot]
+    if not tag then
+        tag = _format(" |cffc8a8ff(%s %d/%d)|r", track, cur, max)
+        byTrack[slot] = tag
+    end
+    return tag
 end
