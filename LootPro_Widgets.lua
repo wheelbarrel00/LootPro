@@ -59,13 +59,13 @@ local BACKDROP_COLORROW = {
     insets = { left = 3, right = 3, top = 3, bottom = 3 },
 }
 
-function U.CreateFontDropdown(name, title, parent, configKey)
-    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    l:SetText(title)
+local function FontStyle(region, fontName)
+    SafeSetFont(region, LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT, 13, "")
+end
 
+local function CreateListDropdown(name, parent, getItems, getValue, setValue, styleText)
     local c = CreateFrame("Button", name, parent, "BackdropTemplate")
     c:SetSize(180, 24)
-    c:SetPoint("TOP", l, "BOTTOM", 0, -5)
     c:SetBackdrop(BACKDROP_DROPDOWN)
     c:SetBackdropColor(0, 0, 0, 0.85)
     c:SetBackdropBorderColor(0.427, 0.020, 0.004, 1.0)
@@ -99,10 +99,10 @@ function U.CreateFontDropdown(name, title, parent, configKey)
 
     local rows = {}
     local function rebuildRows()
-        local fonts = GetFonts()
-        local cfg = LootProConfig[configKey]
+        local items = getItems()
+        local selected = getValue()
         for _, row in ipairs(rows) do row:Hide() end
-        for i, fontName in ipairs(fonts) do
+        for i, item in ipairs(items) do
             local row = rows[i]
             if not row then
                 row = CreateFrame("Button", nil, scrollChild)
@@ -116,49 +116,37 @@ function U.CreateFontDropdown(name, title, parent, configKey)
                 row.text:SetJustifyH("LEFT")
                 row.text:SetWordWrap(false)
                 row:SetScript("OnClick", function(self)
-                    LootProConfig[configKey].font = self.fontName
+                    setValue(self.value)
                     popup:Hide()
                     c.Refresh()
                 end)
                 rows[i] = row
             end
-            if row._builtFont ~= fontName then
+            if row.value ~= item then
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
                 row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -(i - 1) * ROW_H)
-                row.text:SetText(fontName)
-                row.fontName = fontName
-                local p = LSM and LSM:Fetch("font", fontName) or DEFAULT_FONT
-                SafeSetFont(row.text, p, 13, "")
-                row._builtFont = fontName
+                row.text:SetText(item)
+                row.value = item
+                if styleText then styleText(row.text, item) end
             end
-            if fontName == cfg.font then
+            if item == selected then
                 row.text:SetTextColor(0.922, 0.718, 0.024, 1.0)
             else
                 row.text:SetTextColor(0.90, 0.90, 0.90, 1.0)
             end
             row:Show()
         end
-        scrollChild:SetSize(math.max(1, scroll:GetWidth()), math.max(1, #fonts * ROW_H))
-    end
-
-    local function Update()
-        local cfg = LootProConfig[configKey]
-        t:SetText(cfg.font or "Friz Quadrata TT")
-        local p = LSM and LSM:Fetch("font", cfg.font) or DEFAULT_FONT
-        SafeSetFont(t, p, 13, "")
-        if addon.UpdateAllVisuals then
-            addon:UpdateAllVisuals()
-        end
+        scrollChild:SetSize(math.max(1, scroll:GetWidth()), math.max(1, #items * ROW_H))
     end
 
     c:SetScript("OnClick", function()
         if popup:IsShown() then popup:Hide(); return end
-        local fonts = GetFonts()
+        local items = getItems()
         popup:ClearAllPoints()
         popup:SetPoint("TOPLEFT",  c, "BOTTOMLEFT",  0, -2)
         popup:SetWidth(c:GetWidth() + 40)
-        local visible = math.min(#fonts, MAX_VISIBLE)
+        local visible = math.min(#items, MAX_VISIBLE)
         popup:SetHeight(visible * ROW_H + 8)
         rebuildRows()
         popup:Show()
@@ -182,9 +170,43 @@ function U.CreateFontDropdown(name, title, parent, configKey)
     -- popup is parented to UIParent, so hide it explicitly when the owning page hides.
     parent:HookScript("OnHide", function() popup:Hide() end)
 
-    c.Refresh = Update
+    c.Refresh = function()
+        local value = getValue()
+        t:SetText(value)
+        if styleText then styleText(t, value) end
+    end
+    return c
+end
+
+function U.CreateFontDropdown(name, title, parent, configKey)
+    local l = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    l:SetText(title)
+
+    local c = CreateListDropdown(name, parent, GetFonts,
+        function() return LootProConfig[configKey].font or "Friz Quadrata TT" end,
+        function(font) LootProConfig[configKey].font = font end,
+        FontStyle)
+    c:SetPoint("TOP", l, "BOTTOM", 0, -5)
+
+    local showFont = c.Refresh
+    c.Refresh = function()
+        showFont()
+        if addon.UpdateAllVisuals then
+            addon:UpdateAllVisuals()
+        end
+    end
     c.label = l
     return c
+end
+
+function U.CreateSoundDropdown(name, parent, configKey)
+    return CreateListDropdown(name, parent,
+        function() return addon:AlertSoundChoices() end,
+        function() return LootProConfig[configKey].soundName or "Default" end,
+        function(sound)
+            LootProConfig[configKey].soundName = sound
+            addon:PlayAlertSound(configKey)
+        end)
 end
 
 function U.CreateGenericCycler(name, title, parent, list, settingKey, configKey)

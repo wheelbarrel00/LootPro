@@ -32,6 +32,23 @@ ns.about = {
 
     changelog = {
         {
+            version = "2.22.0", date = "2026-10-08",
+            sections = {
+                { head = "New Features", items = {
+                    "Choose the sound for your alerts. A sound box under \"Play Alert Sound\" on the Watch tab, and another under \"Play alert sound\" on the Rare Drops tab, offers Default, eight built-in Blizzard sounds, and any sound your media addons such as SharedMedia, BigWigs, or ElvUI provide. Picking a sound plays it so you can hear it, and a sound from a media addon you later remove falls back to Default.",
+                    "Loot spec reminder. When you enter a dungeon, a raid, or on Retail a delve while your loot specialization is set to a different spec than the one you are playing, a banner and a chat line tell you. It is on by default and stays quiet unless something is wrong. The minimap tooltip also shows your loot spec, in red when it does not match. (Retail and Mists of Pandaria Classic)",
+                    "Hide Blizzard's loot toasts, a new option on the Notifications tab. It stops the loot popups that repeat what the feed already shows, including won rolls and item upgrades. Legendary items, new mounts, pets, and toys, achievements, and quest rewards keep their popups. (Retail)",
+                    "Hold your auto-loot key (Shift by default) as you open a merchant to skip the automatic gray sale for that visit. A chat line confirms it, and Sell Grays Now still works if you change your mind.",
+                } },
+                { head = "Improvements", items = {
+                    "Item totals after a loot line now count your warband bank, so ore you keep there is included in the (14).",
+                    "Alerts now play on the Master sound channel, so you hear them even with sound effects muted.",
+                    "Automatic gray selling pauses while you hold an item on your cursor and picks up once you put it down, instead of skipping that slot for the rest of the run.",
+                    "If ElvUI's own Vendor Grays option is also on, the Vendor tab and the skip message now say so, since ElvUI's seller ignores the skip key.",
+                } },
+            },
+        },
+        {
             version = "2.21.0", date = "2026-10-06",
             sections = {
                 { head = "New Features", items = {

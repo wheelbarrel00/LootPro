@@ -435,7 +435,7 @@ function ns.UI:Initialize()
     countCheck:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Item totals", 1, 1, 1)
-        GameTooltip:AddLine("Adds how many of an item you now own in parentheses after a loot line, like Linen Cloth (14). Off shows only what just dropped.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Adds how many of an item you now own in parentheses after a loot line, like Linen Cloth (14). It counts your bags, your bank, and your warband bank. Off shows only what just dropped.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     countCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -552,6 +552,25 @@ function ns.UI:Initialize()
     local fEnh    = AddFilter("hideEnhancement", "Enhancements", 40,  -422)
     local fMisc   = AddFilter("hideMisc",        "Misc",         190, -422)
     local fGlyph  = AddFilter("hideGlyph",       "Glyphs",       340, -422)
+
+    if addon.LootToastsAvailable and addon:LootToastsAvailable() then
+        local toastCheck = CreateFrame("CheckButton", "LPRO_HideLootToasts", pages.notifications, "InterfaceOptionsCheckButtonTemplate")
+        toastCheck:SetPoint("TOPLEFT", 40, -460)
+        _G[toastCheck:GetName().."Text"]:SetText("Hide Blizzard's loot toasts")
+        toastCheck:SetChecked(LootProConfig.hideLootToasts)
+        toastCheck:SetScript("OnClick", function(cb)
+            LootProConfig.hideLootToasts = cb:GetChecked() and true or false
+            addon:ApplyLootToasts()
+        end)
+        toastCheck:SetScript("OnEnter", function(cb)
+            GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Hide Blizzard's loot toasts", 1, 1, 1)
+            GameTooltip:AddLine("Stops Blizzard's loot popups, which repeat what the loot feed already shows. That covers item drops along with the money, currency, and honor that share the same popup, won rolls, and item upgrades. Legendary items, new mounts, pets, and toys, achievements, and quest rewards still get their popups.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        toastCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        ExpandCheckHover(toastCheck)
+    end
 
     local cFont = U.CreateFontDropdown("LPRO_CF", "Combat Font", pages.customization, "combat")
     cFont.label:SetPoint("TOPLEFT", 30, 0); cFont:ClearAllPoints(); cFont:SetPoint("TOPLEFT", cFont.label, "BOTTOMLEFT", 0, -5)
@@ -988,8 +1007,11 @@ function ns.UI:Initialize()
         local soundCheck = CreateFrame("CheckButton", "LPRO_WatchSound", page, "InterfaceOptionsCheckButtonTemplate")
         soundCheck:SetPoint("TOPLEFT", 235, -6)
         _G[soundCheck:GetName().."Text"]:SetText("Play Alert Sound")
+        local watchSoundPick = U.CreateSoundDropdown("LPRO_WatchSoundPick", page, "watchlist")
+        watchSoundPick:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 22, 0)
         soundCheck:SetScript("OnClick", function(self)
             LootProConfig.watchlist.sound = self:GetChecked() and true or false
+            watchSoundPick:SetAlpha(LootProConfig.watchlist.sound and 1 or 0.4)
         end)
 
         local watchTestBtn = CreateStyledButton(page, 90, 22, "Test Alert")
@@ -999,12 +1021,12 @@ function ns.UI:Initialize()
         end)
 
         local addLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        addLabel:SetPoint("TOPLEFT", 30, -40)
+        addLabel:SetPoint("TOPLEFT", 30, -70)
         addLabel:SetText("Add item (type a name or ID, or shift-click an item into the box):")
 
         local addBox = CreateFrame("EditBox", "LPRO_WatchAdd", page, "InputBoxTemplate")
         addBox:SetSize(300, 22)
-        addBox:SetPoint("TOPLEFT", 34, -58)
+        addBox:SetPoint("TOPLEFT", 34, -88)
         addBox:SetAutoFocus(false)
         addBox:SetMaxLetters(200)
 
@@ -1012,8 +1034,8 @@ function ns.UI:Initialize()
         addBtn:SetPoint("LEFT", addBox, "RIGHT", 12, 0)
 
         local scroll = CreateFrame("ScrollFrame", "LPRO_WatchScroll", page, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", 30, -92)
-        scroll:SetSize(430, 290)
+        scroll:SetPoint("TOPLEFT", 30, -122)
+        scroll:SetSize(430, 260)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(410, 1)
         scroll:SetScrollChild(content)
@@ -1093,6 +1115,8 @@ function ns.UI:Initialize()
         page:SetScript("OnShow", function()
             enableCheck:SetChecked(LootProConfig.watchlist.enabled)
             soundCheck:SetChecked(LootProConfig.watchlist.sound)
+            watchSoundPick.Refresh()
+            watchSoundPick:SetAlpha(LootProConfig.watchlist.sound and 1 or 0.4)
             RefreshList()
         end)
     end
@@ -1121,12 +1145,15 @@ function ns.UI:Initialize()
         local rareSound = CreateFrame("CheckButton", "LPRO_RareSound", page, "InterfaceOptionsCheckButtonTemplate")
         rareSound:SetPoint("TOPLEFT", rareFlash, "BOTTOMLEFT", 0, -2)
         _G[rareSound:GetName().."Text"]:SetText("Play alert sound")
+        local rareSoundPick = U.CreateSoundDropdown("LPRO_RareSoundPick", page, "rareAlert")
+        rareSoundPick:SetPoint("TOPLEFT", rareSound, "BOTTOMLEFT", 22, 0)
         rareSound:SetScript("OnClick", function(self)
             LootProConfig.rareAlert.sound = self:GetChecked() and true or false
+            rareSoundPick:SetAlpha(LootProConfig.rareAlert.sound and 1 or 0.4)
         end)
 
         local notableCheck = CreateFrame("CheckButton", "LPRO_RareNotable", page, "InterfaceOptionsCheckButtonTemplate")
-        notableCheck:SetPoint("TOPLEFT", rareSound, "BOTTOMLEFT", 0, -2)
+        notableCheck:SetPoint("TOPLEFT", rareSoundPick, "BOTTOMLEFT", -22, -4)
         _G[notableCheck:GetName().."Text"]:SetText("Also alert on notable items")
         notableCheck:SetScript("OnClick", function(self)
             LootProConfig.rareAlert.notable = self:GetChecked() and true or false
@@ -1301,10 +1328,40 @@ function ns.UI:Initialize()
             ExpandCheckHover(trackGroupCheck)
         end
 
+        local specCheck
+        if addon.LootSpecsAvailable and addon:LootSpecsAvailable() then
+            local specDivider = page:CreateTexture(nil, "ARTWORK")
+            specDivider:SetSize(440, 1)
+            specDivider:SetPoint("TOPLEFT", upgradeCheck or ilvlCheck, "BOTTOMLEFT", 4, -18)
+            specDivider:SetColorTexture(0.427, 0.020, 0.004, 0.7)
+
+            local specHeader = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            specHeader:SetPoint("TOPLEFT", specDivider, "BOTTOMLEFT", 0, -8)
+            specHeader:SetText("|cFFFF2222Loot Spec|r")
+
+            specCheck = CreateFrame("CheckButton", "LPRO_LootSpecReminder", page, "InterfaceOptionsCheckButtonTemplate")
+            specCheck:SetPoint("TOPLEFT", specHeader, "BOTTOMLEFT", -4, -6)
+            _G[specCheck:GetName().."Text"]:SetText("Warn when my loot spec isn't my current spec")
+            specCheck:SetScript("OnClick", function(cb)
+                LootProConfig.lootSpecReminder = cb:GetChecked() and true or false
+            end)
+            specCheck:SetScript("OnEnter", function(cb)
+                GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Loot spec reminder", 1, 1, 1)
+                GameTooltip:AddLine("When you enter a " .. (addon.IS_RETAIL and "dungeon, raid, or delve" or "dungeon or raid") .. " while your loot specialization is set to a different spec than the one you are playing, Loot Pro shows a banner and a chat message. It never changes your loot spec for you.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            specCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            ExpandCheckHover(specCheck)
+        end
+
         page:SetScript("OnShow", function()
+            if specCheck then specCheck:SetChecked(LootProConfig.lootSpecReminder) end
             rareColor:SetChecked(LootProConfig.rareAlert.color)
             rareFlash:SetChecked(LootProConfig.rareAlert.flash)
             rareSound:SetChecked(LootProConfig.rareAlert.sound)
+            rareSoundPick.Refresh()
+            rareSoundPick:SetAlpha(LootProConfig.rareAlert.sound and 1 or 0.4)
             notableCheck:SetChecked(LootProConfig.rareAlert.notable)
             if upgradeAlertCheck then upgradeAlertCheck:SetChecked(LootProConfig.rareAlert.upgrade) end
             ilvlCheck:SetChecked(LootProConfig.lootIlvl)
@@ -1417,19 +1474,36 @@ function ns.UI:Initialize()
 
     do
         local page = pages.vendor
+        local RefreshSellerWarning
 
         local enableCheck = CreateFrame("CheckButton", "LPRO_VendorEnable", page, "InterfaceOptionsCheckButtonTemplate")
         enableCheck:SetPoint("TOPLEFT", 26, -6)
         _G[enableCheck:GetName().."Text"]:SetText("Automatically sell gray items at vendors")
         enableCheck:SetScript("OnClick", function(self)
             LootProConfig.vendorGrays.enabled = self:GetChecked() and true or false
+            RefreshSellerWarning()
         end)
 
         local enableDesc = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         enableDesc:SetPoint("TOPLEFT", enableCheck, "BOTTOMLEFT", 25, -2)
         enableDesc:SetWidth(430)
         enableDesc:SetJustifyH("LEFT")
-        enableDesc:SetText("When you open a merchant, every poor-quality (gray) item in your bags is sold automatically. Quest items and no-value items are never sold.")
+        enableDesc:SetText("When you open a merchant, every poor-quality (gray) item in your bags is sold automatically. Quest items and no-value items are never sold. Hold your auto-loot key (Shift by default) as you open a merchant to skip it for that visit.")
+
+        local sellerWarning = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sellerWarning:SetPoint("TOPLEFT", enableDesc, "BOTTOMLEFT", 0, -4)
+        sellerWarning:SetWidth(430)
+        sellerWarning:SetJustifyH("LEFT")
+        sellerWarning:SetTextColor(1, 0.3, 0.3)
+        RefreshSellerWarning = function()
+            local other = LootProConfig.vendorGrays.enabled and addon.OtherGraySeller and addon.OtherGraySeller()
+            if other then
+                sellerWarning:SetText(other .. "'s Vendor Grays is also on, and holding Shift won't stop it.")
+                sellerWarning:Show()
+            else
+                sellerWarning:Hide()
+            end
+        end
 
         local intervalLabel = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         intervalLabel:SetText("Sell Interval")
@@ -1550,6 +1624,7 @@ function ns.UI:Initialize()
 
         page:SetScript("OnShow", function()
             enableCheck:SetChecked(LootProConfig.vendorGrays.enabled)
+            RefreshSellerWarning()
             progressCheck:SetChecked(LootProConfig.vendorGrays.progressBar)
             detailsCheck:SetChecked(LootProConfig.vendorGrays.details)
             sellTipCheck:SetChecked(LootProConfig.tooltipSell)
@@ -1624,16 +1699,19 @@ function ns.UI:Initialize()
     wnBody:SetJustifyV("TOP")
     wnBody:SetSpacing(5)
     wnBody:SetText(table.concat({
-        "|cFFEBB706What's new in 2.21.0:|r",
+        "|cFFEBB706What's new in 2.22.0:|r",
         " ",
-        "|cFFEBB706Gold by source|r  The session recap now splits your gold into looted, quest rewards, vendor, mailbox, and trade, with a total. Quest gold is counted for the first time and joins your gold per hour.",
+        "|cFFEBB706Choose your alert sounds|r  Watch and rare drop alerts can play a built-in Blizzard sound or one from your media addons, and they now play even with sound effects muted.",
         " ",
-        addon.IS_RETAIL
-            and "|cFFEBB706New alert triggers|r  Rare Drop Alerts can now go off for gear upgrades, or for any gear at or above an item level you choose."
-            or "|cFFEBB706New alert trigger|r  Rare Drop Alerts can now go off for any gear at or above an item level you choose.",
+        "|cFFEBB706Skip the gray sale|r  Hold your auto-loot key (Shift by default) as you open a merchant to keep your grays for that visit.",
         " ",
-        "|cFFEBB706Watch and Rare Drops|r  The Alerts tab is now two tabs. Watch holds your watch list, and Rare Drops holds the rare drop alerts and the gear markers."
-            .. (addon.IS_RETAIL and " A new marker there shows a drop's upgrade track, as (Hero 4/6)." or ""),
+        ((addon.LootSpecsAvailable and addon:LootSpecsAvailable())
+            and "|cFFEBB706Loot spec reminder|r  Walk into a dungeon or raid with your loot spec set to another spec and Loot Pro tells you. It is on by default.\n \n" or "")
+        .. ((addon.LootToastsAvailable and addon:LootToastsAvailable())
+            and "|cFFEBB706Hide Blizzard's loot toasts|r  A new Notifications option turns off the loot popups the feed already shows.\n \n" or "")
+        .. (addon.IS_RETAIL
+            and "|cFFEBB706Warband bank totals|r  Item totals after a loot line now count what you keep in your warband bank."
+            or "|cFFEBB706Smoother gray selling|r  Selling pauses while you hold an item on your cursor and picks up once you put it down."),
         " ",
         "Got an idea or found a bug? Join our Discord below!",
     }, "\n"))
@@ -1846,6 +1924,7 @@ function ns.UI:Initialize()
         qlCheck:SetChecked(LP_GetAutoLoot()); speedyCheck:SetChecked(LootProConfig.speedyAutoLoot)
         fTrade:SetChecked(LootProConfig.lootFilters.hideTradeGoods); fConsum:SetChecked(LootProConfig.lootFilters.hideConsumable); fQuest:SetChecked(LootProConfig.lootFilters.hideQuest); fRecipe:SetChecked(LootProConfig.lootFilters.hideRecipe)
         fGear:SetChecked(LootProConfig.lootFilters.hideGear); fGem:SetChecked(LootProConfig.lootFilters.hideGem); fEnh:SetChecked(LootProConfig.lootFilters.hideEnhancement); fMisc:SetChecked(LootProConfig.lootFilters.hideMisc); fGlyph:SetChecked(LootProConfig.lootFilters.hideGlyph)
+        if _G.LPRO_HideLootToasts then _G.LPRO_HideLootToasts:SetChecked(LootProConfig.hideLootToasts) end
         for _, row in ipairs(colorRows) do row:Refresh() end
         SyncQuestColorWidgets()
         for key, cb in pairs(toggles) do

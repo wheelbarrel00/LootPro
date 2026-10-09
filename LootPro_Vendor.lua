@@ -8,6 +8,8 @@ local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInf
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
 local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _After = C_Timer and C_Timer.After
+local _IsModifiedClick = IsModifiedClick
+local _CursorHasItem = CursorHasItem
 -- 12.0 "secret value" probe (nil pre-12.0). Container links can be secret inside active instances. Guard before any string op.
 local _issecret = issecretvalue
 
@@ -185,6 +187,9 @@ sellFrame:SetScript("OnUpdate", function(_, elapsed)
         return
     end
 
+    -- Pause while the player drags an item, since a slot they are moving reads as locked and would be skipped for the whole run.
+    if _CursorHasItem and _CursorHasItem() then return end
+
     local e = entryPool[info.cursor]
     info.cursor = info.cursor + 1
 
@@ -247,7 +252,31 @@ function addon:VendorStart(manual)
     sellFrame:Show()
 end
 
+-- ElvUI's own gray seller runs on every merchant visit and ignores the skip key, so call it out where players will look.
+function addon.OtherGraySeller()
+    local E = type(_G.ElvUI) == "table" and _G.ElvUI[1]
+    local bags = type(E) == "table" and type(E.db) == "table" and E.db.bags
+    local vg = type(bags) == "table" and bags.vendorGrays
+    if type(vg) == "table" and vg.enable == true then return "ElvUI" end
+    return nil
+end
+
+local skipVisit = false
+local showCount, showHandled = 0, 0
+
+-- MERCHANT_SHOW can fire twice in a row, so only the latest delayed start may act.
 local function OnMerchantShow()
+    showHandled = showHandled + 1
+    if showHandled ~= showCount then return end
+    if skipVisit then
+        local _, count = BuildGrayList(false)
+        if count > 0 then
+            local other = addon.OtherGraySeller()
+            print(_format("|cFFAAAAFF[LootPro]|r Skipped selling %d gray item%s this visit.%s", count, count == 1 and "" or "s",
+                other and (" " .. other .. "'s Vendor Grays is also on and will still sell them.") or ""))
+        end
+        return
+    end
     addon:VendorStart(false)
 end
 
@@ -256,6 +285,10 @@ evf:RegisterEvent("MERCHANT_SHOW")
 evf:RegisterEvent("MERCHANT_CLOSED")
 evf:SetScript("OnEvent", function(_, event)
     if event == "MERCHANT_SHOW" then
+        -- Read the key as the window opens, since it is often released before the delayed sale starts.
+        local cfg = LootProConfig and LootProConfig.vendorGrays
+        skipVisit = (cfg and cfg.enabled and _IsModifiedClick and _IsModifiedClick("AUTOLOOTTOGGLE")) and true or false
+        showCount = showCount + 1
         if _After then _After(0.3, OnMerchantShow) else OnMerchantShow() end
     elseif event == "MERCHANT_CLOSED" then
         -- Use FinishRun, not a bare reset, so closing the merchant mid-run still records the partial tally.

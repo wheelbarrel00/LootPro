@@ -11,6 +11,11 @@ local _GetTime = GetTime
 local _After = C_Timer and C_Timer.After
 local _NewTicker = C_Timer and C_Timer.NewTicker
 local _GetItemCount = (C_Item and C_Item.GetItemCount) or GetItemCount
+-- Every running-count read goes through here, since the arrival-time count, the live count and the dedup salt must cover the same storage or merging and dedup break.
+local function OwnedCount(itemID)
+    if not _GetItemCount then return nil end
+    return _GetItemCount(itemID, true, false, true, true)
+end
 local _GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local _GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 local _GetItemQualityByID = C_Item and C_Item.GetItemQualityByID
@@ -1084,8 +1089,8 @@ local function ShowLoot(p, countStr)
     end
     -- Deferred lines all post in the same frame, so the bag count taken back when the event arrived is what separates two real drops from one message delivered twice.
     local salt = p.preCount
-    if not salt and (p.noCount or countStr == "") and p.itemID and _GetItemCount then
-        salt = _GetItemCount(p.itemID, true)
+    if not salt and (p.noCount or countStr == "") and p.itemID then
+        salt = OwnedCount(p.itemID)
     end
     if IsDuplicateDisplay(line, salt) then return end
     if LootProConfig.framedLoot then
@@ -1101,7 +1106,7 @@ local function PostDeferredLoot(p)
     if not p._pending then return end
     p._pending = false
     -- At +0.1s BAG_UPDATE has landed, so the live read is already post-loot. Adding amt again double-counts, and a party member's amt was never ours to add.
-    local live = (_GetItemCount and _GetItemCount(p.itemID, true)) or 0
+    local live = OwnedCount(p.itemID) or 0
     local cnt = live
     if cnt == 0 and p.isSelf then cnt = (p.preCount or 0) + p.amt end
     p.fCount = (not p.noCount) and cnt > 0 and cnt or nil
@@ -1278,6 +1283,18 @@ addon.lootProLDB = LDB:NewDataObject("LootPro", {
             tooltip:AddLine("Left: "  ..(MM_ACTION_LABEL[mm.leftClick]   or "Nothing"), 0.8, 0.8, 0.8)
             tooltip:AddLine("Right: " ..(MM_ACTION_LABEL[mm.rightClick]  or "Nothing"), 0.8, 0.8, 0.8)
             tooltip:AddLine("Middle: "..(MM_ACTION_LABEL[mm.middleClick] or "Nothing"), 0.8, 0.8, 0.8)
+        end
+        if addon.LootSpecInfo then
+            local lootName, _, curName, follows, mismatch = addon:LootSpecInfo()
+            if lootName then
+                if follows then
+                    tooltip:AddLine("Loot spec: follows your spec (" .. curName .. ")", 0.8, 0.8, 0.8)
+                elseif mismatch then
+                    tooltip:AddLine("Loot spec: " .. lootName .. " (not your current spec)", 1, 0.4, 0.4)
+                else
+                    tooltip:AddLine("Loot spec: " .. lootName, 0.8, 0.8, 0.8)
+                end
+            end
         end
     end,
 })
@@ -1582,6 +1599,33 @@ function addon:RunRegressionTest()
         pass, fail, #cases))
 end
 
+local LOOT_TOAST_EVENTS = { "SHOW_LOOT_TOAST", "SHOW_LOOT_TOAST_UPGRADE", "LOOT_ITEM_ROLL_WON" }
+local hiddenToasts = {}
+
+function addon.LootToastsAvailable()
+    return (_G.AlertFrame and _G.LootAlertSystem) and true or false
+end
+
+-- Only Blizzard's alert frame stops listening and nothing is re-added from addon code, so no taint reaches the alert system. Only events unregistered here are ever registered again.
+function addon.ApplyLootToasts()
+    if not addon.LootToastsAvailable() then return end
+    local alerts = _G.AlertFrame
+    if LootProConfig and LootProConfig.hideLootToasts then
+        for i = 1, #LOOT_TOAST_EVENTS do
+            local ev = LOOT_TOAST_EVENTS[i]
+            if not hiddenToasts[ev] and alerts:IsEventRegistered(ev) then
+                alerts:UnregisterEvent(ev)
+                hiddenToasts[ev] = true
+            end
+        end
+    else
+        for ev in pairs(hiddenToasts) do
+            alerts:RegisterEvent(ev)
+            hiddenToasts[ev] = nil
+        end
+    end
+end
+
 -- Speedy AutoLoot: loot one slot per timer tick (~30/s), highest slot first. A tight full-loop loot can trip the server's rapid-loot disconnect on big AoE piles, and clearing low slots first would shift higher indices.
 local _LootSlot        = LootSlot
 local _LootSlotHasItem = LootSlotHasItem
@@ -1678,6 +1722,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
         if not self:IsReady() then self:InitSettings() end
         if ns.UI then ns.UI:Initialize() end
         self:UpdateAllVisuals()
+        self:ApplyLootToasts()
         -- Register the Masque group now (not lazily on first loot) so "Loot Pro" appears in Masque's config right away.
         GetMasqueGroup()
 
@@ -2007,7 +2052,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                         lp.noCount = noCount
                         lp.itemID  = itemID
                         lp.isSelf  = isSelf
-                        lp.preCount = (_GetItemCount and _GetItemCount(itemID, true)) or 0
+                        lp.preCount = OwnedCount(itemID) or 0
                         lp.cR, lp.cG, lp.cB = lr, lg, lb
                         lp.marker  = marker
                         lp.fIcon = fIcon; lp.fQuality = fQuality; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
@@ -2029,7 +2074,7 @@ addon:SetScript("OnEvent", function(self, event, ...)
                 else
                     local body = isQuest and RecolorItemLink(msg, lr, lg, lb) or msg
                     local line = GetIconString(msg, itemID) .. body .. marker
-                    local salt = itemID and _GetItemCount and _GetItemCount(itemID, true)
+                    local salt = itemID and OwnedCount(itemID)
                     if not IsDuplicateDisplay(line, salt) then
                         if LootProConfig.framedLoot then
                             local nm = fName or lname or CleanMessage(msg, event)

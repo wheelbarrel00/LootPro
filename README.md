@@ -1,6 +1,6 @@
 # Loot Pro
 
-**A clean replacement for World of Warcraft's loot and combat text. Two repositionable readouts, one for combat and system messages and one for loot and money, with a color and a toggle for every kind of message. On top of the live feed it adds the loot tools the default UI never had: a session recap with gold per hour, watched-item alerts, gear markers, a name block list, and automatic gray selling. Install it and it works right away. Everything beyond the basics is off until you turn it on.**
+**A clean replacement for World of Warcraft's loot and combat text. Two repositionable readouts, one for combat and system messages and one for loot and money, with a color and a toggle for every kind of message. On top of the live feed it adds the loot tools the default UI never had: a session recap with gold per hour, watched-item alerts, gear markers, a name block list, and automatic gray selling. Install it and it works right away. Everything beyond the basics is off until you turn it on, apart from a loot spec reminder that stays quiet unless something is wrong.**
 
 [![Join our Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/vm8K2WfQUE) [![Version](https://img.shields.io/github/v/release/wheelbarrel00/LootPro?color=6D0501&label=Version&style=flat-square)](https://github.com/wheelbarrel00/LootPro/releases) ![WoW Midnight](https://img.shields.io/badge/WoW-Midnight12.1-8B0000?style=flat-square) ![WoW Classic Era](https://img.shields.io/badge/WoW-ClassicEra1.15.9-8B0000?style=flat-square) ![WoW TBC](https://img.shields.io/badge/WoW-BurningCrusade2.5.6-8B0000?style=flat-square) ![WoW MoP](https://img.shields.io/badge/WoW-MoP5.5.4-8B0000?style=flat-square) ![Dependencies](https://img.shields.io/badge/Dependencies-None-6D0501?style=flat-square) [![License](https://img.shields.io/github/license/wheelbarrel00/LootPro?style=flat-square&color=333333)](https://github.com/wheelbarrel00/LootPro/blob/main/LICENSE)
 
@@ -16,7 +16,7 @@
 6. Custom: fonts, framed rows, and behavior
 7. Recap: your session at a glance
 8. Watch: alerts for items you name
-9. Rare Drops: rare drop alerts and gear markers
+9. Rare Drops: alerts, gear markers, and loot spec
 10. Block: hiding loot by name
 11. Vendor: selling grays
 12. Item tooltips
@@ -40,7 +40,7 @@ Loot Pro replaces the default scrolling combat and loot text with two frames you
 
 Each one has its own size, width, height, fade time, maximum line count, font, and outline. Every kind of message has its own color and its own on and off switch. Out of the box you get clean text with inline item icons and a running total of how many of each item you own.
 
-Everything past that is optional and off by default. Turn on only what you want.
+Everything past that is optional and off by default. Turn on only what you want. The one exception is the loot spec reminder, which is on from the start because it only speaks up when your loot spec does not match the spec you are playing.
 
 Loot Pro never equips, trades, or destroys anything. Two features do act for you once you turn them on, and both are off by default: Speedy AutoLoot takes items from a corpse on your behalf, and the Vendor tab sells gray items while a merchant window is open.
 
@@ -122,7 +122,7 @@ Three of them change formatting rather than turning a message on or off:
 
 **Enable Clean Mode** (on) strips the game's wrapper text, so "You receive loot: [Linen Cloth]" becomes just the item with its icon. Turn it off to see the original message.
 
-**Inject Item Totals** (on) adds how many you now own in parentheses after the item, as in `Linen Cloth (14)`. Turn it off to see only what just dropped.
+**Inject Item Totals** (on) adds how many you now own in parentheses after the item, as in `Linen Cloth (14)`. The total counts your bags, your bank, and your warband bank, so ore you have parked in the warband bank is included. Turn it off to see only what just dropped.
 
 **Use Coin Icons** (on) shows looted money as gold, silver, and copper coin icons instead of the words. It only applies while Clean Mode is on.
 
@@ -143,6 +143,10 @@ Nine checkboxes that hide whole categories of item, all off by default: Trade Go
 Gear covers weapons and armor together. There is no separate weapon and armor split.
 
 Hidden items still count toward the session recap. Only the line in the feed is suppressed, so your totals stay honest no matter how much you filter.
+
+## Blizzard loot toasts
+
+**Hide Blizzard's loot toasts** (off) stops the popups Blizzard shows when you loot something, since the loot feed already lists the same drops. It covers item drops, along with the money, currency, and honor that share the same popup, won loot rolls, and item upgrades. Legendary items, new mounts, pets, and toys, achievements, and quest rewards still get their popups. Untick it and the popups come straight back. Classic has no loot toasts, so the option only appears on Retail and WoW Forever.
 
 ***
 
@@ -226,11 +230,13 @@ Add an item by typing its name, typing its item ID, or shift-clicking it straigh
 
 Alerts fire only for items **you** loot, not the group's. **Play Alert Sound** (on) controls the sound, and **Test Alert** fires a sample banner so you can check placement.
 
+The box under **Play Alert Sound** picks which sound plays: **Default** (a raid warning horn), one of eight built-in Blizzard sounds, or any sound a media addon such as SharedMedia, BigWigs, or ElvUI has registered. Picking a sound plays it once so you can hear it. Alert sounds play on the Master channel, so you still hear them with sound effects muted. If you remove the media addon a sound came from, the alert falls back to Default instead of going quiet.
+
 ***
 
-# Rare Drops: rare drop alerts and gear markers
+# Rare Drops: alerts, gear markers, and loot spec
 
-**Options > Rare Drops.** Two groups of settings share this tab.
+**Options > Rare Drops.** Three groups of settings share this tab. The third, the loot spec reminder, only appears on game versions that have loot specializations.
 
 ## Rare Drop Alerts
 
@@ -246,7 +252,7 @@ A separate alert for anything valuable, whether or not it is on your watch list.
 
 **Alert on item level (0 = off)** fires when a weapon or armor piece you loot is at least the item level you enter, whatever its quality. Shirts, tabards, and cosmetic armor never count. Press Enter to save.
 
-The three effects are **Color loot line by rarity**, **Flash the loot frame**, and **Play alert sound**, all off by default. Note that coloring by rarity is part of the alert rather than a general setting, so it applies to lines that trip one of the triggers above, not to every drop.
+The three effects are **Color loot line by rarity**, **Flash the loot frame**, and **Play alert sound**, all off by default. The sound has its own picker under its checkbox, with the same choices as the watch list, and its Default is the epic loot fanfare. Note that coloring by rarity is part of the alert rather than a general setting, so it applies to lines that trip one of the triggers above, not to every drop.
 
 **Test Rare Drop** fires the flash and sound so you can judge them without waiting for a real drop.
 
@@ -264,6 +270,14 @@ Five tags that get appended to a loot line so you can judge a drop without openi
 
 The Retail-only markers appear on your own drops. The item level tag also applies to loot the group picks up, and so does the upgrade track when you tick **Include the group's loot** under it.
 
+## Loot spec reminder
+
+**Warn when my loot spec isn't my current spec** (on) catches the classic mistake of running a dungeon with your loot specialization still set for another spec. When you enter a dungeon, a raid, or on Retail a delve, and your loot spec is set to a different spec than the one you are playing, Loot Pro shows a banner in the middle of your screen and prints a chat line naming both specs. It checks again if you change spec or loot spec while inside, and it warns once per mismatch rather than every few seconds.
+
+A loot spec set to follow your current spec never triggers it. Loot Pro never changes your loot spec for you. Right-click your character portrait to change it.
+
+This section only appears on game versions that have loot specializations, which means Retail and Mists of Pandaria Classic.
+
 ***
 
 # Block: hiding loot by name
@@ -280,7 +294,9 @@ This is the tool for the specific junk that slips past a quality or category fil
 
 **Options > Vendor.** Off by default.
 
-**Automatically sell gray items at vendors** (off) sells every poor-quality item in your bags as soon as you open a merchant. Quest items and items with no sell value are never sold, and each bag slot is checked again in the instant before it sells, so an item you moved mid-sale is never vendored by mistake.
+**Automatically sell gray items at vendors** (off) sells every poor-quality item in your bags as soon as you open a merchant. Quest items and items with no sell value are never sold, and each bag slot is checked again in the instant before it sells, so an item you moved mid-sale is never vendored by mistake. While you are holding an item on your cursor, selling pauses and picks up again once you put it down.
+
+To skip it for one visit, hold your auto-loot modifier key (Shift by default, the same key Speedy AutoLoot uses) as you open the merchant. A chat line confirms how many grays were left alone, and **Sell Grays Now** still works if you change your mind. If ElvUI's own Vendor Grays option is also on, ElvUI sells them anyway, because its seller ignores that key. The Vendor tab shows a red warning while both are on, so turn one of them off.
 
 **Sell Interval** (0.1 to 1.0 seconds, default 0.2) is the delay between each item. A longer interval is gentler on the server and makes the progress bar easier to follow.
 
@@ -334,7 +350,7 @@ A LibDataBroker launcher with a LibDBIcon minimap button, so Titan Panel, Chocol
 | **Right** | Print Recap |
 | **Middle** | Toggle Lock |
 
-All three are configurable on the Custom tab, and each can be set to Nothing. Hovering the icon shows the version and a reminder of what your three clicks currently do. The button itself can be hidden from the Custom tab.
+All three are configurable on the Custom tab, and each can be set to Nothing. Hovering the icon shows the version, a reminder of what your three clicks currently do, and on game versions with loot specializations your current loot spec, in red when it does not match the spec you are playing. The button itself can be hidden from the Custom tab.
 
 ***
 
@@ -350,6 +366,8 @@ Loot Pro runs on Midnight (12.1), Classic Era (1.15.9), Burning Crusade Classic 
 | Gear upgrade marker and alert | Yes | Not available |
 | Tertiary stat marker | Yes | Not available, no tertiary stats |
 | Upgrade track marker | Yes | Not available, no upgrade tracks |
+| Loot spec reminder and tooltip line | Yes | Mists of Pandaria Classic only, Era and TBC have no loot specializations |
+| Hide Blizzard's loot toasts | Yes | Not available, Classic has no loot toasts |
 | "Already owned" collectible tooltips | Yes | Not available, no shared journals |
 | Notable-item alerts for uncollected mounts, pets, and toys | Yes | Fires for all mounts, pets, and toys |
 | Everything else | Yes | Yes |

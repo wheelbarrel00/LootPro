@@ -30,8 +30,8 @@ addon.DEFAULTS = {
     hideWelcome = false,
     whatsNewSeen = 0,
     minimap = { hide = false, minimapPos = 220, leftClick = "settings", rightClick = "recap", middleClick = "lock" },
-    watchlist = { enabled = false, sound = true, items = {} },
-    rareAlert = { threshold = 5, color = false, flash = false, sound = false, notable = false, value = 0, upgrade = false, ilvl = 0 },
+    watchlist = { enabled = false, sound = true, soundName = "Default", items = {} },
+    rareAlert = { threshold = 5, color = false, flash = false, sound = false, soundName = "Default", notable = false, value = 0, upgrade = false, ilvl = 0 },
     questColor = { enabled = false, classColor = false },
     newAppearance = false,
     lootUpgrade = false,
@@ -39,6 +39,8 @@ addon.DEFAULTS = {
     tertiaryStat = false,
     upgradeTrack = false,
     upgradeTrackGroup = false,
+    lootSpecReminder = true,
+    hideLootToasts = false,
     vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
     loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4, scale = 1.0 },
     combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4, scale = 1.0 },
@@ -123,6 +125,7 @@ function addon:ResetDefaults()
     -- LibDBIcon captured the old minimap table when it registered, so hand it the new one or drag positions stop persisting.
     if self.LDBIcon then self.LDBIcon:Refresh("LootPro", LootProConfig.minimap) end
     self:UpdateAllVisuals()
+    if self.ApplyLootToasts then self:ApplyLootToasts() end
     if ns.UI and ns.UI.RefreshAllWidgets then ns.UI:RefreshAllWidgets() end
     print("|cFF00FF00[LootPro]|r Settings reset to defaults.")
 end

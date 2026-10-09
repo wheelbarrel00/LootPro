@@ -7,6 +7,15 @@ local _GetItemNameByID = C_Item and C_Item.GetItemNameByID
 local _select = select
 local _tonumber = tonumber
 local SOUNDKIT = _G.SOUNDKIT
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+local _PlaySoundFile = PlaySoundFile
+local _After = C_Timer and C_Timer.After
+local _HasLootSpecs = HasLootSpecializations
+local _GetLootSpec = GetLootSpecialization
+local _GetSpecialization = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
+local _GetSpecInfo = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo) or GetSpecializationInfo
+local _IsInInstance = IsInInstance
+local _IsDelveInProgress = C_PartyInfo and C_PartyInfo.IsDelveInProgress
 local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark
 
 local CLASS_MISC, CLASS_BATTLEPET = 15, 17
@@ -210,6 +219,7 @@ function addon:WatchAlert(entry, link, name)
     if not icon and entry.id and _GetItemInfoInstant then
         icon = _select(5, _GetItemInfoInstant(entry.id))
     end
+    f.title:SetText("|cFFFF2222WATCHED ITEM LOOTED|r")
     f.icon:SetTexture(icon or QUESTION_MARK_ICON)
     f.name:SetText(link or entry.label or name or "Watched item")
 
@@ -218,8 +228,8 @@ function addon:WatchAlert(entry, link, name)
     f.anim:Stop()
     f.anim:Play()
 
-    if LootProConfig.watchlist and LootProConfig.watchlist.sound and SOUNDKIT then
-        PlaySound(SOUNDKIT.RAID_WARNING)
+    if LootProConfig.watchlist and LootProConfig.watchlist.sound then
+        self:PlayAlertSound("watchlist")
     end
 end
 
@@ -233,6 +243,71 @@ function addon:WatchOnLoot(itemID, name, link)
 end
 
 local RARE_SOUND = (SOUNDKIT and (SOUNDKIT.UI_EPICLOOT_TOAST or SOUNDKIT.RAID_WARNING)) or nil
+
+local SOUND_CHANNEL = "Master"
+local DEFAULT_SOUND = "Default"
+local DEFAULT_KIT = {
+    watchlist = SOUNDKIT and SOUNDKIT.RAID_WARNING,
+    rareAlert = RARE_SOUND,
+}
+local BUILTIN_SOUNDS = {
+    { "Blizzard: Raid Warning", "RAID_WARNING" },
+    { "Blizzard: Epic Loot", "UI_EPICLOOT_TOAST" },
+    { "Blizzard: Legendary Loot", "UI_LEGENDARY_LOOT_TOAST" },
+    { "Blizzard: Ready Check", "READY_CHECK" },
+    { "Blizzard: Alarm Clock", "ALARM_CLOCK_WARNING_3" },
+    { "Blizzard: Quest Complete", "IG_QUEST_LIST_COMPLETE" },
+    { "Blizzard: Boss Whisper", "UI_RAID_BOSS_WHISPER_WARNING" },
+    { "Blizzard: Coin", "IG_BACKPACK_COIN_OK" },
+}
+local builtinKit = {}
+for i = 1, #BUILTIN_SOUNDS do
+    builtinKit[BUILTIN_SOUNDS[i][1]] = SOUNDKIT and SOUNDKIT[BUILTIN_SOUNDS[i][2]]
+end
+
+local soundChoices
+function addon.AlertSoundChoices()
+    if soundChoices then return soundChoices end
+    local list = { DEFAULT_SOUND }
+    for i = 1, #BUILTIN_SOUNDS do
+        local label = BUILTIN_SOUNDS[i][1]
+        if builtinKit[label] then list[#list + 1] = label end
+    end
+    if LSM then
+        local shared = {}
+        for name in pairs(LSM:HashTable("sound")) do
+            if name ~= "None" and name ~= DEFAULT_SOUND and not builtinKit[name] then shared[#shared + 1] = name end
+        end
+        table.sort(shared)
+        for i = 1, #shared do list[#list + 1] = shared[i] end
+    end
+    soundChoices = list
+    return list
+end
+if LSM and LSM.RegisterCallback then
+    local sink = {}
+    LSM.RegisterCallback(sink, "LibSharedMedia_Registered", function(_, mediatype)
+        if mediatype == "sound" then soundChoices = nil end
+    end)
+end
+
+function addon.PlayAlertSound(_, configKey)
+    local cfg = LootProConfig and LootProConfig[configKey]
+    local choice = cfg and cfg.soundName
+    if choice and choice ~= DEFAULT_SOUND then
+        if builtinKit[choice] then
+            PlaySound(builtinKit[choice], SOUND_CHANNEL)
+            return
+        end
+        -- noDefault, or LSM hands back its silent "None" sound for a media pack that was removed.
+        local file = LSM and LSM:Fetch("sound", choice, true)
+        if file then
+            _PlaySoundFile(file, SOUND_CHANNEL)
+            return
+        end
+    end
+    if DEFAULT_KIT[configKey] then PlaySound(DEFAULT_KIT[configKey], SOUND_CHANNEL) end
+end
 
 local function RareFlash(quality)
     local lf = addon.lootFrame
@@ -351,11 +426,89 @@ function addon:RareOnLoot(quality, triggered)
     if not ra then return end
     if not ((quality and quality >= (ra.threshold or 5)) or triggered) then return end
     if ra.flash then RareFlash(quality or 0) end
-    if ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
+    if ra.sound then self:PlayAlertSound("rareAlert") end
 end
 
 function addon:RareTest()
     local ra = LootProConfig and LootProConfig.rareAlert
     RareFlash((ra and ra.threshold) or 5)
-    if ra and ra.sound and RARE_SOUND then PlaySound(RARE_SOUND) end
+    if ra and ra.sound then self:PlayAlertSound("rareAlert") end
 end
+
+-- The loot spec API exists on every flavor, even ones without specs, so ask the client whether loot specs apply.
+function addon.LootSpecsAvailable()
+    return (_HasLootSpecs and _HasLootSpecs() and _GetLootSpec and _GetSpecialization and _GetSpecInfo) and true or false
+end
+
+local function OwnSpecByID(specID)
+    for i = 1, 4 do
+        local id, name, _, icon = _GetSpecInfo(i)
+        if not id or id == 0 then return nil end
+        if id == specID then return name, icon end
+    end
+    return nil
+end
+
+function addon:LootSpecInfo()
+    if not self:LootSpecsAvailable() then return nil end
+    local index = _GetSpecialization()
+    if not index or index == 0 then return nil end
+    local curID, curName, _, curIcon = _GetSpecInfo(index)
+    if not curID or curID == 0 or not curName then return nil end
+    local lootID = _GetLootSpec() or 0
+    if lootID == 0 or lootID == curID then
+        return curName, curIcon, curName, lootID == 0, false, curID
+    end
+    local lootName, lootIcon = OwnSpecByID(lootID)
+    if not lootName then return nil end
+    return lootName, lootIcon, curName, false, true, curID, lootID
+end
+
+local function InLootSpecInstance()
+    local inside, kind = _IsInInstance()
+    if not inside then return false end
+    if kind == "party" or kind == "raid" then return true end
+    return kind == "scenario" and _IsDelveInProgress ~= nil and _IsDelveInProgress() and true or false
+end
+
+local warnedSpecs
+local function CheckLootSpec()
+    if not (LootProConfig and LootProConfig.lootSpecReminder) or not InLootSpecInstance() then
+        warnedSpecs = nil
+        return
+    end
+    local lootName, lootIcon, curName, _, mismatch, curID, lootID = addon:LootSpecInfo()
+    if not mismatch then
+        warnedSpecs = nil
+        return
+    end
+    local key = curID * 100000 + lootID
+    if key == warnedSpecs then return end
+    warnedSpecs = key
+
+    local f = EnsureAlert()
+    f.title:SetText("|cFFFF2222LOOT SPEC MISMATCH|r")
+    f.icon:SetTexture(lootIcon or QUESTION_MARK_ICON)
+    f.name:SetText("Loot spec: " .. lootName)
+    f:Show()
+    f:SetAlpha(0)
+    f.anim:Stop()
+    f.anim:Play()
+    print("|cFFFF2222[LootPro]|r Your loot spec is " .. lootName .. ", but you are playing " .. curName .. ". Right-click your portrait to change it.")
+end
+
+local specFrame = CreateFrame("Frame")
+specFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+pcall(specFrame.RegisterEvent, specFrame, "PLAYER_LOOT_SPEC_UPDATED")
+pcall(specFrame.RegisterEvent, specFrame, "PLAYER_SPECIALIZATION_CHANGED")
+specFrame:SetScript("OnEvent", function(_, event, unit)
+    if event == "PLAYER_ENTERING_WORLD" then
+        warnedSpecs = nil
+        -- Wait out the loading screen, which would hide the banner, and give delve and spec data time to settle.
+        if _After then _After(3, CheckLootSpec) else CheckLootSpec() end
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then
+        return
+    else
+        CheckLootSpec()
+    end
+end)
