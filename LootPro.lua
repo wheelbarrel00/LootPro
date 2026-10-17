@@ -1,105 +1,15 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "2.22.0"
--- Bump on each new What's New popup. It shows once per revision (LootProConfig.whatsNewSeen).
-ns.addon.WHATS_NEW = 15
+ns.addon.VERSION = "3.0.0"
 ns.addon.isTesting = false
 -- Forever reports WOW_PROJECT_CAMELOT (18) since build 70170 but runs the retail engine.
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
 ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
-ns.U = {}
-
 _G[addonName] = ns.addon
 
 ns.addon.DISCORD_URL = "https://discord.gg/vm8K2WfQUE"
-
-local function DiscordBox_OnEscape(box)
-    box:GetParent():Hide()
-end
-local function DiscordBox_OnTextChanged(box)
-    if box:GetText() ~= ns.addon.DISCORD_URL then
-        box:SetText(ns.addon.DISCORD_URL)
-        box:HighlightText()
-    end
-end
-
-StaticPopupDialogs["LOOTPRO_DISCORD"] = {
-    text = "Join the Loot Pro community for help, feedback, and updates.\n\nCopy the invite below (it's pre-selected — just press Ctrl+C):",
-    button1 = "Close",
-    hasEditBox = true,
-    editBoxWidth = 220,
-    -- Use the per-dialog fields, not SetScript on the shared editbox, which would leak these handlers onto later popups.
-    EditBoxOnEscapePressed = DiscordBox_OnEscape,
-    EditBoxOnTextChanged = DiscordBox_OnTextChanged,
-    OnShow = function(self)
-        local eb = self.editBox or (self.EditBox)
-        if eb then
-            eb:SetText(ns.addon.DISCORD_URL)
-            eb:HighlightText()
-            eb:SetFocus()
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
-function ns.addon:ShowDiscord()
-    StaticPopup_Show("LOOTPRO_DISCORD")
-end
-
-ns.addon._urlToCopy = ""
-
-local function URLBox_OnEscape(box)
-    box:GetParent():Hide()
-end
-local function URLBox_OnTextChanged(box)
-    if box:GetText() ~= ns.addon._urlToCopy then
-        box:SetText(ns.addon._urlToCopy)
-        box:HighlightText()
-    end
-end
-
-StaticPopupDialogs["LOOTPRO_URL"] = {
-    text = "Copy the link below (it's pre-selected — just press Ctrl+C):",
-    button1 = "Close",
-    hasEditBox = true,
-    editBoxWidth = 320,
-    EditBoxOnEscapePressed = URLBox_OnEscape,
-    EditBoxOnTextChanged = URLBox_OnTextChanged,
-    OnShow = function(self)
-        local eb = self.editBox or (self.EditBox)
-        if eb then
-            eb:SetText(ns.addon._urlToCopy)
-            eb:HighlightText()
-            eb:SetFocus()
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
-function ns.addon:ShowURL(url)
-    self._urlToCopy = url or ""
-    StaticPopup_Show("LOOTPRO_URL")
-end
-
-StaticPopupDialogs["LOOTPRO_RESET"] = {
-    text = "Reset all Loot Pro settings to defaults?\n\nThis clears your watch list, block list, colors, window layout, and every toggle. It cannot be undone.",
-    button1 = "Reset",
-    button2 = "Cancel",
-    OnAccept = function() ns.addon:ResetDefaults() end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    showAlert = true,
-    preferredIndex = 3,
-}
 
 -- Registered at load time so /lp works during the loading screen, not only after PLAYER_LOGIN.
 SLASH_LOOTPRO1 = "/lp"
@@ -129,25 +39,25 @@ SlashCmdList["LOOTPRO"] = function(msg)
         if ns.addon.RecapPauseToggle then
             local paused = ns.addon:RecapPauseToggle()
             print(paused and "|cFFFFA000[LootPro]|r Session timer paused." or "|cFF00FF00[LootPro]|r Session timer resumed.")
-            if ns.UI and ns.UI.RefreshRecapButtons then ns.UI.RefreshRecapButtons() end
+            if ns.Settings then ns.Settings.Redraw() end
         end
         return
     elseif msg == "whatsnew" then
-        if ns.UI and ns.UI.whatsNewFrame then
-            ns.UI.whatsNewFrame:Show()
+        if ns.WhatsNew and ns.addon:IsReady() then
+            ns.WhatsNew.Show()
         else
             print("|cFFFF6060[LootPro]|r What's New popup not available yet.")
         end
         return
     elseif msg == "whatsnew reset" then
-        if LootProConfig then
-            LootProConfig.whatsNewSeen = 0
-            print("|cFF00FF00[LootPro]|r What's New flag reset; it will show on next /reload.")
+        if LootProConfig and ns.WhatsNew then
+            ns.WhatsNew.ResetSeen()
+            print("|cFF00FF00[LootPro]|r What's New reset. The newest release counts as unread at the next login.")
         end
         return
     elseif msg == "about" then
-        if ns.UI and ns.UI.showAbout then
-            ns.UI.showAbout()
+        if ns.Settings and ns.addon:IsReady() then
+            ns.Settings.Open("about")
         else
             print("|cFFFF6060[LootPro]|r UI not initialized yet.")
         end
@@ -156,8 +66,8 @@ SlashCmdList["LOOTPRO"] = function(msg)
         print("|cFFAAAAFF[LootPro]|r Commands: /lp (toggle GUI), /lp recap (session recap), /lp recap reset, /lp pause (pause/resume timer), /lp whatsnew, /lp about, /lp test, /lp help")
         return
     end
-    if ns.UI and ns.UI.toggleGUI then
-        ns.UI.toggleGUI()
+    if ns.Settings and ns.addon:IsReady() then
+        ns.Settings.Toggle()
     else
         print("|cFFFF6060[LootPro]|r UI not initialized yet.")
     end

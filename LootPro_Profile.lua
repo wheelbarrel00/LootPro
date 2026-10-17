@@ -23,12 +23,14 @@ addon.DEFAULTS = {
     mergeRows = true,
     speedyAutoLoot = false,
     uiScale = 1.0,
+    lastSettingsPage = "general",
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false, hideGear = false, hideGem = false, hideEnhancement = false, hideMisc = false, hideGlyph = false },
     lootBlacklist = { items = {} },
     combatEnterText = "Combat Start",
     combatLeaveText = "Combat End",
-    hideWelcome = false,
-    whatsNewSeen = 0,
+    whatsNewSeen = "",
+    whatsNewAnnounced = "",
+    whatsNewMode = "popup",
     minimap = { hide = false, minimapPos = 220, leftClick = "settings", rightClick = "recap", middleClick = "lock" },
     watchlist = { enabled = false, sound = true, soundName = "Default", items = {} },
     rareAlert = { threshold = 5, color = false, flash = false, sound = false, soundName = "Default", notable = false, value = 0, upgrade = false, ilvl = 0 },
@@ -98,13 +100,23 @@ local function prune(src, dst)
     end
 end
 
+local function newestRelease()
+    local c = ns.about and ns.about.changelog
+    return c and c[1] and c[1].version or ""
+end
+
 function addon:InitSettings()
     if not LootProConfig then
         LootProConfig = addon:DeepCopy(addon.DEFAULTS)
-        -- Fresh install: mark the current revision seen so a first-time user gets the welcome popup, not What's New too.
-        LootProConfig.whatsNewSeen = addon.WHATS_NEW
+        -- Fresh install: mark the newest release seen so a first-time user gets the welcome, not What's New too.
+        LootProConfig.whatsNewSeen = newestRelease()
+        LootProConfig.whatsNewAnnounced = newestRelease()
+        addon.firstInstall = true
 
     else
+        -- 2.22.0 and older saved a popup revision number, or none before 2.5.0, and either counts as told up to 2.22.0
+        local seen = LootProConfig.whatsNewSeen
+        if type(seen) ~= "string" or seen == "" then LootProConfig.whatsNewSeen = "2.22.0" end
         if LootProConfig.minQuality ~= nil and LootProConfig.minQualityOwn == nil and LootProConfig.minQualityOther == nil then
             LootProConfig.minQualityOwn = LootProConfig.minQuality
             LootProConfig.minQualityOther = LootProConfig.minQuality
@@ -121,11 +133,11 @@ end
 
 function addon:ResetDefaults()
     LootProConfig = self:DeepCopy(addon.DEFAULTS)
-    LootProConfig.whatsNewSeen = addon.WHATS_NEW
+    LootProConfig.whatsNewSeen = newestRelease()
     -- LibDBIcon captured the old minimap table when it registered, so hand it the new one or drag positions stop persisting.
     if self.LDBIcon then self.LDBIcon:Refresh("LootPro", LootProConfig.minimap) end
     self:UpdateAllVisuals()
     if self.ApplyLootToasts then self:ApplyLootToasts() end
-    if ns.UI and ns.UI.RefreshAllWidgets then ns.UI:RefreshAllWidgets() end
+    if ns.Settings then ns.Settings.Redraw() end
     print("|cFF00FF00[LootPro]|r Settings reset to defaults.")
 end

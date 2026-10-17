@@ -1248,16 +1248,14 @@ local MM_ACTION_LABEL = {
 
 function addon:DoMinimapAction(action)
     if action == "settings" then
-        if ns.UI and LootProGUI then
-            if LootProGUI:IsShown() then LootProGUI:Hide() else LootProGUI:Show() end
-        end
+        if ns.Settings then ns.Settings.Toggle() end
     elseif action == "recap" then
         if self.RecapPrint then self:RecapPrint() end
     elseif action == "lock" then
         if self:IsReady() then
             LootProConfig.locked = not LootProConfig.locked
             self:UpdateAllVisuals()
-            if ns.UI and ns.UI.RefreshLockButton then ns.UI.RefreshLockButton() end
+            if ns.Settings then ns.Settings.Redraw() end
         end
     end
 end
@@ -1726,15 +1724,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
         -- Register the Masque group now (not lazily on first loot) so "Loot Pro" appears in Masque's config right away.
         GetMasqueGroup()
 
-        -- Show at most one login popup (what's-new for upgraders, else welcome), stamped at SHOW time so a /lp whatsnew preview or reload-teardown can't flip the flag. Deferred past the PLAYER_LOGIN burst, which won't render a popup reliably.
+        -- Deferred past the PLAYER_LOGIN burst, which won't render a popup reliably.
         local function ShowLoginPopup()
-            if not (ns.UI and addon:IsReady()) then return end
-            if ns.UI.whatsNewFrame and LootProConfig.whatsNewSeen ~= addon.WHATS_NEW then
-                LootProConfig.whatsNewSeen = addon.WHATS_NEW
-                ns.UI.whatsNewFrame:Show()
-            elseif ns.UI.welcomeFrame and not LootProConfig.hideWelcome then
-                ns.UI.welcomeFrame:Show()
-            end
+            if not (ns.WhatsNew and addon:IsReady()) then return end
+            if addon.firstInstall then ns.WhatsNew.Welcome() else ns.WhatsNew.OnLogin() end
         end
         if _After then _After(1.5, ShowLoginPopup) else ShowLoginPopup() end
 

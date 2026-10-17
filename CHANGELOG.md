@@ -5,6 +5,30 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-17
+
+### New Features
+- A brand new settings window. Loot Pro's options now open in the same window as Everything Quests, EQ Objective Tracker, Everything Delves, and Cooldown Master. A sidebar on the left holds nine pages: General, Layout, Notifications, Recap, Watch, Rare Drops, Block, Vendor, and About. Each page is laid out in cards. The window opens on the page you used last. Every setting carries over exactly as you left it, and nothing resets.
+- Unlock Windows and Start Test Mode sit at the bottom of the Layout and Notifications pages, so you can drag a feed or fill both feeds with sample lines without leaving the page you are tuning. Start Test Mode turns into Stop Test Mode while the samples run, and closing the window still locks the feeds and ends the test. Unlock Windows replaces the Lock Windows button, and the minimap's Toggle Lock keeps it in step.
+- Click any slider's number to type an exact value.
+- Match the Combat Feed, at the bottom of the Loot Feed card on the Layout page, gives your loot feed the combat feed's font, text size, outline, fade, frame size, max lines, and frame scale in one click. It replaces Sync Combat Layout to Loot and Sync Combat Fonts to Loot.
+- What's New now appears only for releases that bring new features. A release with only fixes stays quiet, and the next feature release lists it too, so nothing is missed. If you have been away for several versions, it lists everything since you last looked. Under Updates on the General page, choose a Popup window, a quiet Chat link, or Off, and Show What's New opens the notes any time.
+
+### Improvements
+- The Colors and Custom tabs are gone. Each color now sits at the right end of the switch for the line it paints, on the Notifications page, with the Quest Items color beside Color quest items. Start Test Mode shows your colors in the real feeds. Custom's feed settings joined the Layout page, which has one card for the loot feed, one for the combat feed, and one for settings that cover both. Custom's other settings are on the General page.
+- Settings that do nothing while another one is off are dimmed until it is on. Show Item Totals dims while Clean Mode is off, Combine repeated drops while Framed loot rows is off, and the Rare Drops triggers until Color loot line by rarity, Flash the loot frame, or Play alert sound is on.
+- Many settings that had no tooltip now have one, and three are corrected. Show Item Totals says it needs Clean Mode, Use Coin Icons explains when framed rows show coin icons anyway, and Show Combat Follower XP says it needs Display Experience.
+- Clearer labels. "Inject Item Totals (e.g. 14)" is now "Show Item Totals", "Use Coin Icons (Clean Mode only)" is "Use Coin Icons", Display Combat Start, Display Combat End, Display Reputation Gain, and Display Reputation Loss are no longer in capitals, and the two combat text boxes no longer say "(Enter to Save)".
+- The Watch and Block lists show each entry on its own row with an X to remove it, and a watched item shows its icon and its name in its quality color. Press Enter or Add to add an entry, or shift-click an item into the box. The count beside the box shows how full the list is, and says so when the list is full or the entry is already on it.
+- The Recap page shows your session at a glance: Session time, Total gold, Gold per hour, and Items looted across the top, then where your gold came from, items per hour, and your loot by quality. Currencies and Notable Drops have their own cards, and Reset Session and Pause Timer sit at the bottom of the page.
+- The About page shows your version and the game client you are on, links to Discord, CurseForge, GitHub, Report a Bug, and What's New, every slash command (now with /lp pause), the tutorials, the other addons (now with EQ Objective Tracker), and the whole changelog.
+- Links open in a copy box you cannot accidentally type over.
+- The Options Window scale on the General page now stops at the largest size that fits your screen.
+- Escape closes the window out of combat. In combat, use its close button.
+
+### Bug Fixes
+- Hiding the interface with Alt-Z, or a cinematic playing, while the settings window is open no longer locks your feeds and stops Test Mode.
+
 ## [2.22.0] - 2026-10-08
 
 ### New Features
