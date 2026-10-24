@@ -5,6 +5,14 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-24
+
+### New Features
+- Text Alignment, Text Position, and Newest Line, three new settings on each feed's card on the Layout page, set separately for the loot feed and the combat feed. Text Alignment lines the text up with the left edge, the center, or the right edge of the feed. Text Position places the lines at the top, in the middle, or at the bottom of the feed's area when they do not fill it. Newest Line chooses whether a new line appears above the others or below them. All three work in the text feed and in framed rows, where Right also moves item icons to the right edge. Your feeds look exactly as they did before until you change them. Thanks to berserk_mcnulty62 on CurseForge for the suggestion.
+
+### Improvements
+- Match the Combat Feed now also copies the combat feed's text alignment, text position, and newest line.
+
 ## [3.0.0] - 2026-10-17
 
 ### New Features

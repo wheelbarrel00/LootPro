@@ -44,8 +44,8 @@ addon.DEFAULTS = {
     lootSpecReminder = true,
     hideLootToasts = false,
     vendorGrays = { enabled = false, interval = 0.2, details = false, progressBar = true },
-    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4, scale = 1.0 },
-    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4, scale = 1.0 },
+    loot = { size = 22, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 50, maxLines = 4, scale = 1.0, align = "CENTER", position = "BOTTOM", newest = "BOTTOM" },
+    combat = { size = 20, font = "Friz Quadrata TT", fade = 6, outline = "OUTLINE", width = 200, height = 200, point = "CENTER", relativePoint = "CENTER", x = 0, y = 150, maxLines = 4, scale = 1.0, align = "CENTER", position = "BOTTOM", newest = "BOTTOM" },
     colors = {
         money = {r = 1.0, g = 0.82, b = 0.0},
         currency = {r = 0.65, g = 0.85, b = 1.0},
@@ -105,6 +105,13 @@ local function newestRelease()
     return c and c[1] and c[1].version or ""
 end
 
+-- A save from before Text Position keeps the old stacking: a text feed sat at the bottom with the newest line last, and framed rows at the top with the newest first
+local function keepOldStacking(s, framed)
+    if type(s) ~= "table" or s.position ~= nil then return end
+    s.position = framed and "TOP" or "BOTTOM"
+    s.newest = framed and "TOP" or "BOTTOM"
+end
+
 function addon:InitSettings()
     if not LootProConfig then
         LootProConfig = addon:DeepCopy(addon.DEFAULTS)
@@ -121,6 +128,8 @@ function addon:InitSettings()
             LootProConfig.minQualityOwn = LootProConfig.minQuality
             LootProConfig.minQualityOther = LootProConfig.minQuality
         end
+        keepOldStacking(LootProConfig.loot, LootProConfig.framedLoot)
+        keepOldStacking(LootProConfig.combat, LootProConfig.framedCombat)
         validate(addon.DEFAULTS, LootProConfig)
         prune(addon.DEFAULTS, LootProConfig)
     end

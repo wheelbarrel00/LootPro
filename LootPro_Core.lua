@@ -534,18 +534,39 @@ local function GetMasqueGroup()
     return masqueGroup or nil
 end
 
+-- rowActive is newest first, and the first row placed sits on the anchored edge.
 local function LayoutRows(f)
-    local host = f.rowHost
-    for i, row in ipairs(f.rowActive) do
+    local host, rows = f.rowHost, f.rowActive
+    local s = LootProConfig[f.configKey]
+    local n = #rows
+    local fromBottom = s.position == "BOTTOM"
+    local newestFirst = (s.newest == "TOP") ~= fromBottom
+    local top = 0
+    if s.position == "MIDDLE" then
+        local used = (n - 1) * ROW_GAP
+        for i = 1, n do used = used + rows[i]:GetHeight() end
+        top = math.max(0, (host:GetHeight() - used) / 2)
+    end
+    local prev
+    for k = 1, n do
+        local row = newestFirst and rows[k] or rows[n - k + 1]
         row:ClearAllPoints()
-        if i == 1 then
-            row:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-            row:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-        else
-            local prev = f.rowActive[i - 1]
+        if fromBottom then
+            if prev then
+                row:SetPoint("BOTTOMLEFT", prev, "TOPLEFT", 0, ROW_GAP)
+                row:SetPoint("BOTTOMRIGHT", prev, "TOPRIGHT", 0, ROW_GAP)
+            else
+                row:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+                row:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+            end
+        elseif prev then
             row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -ROW_GAP)
             row:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -ROW_GAP)
+        else
+            row:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -top)
+            row:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -top)
         end
+        prev = row
     end
 end
 
@@ -773,10 +794,16 @@ local function LayoutItemRow(f, row)
     local catSize = math.max(9, math.floor(s.size * 0.55))
     local baseH = s.size + catSize + 12
     local rowWidth = (s.width or 200) - 16
+    local right = s.align == "RIGHT"
     local nameLeft
     if row._hasIcon then
         local iconSize = baseH - 6
         row.iconFrame:SetSize(iconSize, iconSize)
+        if row._iconRight ~= right then
+            row._iconRight = right
+            row.iconFrame:ClearAllPoints()
+            if right then row.iconFrame:SetPoint("RIGHT", -4, 0) else row.iconFrame:SetPoint("LEFT", 4, 0) end
+        end
         -- Masque skins at the button's size, so re-skin only when the size changes, not on every loot.
         if row._masque and row.iconFrame._skinnedSize ~= iconSize then
             row.iconFrame._skinnedSize = iconSize
@@ -788,13 +815,17 @@ local function LayoutItemRow(f, row)
         nameLeft = 8
     end
     local nameWidth = math.max(20, rowWidth - nameLeft - 6)
+    local side, top, below = "LEFT", "TOPLEFT", "BOTTOMLEFT"
+    if right then side, top, below, nameLeft = "RIGHT", "TOPRIGHT", "BOTTOMRIGHT", -nameLeft end
 
     row.name:ClearAllPoints()
-    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", nameLeft, -5)
+    row.name:SetPoint(top, row, top, nameLeft, -5)
     row.name:SetWidth(nameWidth)
+    row.name:SetJustifyH(side)
     row.cat:ClearAllPoints()
-    row.cat:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+    row.cat:SetPoint(top, row.name, below, 0, -1)
     row.cat:SetWidth(nameWidth)
+    row.cat:SetJustifyH(side)
 
     local nameH = row.name:GetStringHeight()
     local catH = row.cat:IsShown() and row.cat:GetStringHeight() or 0
@@ -851,8 +882,9 @@ local function MergeIntoRow(f, row, amt, count, icon, link, marker)
     if newMark then row._marker = marker end
     if count or not row._hasIcon or newMark then
         row.name:SetText(RowNameText(row, count))
-        -- A wider count can re-wrap the name and change the row height, so remeasure. Rows below reflow on their own relative anchors.
+        -- A wider count can re-wrap the name and change the row height, so remeasure, and re-lay the rows so Middle re-centers them.
         LayoutItemRow(f, row)
+        LayoutRows(f)
     end
     if icon and row._hasIcon then row.icon:SetTexture(icon) end
     row.itemLink = link
@@ -898,12 +930,10 @@ local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, li
     end
 
     row.name:SetWordWrap(true)
-    row.name:SetJustifyH("LEFT")
     row.name:SetJustifyV("TOP")
     row.name:SetText(RowNameText(row, count))
     row.name:SetTextColor(br, bg, bb)
 
-    row.cat:SetJustifyH("LEFT")
     if category and category ~= "" then
         row.cat:SetText(category)
         row.cat:SetTextColor(0.7, 0.7, 0.7)
@@ -940,7 +970,7 @@ local function RowText(f, text, r, g, b, isMoney)
     row.name:SetPoint("LEFT", row, "LEFT", 6, 0)
     row.name:SetWidth((s.width or 200) - 28)
     row.name:SetWordWrap(false)
-    row.name:SetJustifyH("CENTER")
+    row.name:SetJustifyH(s.align or "CENTER")
     row.name:SetJustifyV("MIDDLE")
     row.name:SetText(text or "")
     row.name:SetTextColor(r or 1, g or 1, b or 1)
@@ -989,6 +1019,7 @@ local function RestyleRow(f, row)
     if row._isText then
         row:SetHeight(s.size + 12)
         row.name:SetWidth((s.width or 200) - 28)
+        row.name:SetJustifyH(s.align or "CENTER")
     else
         LayoutItemRow(f, row)
     end
@@ -1155,6 +1186,50 @@ local function ScheduleSweep(f)
     _After(LineLife(f.display, f.configKey), f._sweepFn)
 end
 
+-- SetInsertMode compares against these numbers, so the string "TOP" silently stacks from the bottom.
+local INSERT_TOP = SCROLLING_MESSAGE_FRAME_INSERT_MODE_TOP or 1
+local INSERT_BOTTOM = SCROLLING_MESSAGE_FRAME_INSERT_MODE_BOTTOM or 2
+
+-- Blizzard's message frame stacks lines from the newest line's edge only, so any other position moves the whole display by the room its shown lines leave.
+local function PlaceTextBlock(disp)
+    local f = disp:GetParent()
+    local s = LootProConfig and LootProConfig[f.configKey]
+    if not s then return end
+    local edge = s.newest == "TOP" and "TOP" or "BOTTOM"
+    local position = s.position or "BOTTOM"
+    local lines = disp.visibleLines
+    local moves = position ~= edge and lines ~= nil
+    local dy, last = 0, 0
+    if moves then
+        for i = 1, #lines do
+            if lines[i]:IsShown() then last = i end
+        end
+        local used = 0
+        for i = 1, last do used = used + lines[i]:GetStringHeight() end
+        if last > 1 then used = used + (last - 1) * lines[1]:GetSpacing() end
+        local spare = math.max(0, disp:GetHeight() - used)
+        if position == "MIDDLE" then spare = spare / 2 end
+        dy = edge == "TOP" and -spare or spare
+    end
+    disp._moves, disp._shownTo = moves, last
+    if disp._dy ~= dy then
+        disp._dy = dy
+        disp:ClearAllPoints()
+        disp:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -10 + dy)
+        disp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 10 + dy)
+    end
+end
+
+-- UpdateFading hides a faded line without refreshing the display, so the block is re-placed when the shown lines change.
+local function PlaceAfterFade(disp)
+    if not disp._moves then return end
+    local lines, last = disp.visibleLines, 0
+    for i = 1, #lines do
+        if lines[i]:IsShown() then last = i end
+    end
+    if last ~= disp._shownTo then PlaceTextBlock(disp) end
+end
+
 local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     local f = CreateFrame("Frame", name.."Anchor", UIParent, "BackdropTemplate")
     f.configKey = configKey
@@ -1184,11 +1259,10 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     f.display = CreateFrame("ScrollingMessageFrame", name.."Display", f)
     f.display:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -10)
     f.display:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 10)
-    f.display:SetInsertMode("TOP")
     f.display:SetFading(true)
     f.display:SetFadeDuration(1)
-    f.display:SetJustifyH("CENTER")
-    f.display:SetJustifyV("TOP")
+    f.display:AddOnDisplayRefreshedCallback(PlaceTextBlock)
+    hooksecurefunc(f.display, "UpdateFading", PlaceAfterFade)
 
     f._sweepFn = function() SweepReadout(f) end
 
@@ -1405,6 +1479,13 @@ function addon:UpdateAllVisuals()
             SafeSetFont(f.display, fontPath, s.size, flags)
             f.display._fontKey = fontKey
         end
+        local align = s.align or "CENTER"
+        if f.display._align ~= align then
+            f.display:SetJustifyH(align)
+            f.display._align = align
+        end
+        f.display:SetInsertMode(s.newest == "TOP" and INSERT_TOP or INSERT_BOTTOM)
+        PlaceTextBlock(f.display)
         f.display:SetTimeVisible(s.fade or 6)
 
         if not self.isTesting then

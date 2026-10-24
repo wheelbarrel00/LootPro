@@ -10,12 +10,33 @@ local OUTLINES = {
     { value = "MONOCHROME",   label = "Pixel" },
 }
 
-local MATCHED = { "font", "size", "outline", "fade", "width", "height", "maxLines" }
+local ALIGNMENTS = {
+    { value = "LEFT",   label = "Left" },
+    { value = "CENTER", label = "Center" },
+    { value = "RIGHT",  label = "Right" },
+}
+
+local POSITIONS = {
+    { value = "TOP",    label = "Top" },
+    { value = "MIDDLE", label = "Middle" },
+    { value = "BOTTOM", label = "Bottom" },
+}
+
+local NEWEST = {
+    { value = "TOP",    label = "Top" },
+    { value = "BOTTOM", label = "Bottom" },
+}
+
+local MATCHED = { "font", "size", "outline", "align", "position", "newest", "fade", "width", "height", "maxLines" }
 
 local TIP = {
     font = "The font this feed's lines are drawn in. Fonts from your media addons are listed too.",
     size = "The size of this feed's text.",
     outline = "The outline around this feed's text. None draws a soft shadow instead.",
+    lootAlign = "Lines this feed's text up with the left edge, the center or the right edge of its area. Framed item rows keep their icon on the left with the name beside it, and Right mirrors them.",
+    combatAlign = "Lines this feed's text up with the left edge, the center or the right edge of its area.",
+    position = "Where this feed's lines sit in its area when they do not fill it: against the top, in the middle or against the bottom. Unlock Windows to see the area.",
+    newest = "Whether a new line appears above the lines already showing or below them.",
     fade = "How many seconds a line stays before it fades out.",
     width = "The width of this feed's area, in pixels. Unlock Windows to see the area.",
     height = "The height of this feed's area, in pixels. Unlock Windows to see the area.",
@@ -28,7 +49,7 @@ local TIP = {
     clickThrough = "While the readout is locked, clicks pass through framed rows to whatever is behind them. Trades away shift-clicking a row to link its item.",
     hoverPause = "Hovering a readout freezes its fade so you can read it. Clicks still pass through to whatever is behind it.",
     fadeScale = "Lengthens how long lines stay visible when many arrive at once (e.g. an AoE pull), easing back to your fade setting as they clear.",
-    match = "Copies the Combat Feed's font, text size, outline, fade, frame size, max lines and frame scale to the Loot Feed.",
+    match = "Copies the Combat Feed's font, text size, outline, text alignment, text position, newest line, fade, frame size, max lines and frame scale to the Loot Feed.",
 }
 
 local fontCache
@@ -99,6 +120,13 @@ local function feedCard(self, content, stack, deps, feed)
     card:Add(slider(self, content, "Text Size", 10, 50, 1, get, set, TIP.size))
     get, set = feedSetting(feed, "outline")
     card:Add(self:CreateDropdown(content, "Outline", OUTLINES, get, set, TIP.outline))
+    get, set = feedSetting(feed, "align", "CENTER")
+    card:Add(self:CreateDropdown(content, "Text Alignment", ALIGNMENTS, get, set,
+        feed == "loot" and TIP.lootAlign or TIP.combatAlign))
+    get, set = feedSetting(feed, "position", "BOTTOM")
+    card:Add(self:CreateDropdown(content, "Text Position", POSITIONS, get, set, TIP.position))
+    get, set = feedSetting(feed, "newest", "BOTTOM")
+    card:Add(self:CreateDropdown(content, "Newest Line", NEWEST, get, set, TIP.newest))
     get, set = feedSetting(feed, "fade")
     card:Add(slider(self, content, "Fade", 1, 30, 1, get, set, TIP.fade, seconds))
     get, set = feedSetting(feed, "width")

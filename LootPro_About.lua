@@ -37,6 +37,17 @@ ns.about = {
 
     changelog = {
         {
+            version = "3.1.0", date = "2026-10-24",
+            sections = {
+                { head = "New Features", items = {
+                    "Text Alignment, Text Position, and Newest Line, three new settings on each feed's card on the Layout page, set separately for the loot feed and the combat feed. Text Alignment lines the text up with the left edge, the center, or the right edge of the feed. Text Position places the lines at the top, in the middle, or at the bottom of the feed's area when they do not fill it. Newest Line chooses whether a new line appears above the others or below them. All three work in the text feed and in framed rows, where Right also moves item icons to the right edge. Your feeds look exactly as they did before until you change them. Thanks to berserk_mcnulty62 on CurseForge for the suggestion.",
+                } },
+                { head = "Improvements", items = {
+                    "Match the Combat Feed now also copies the combat feed's text alignment, text position, and newest line.",
+                } },
+            },
+        },
+        {
             version = "3.0.0", date = "2026-10-17",
             sections = {
                 { head = "New Features", items = {

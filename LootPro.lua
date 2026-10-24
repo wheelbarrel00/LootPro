@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "3.0.0"
+ns.addon.VERSION = "3.1.0"
 ns.addon.isTesting = false
 -- Forever reports WOW_PROJECT_CAMELOT (18) since build 70170 but runs the retail engine.
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
