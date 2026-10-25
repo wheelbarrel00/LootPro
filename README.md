@@ -402,11 +402,18 @@ Download the latest release, then extract the `LootPro` folder into `World of Wa
 <img width="3838" height="2155" alt="Loot Pro in action" src="https://github.com/user-attachments/assets/e367cdb9-63c0-4410-825d-232c3f6ccce6" />
 <img width="3839" height="2159" alt="Loot Pro loot feed" src="https://github.com/user-attachments/assets/3b3c8b40-54a1-470f-9464-ddc3184dec35" />
 <img width="3830" height="2142" alt="Loot Pro combat feed" src="https://github.com/user-attachments/assets/dc4d4e64-9003-4637-b16d-91a0932fb33e" />
-<img width="3839" height="2159" alt="Loot Pro settings" src="https://github.com/user-attachments/assets/f52e12aa-5ec7-48ca-8295-e8084c738c91" />
-<img width="935" height="1227" alt="Layout tab" src="https://github.com/user-attachments/assets/585e322c-7621-47a9-9c5d-7f752a2ab18e" />
-<img width="937" height="1223" alt="Colors tab" src="https://github.com/user-attachments/assets/e26d50d1-b011-4af7-ac97-ead30785a113" />
-<img width="933" height="1226" alt="Notifications tab" src="https://github.com/user-attachments/assets/a8caccb6-60a4-4f61-aa65-7b3780a61aff" />
-<img width="936" height="1227" alt="Custom tab" src="https://github.com/user-attachments/assets/1f831a0c-6a54-4cef-8e82-3208f92de3cb" />
+<img width="1713" height="869" alt="Test Mode with framed rows in game" src="screenshots/in-game-test-mode.png" />
+<img width="1317" height="866" alt="General page" src="screenshots/general.png" />
+<img width="1683" height="1105" alt="Layout page, Loot Feed card" src="screenshots/layout-loot-feed.png" />
+<img width="1683" height="1106" alt="Layout page, Combat Feed card" src="screenshots/layout-combat-feed.png" />
+<img width="1313" height="859" alt="Notifications page" src="screenshots/notifications.png" />
+<img width="1313" height="859" alt="Notifications page, Combat Feed colors" src="screenshots/notifications-colors.png" />
+<img width="1315" height="860" alt="Recap page" src="screenshots/recap.png" />
+<img width="1315" height="862" alt="Watch page" src="screenshots/watch.png" />
+<img width="1316" height="859" alt="Rare Drops page" src="screenshots/rare-drops.png" />
+<img width="1314" height="862" alt="Block page" src="screenshots/block.png" />
+<img width="1314" height="857" alt="Vendor page" src="screenshots/vendor.png" />
+<img width="1312" height="861" alt="About page" src="screenshots/about.png" />
 
 ***
 
