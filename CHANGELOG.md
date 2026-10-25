@@ -5,6 +5,29 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-10-25
+
+### Bug Fixes
+- Turning off "Keep busy feeds up longer" now takes effect right away. Lines kept lingering for the longer busy time until you reloaded, and with "Pause fade while hovering the feed" on, they could vanish early without fading.
+- Several gains of the same currency in quick succession now all count. When the amounts matched, as when AoE looting with Speedy AutoLoot, only the first gain reached the loot feed and the session recap. A gain the game reports twice still counts once.
+- Bonus roll loot now counts as your own loot. It reaches the session recap and Notable Drops, and it can trigger watch and rare drop alerts. Before, it was treated as a party member's loot. (Mists of Pandaria Classic)
+- Items you craft or get refunded now show as yours. They use your own minimum quality, still show with Display Party Loot turned off, show how many you own, and lose the "You create:" or "You are refunded:" text in Clean Mode. They stay out of the session recap and alerts, since they were not looted.
+- With Clean Mode on and Use Coin Icons off, looted money now shows as + 12g 50s 20c instead of the full chat sentence.
+- Test Mode's sample lines now follow Enable Clean Mode, Show Item Totals, and Use Coin Icons, so you can see those settings change while you tune them.
+- Shift-clicking a framed loot row to link it in chat now uses the game's current chat function, so it keeps working once Blizzard removes the old one.
+- Hide Blizzard's loot toasts no longer appears on Classic Era, TBC Anniversary, and Mists of Pandaria Classic, where it had nothing to hide.
+- A saved setting with the wrong kind of value, such as after hand-editing the saved variables file, now goes back to its default at login instead of causing an error on every loot.
+- A mistyped /lp command now says it is unknown instead of opening the settings window, and extra spaces between words no longer break a command. /lp config, /lp options, and /lp settings still open the window, and /lp help now lists /lp whatsnew reset.
+- The watch list no longer accepts a shift-clicked currency, which could never trigger an alert, and says so. A full watch or block list now says an entry is already on the list instead of calling the list full.
+- Automatic gray selling now credits the stack you actually sold when its size changed during the sale.
+- Loot quality is now read correctly from item links written with the game's named quality colors, keeping rare drop alerts, line colors, and quality limits accurate. (Retail and WoW Forever)
+
+### Improvements
+- With Text Alignment set to Center, framed loot rows without an icon now center their text like the money and text rows beside them. Rows with an icon keep the icon on the left with the name beside it.
+- The settings window now runs on the newest version of the library the Everything addons share. Loot Pro's colors no longer pick up another addon's color when that addon opens the color picker while you are choosing a Loot Pro color.
+- The minimap button's tooltip now says Toggle Lock, the same as the General page.
+- Under the hood, the loot and chat handling was reorganized so future updates have room to grow, and finished feed rows let go of their item details sooner.
+
 ## [3.1.0] - 2026-10-24
 
 ### New Features

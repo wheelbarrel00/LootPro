@@ -60,7 +60,7 @@ function addon:WatchAdd(text)
 
     text = text and text:gsub("^%s+", ""):gsub("%s+$", "") or ""
     if text == "" then return false, "empty" end
-    if #wl.items >= WATCH_CAP then return false, "full" end
+    if text:find("|Hcurrency:", 1, true) then return false, "currency" end
 
     local id = _tonumber(text:match("|Hitem:(%d+)"))
     if not id and text:match("^%d+$") then id = _tonumber(text) end
@@ -82,6 +82,7 @@ function addon:WatchAdd(text)
         entry = { key = key, label = name }
     end
 
+    if #wl.items >= WATCH_CAP then return false, "full" end
     wl.items[#wl.items + 1] = entry
     return true, entry
 end
@@ -136,12 +137,12 @@ function addon:BlockAdd(text)
     text = text and text:gsub("^%s+", ""):gsub("%s+$", "") or ""
     local name = text:match("|h%[(.-)%]|h") or text
     if name == "" then return false, "empty" end
-    if #bl.items >= BLOCK_CAP then return false, "full" end
 
     local key = name:lower()
     for _, e in ipairs(bl.items) do
         if e.key == key then return false, "dupe" end
     end
+    if #bl.items >= BLOCK_CAP then return false, "full" end
     local entry = { key = key, label = name }
     bl.items[#bl.items + 1] = entry
     return true, entry

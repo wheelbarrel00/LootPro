@@ -10,7 +10,7 @@ local _RequestItemData = C_Item and C_Item.RequestLoadItemDataByID
 local _After = C_Timer and C_Timer.After
 local _IsModifiedClick = IsModifiedClick
 local _CursorHasItem = CursorHasItem
--- 12.0 "secret value" probe (nil pre-12.0). Container links can be secret inside active instances. Guard before any string op.
+-- 12.0 "secret value" probe (nil pre-12.0). Blizzard marks no container data secret today, so the guards are a precaution.
 local _issecret = issecretvalue
 
 local _Container = C_Container
@@ -194,14 +194,15 @@ sellFrame:SetScript("OnUpdate", function(_, elapsed)
     info.cursor = info.cursor + 1
 
     -- Re-read the slot and only sell if it still holds the exact gray we listed. A different, moved, or locked item is skipped, never sold.
-    local link, _, _, locked = ReadSlot(e.bag, e.slot)
+    local link, _, _, locked, _, nowCount = ReadSlot(e.bag, e.slot)
     if not (_issecret and _issecret(link)) and link == e.link and not locked then
+        local count = nowCount or e.count or 1
         -- Re-read the price at sell time: the cache is reliably warm by now, so this corrects any 0 from the snapshot scan.
         local unit = _select(11, _GetItemInfo(e.link))
-        local gained = (unit and unit * (e.count or 1)) or (e.price or 0)
+        local gained = (unit and unit * count) or ((e.price or 0) / (e.count or 1) * count)
         if LootProConfig.vendorGrays and LootProConfig.vendorGrays.details then
             print(_format("|cFF00DDDD[LootPro]|r Sold %s x%d (%s)",
-                e.link, e.count or 1, addon:RecapFormatMoney(gained)))
+                e.link, count, addon:RecapFormatMoney(gained)))
         end
         _UseContainer(e.bag, e.slot)
         info.sold = info.sold + 1

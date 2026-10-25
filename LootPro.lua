@@ -1,11 +1,10 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "3.1.0"
+ns.addon.VERSION = "3.1.1"
 ns.addon.isTesting = false
 -- Forever reports WOW_PROJECT_CAMELOT (18) since build 70170 but runs the retail engine.
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
-ns.addon.IS_BCC    = WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
 _G[addonName] = ns.addon
 
@@ -14,7 +13,7 @@ ns.addon.DISCORD_URL = "https://discord.gg/vm8K2WfQUE"
 -- Registered at load time so /lp works during the loading screen, not only after PLAYER_LOGIN.
 SLASH_LOOTPRO1 = "/lp"
 SlashCmdList["LOOTPRO"] = function(msg)
-    msg = (msg or ""):lower():match("^%s*(.-)%s*$") or ""
+    msg = ((msg or ""):lower():gsub("%s+", " ")):match("^%s*(.-)%s*$")
     if msg == "test" then
         if ns.addon.RunRegressionTest then
             ns.addon:RunRegressionTest()
@@ -63,7 +62,11 @@ SlashCmdList["LOOTPRO"] = function(msg)
         end
         return
     elseif msg == "help" or msg == "?" then
-        print("|cFFAAAAFF[LootPro]|r Commands: /lp (toggle GUI), /lp recap (session recap), /lp recap reset, /lp pause (pause/resume timer), /lp whatsnew, /lp about, /lp test, /lp help")
+        print("|cFFAAAAFF[LootPro]|r Commands: /lp (toggle GUI), /lp recap (session recap), /lp recap reset, /lp pause (pause/resume timer), /lp whatsnew, /lp whatsnew reset, /lp about, /lp test, /lp help")
+        return
+    -- Words other addons use to open their settings still open Loot Pro's, since any text used to.
+    elseif msg ~= "" and msg ~= "config" and msg ~= "options" and msg ~= "settings" then
+        print("|cFFFF6060[LootPro]|r Unknown command '" .. (msg:gsub("|", "||")) .. "'. Type /lp help for the list.")
         return
     end
     if ns.Settings and ns.addon:IsReady() then

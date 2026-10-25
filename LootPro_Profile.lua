@@ -84,7 +84,7 @@ local function validate(src, dst)
             if type(dst[k]) ~= "table" then dst[k] = {} end
             validate(v, dst[k])
         else
-            if dst[k] == nil then dst[k] = v end
+            if dst[k] == nil or type(dst[k]) ~= type(v) then dst[k] = v end
         end
     end
 end

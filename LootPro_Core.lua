@@ -51,7 +51,6 @@ local function SafeSetFont(region, path, size, flags)
     pcall(region.SetFont, region, DEFAULT_FONT, size, flags)
     return false
 end
-addon._SafeSetFont = SafeSetFont
 
 local function ToPattern(s)
     if not s then return nil end
@@ -76,30 +75,30 @@ end
 local function EscapeLiteral(s)
     return (s:gsub("([%.%[%]%(%)%+%-%?%^%$%%])", "%%%1"))
 end
-local LOOT_PREFIX_PATS = {}
-for _, fmt in ipairs({
-    _G.LOOT_ITEM_SELF, _G.LOOT_ITEM_PUSHED_SELF, _G.CURRENCY_GAINED,
-    _G.LOOT_ITEM_SELF_MULTIPLE, _G.LOOT_ITEM_PUSHED_SELF_MULTIPLE,
-}) do
-    local head = LeadIn(fmt)
-    if head then LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^"..EscapeLiteral(head) end
-end
-LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive loot: "
-LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive item: "
-LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You receive currency: "
-LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS+1] = "^You loot "
-
+-- Crafted and refunded items are the player's own without being loot, so they show as yours but never count.
+local LOOT_PREFIX_PATS, OWN_HEADS = {}, {}
 do
     local seen = {}
-    local deduped = {}
-    for _, pat in ipairs(LOOT_PREFIX_PATS) do
-        if not seen[pat] then
+    local function add(fmt, own)
+        local head = LeadIn(fmt)
+        local pat = head and "^" .. EscapeLiteral(head)
+        if pat and not seen[pat] then
             seen[pat] = true
-            deduped[#deduped + 1] = pat
+            LOOT_PREFIX_PATS[#LOOT_PREFIX_PATS + 1] = pat
+            OWN_HEADS[pat] = own
         end
     end
-    LOOT_PREFIX_PATS = deduped
-    seen = nil
+    for _, key in ipairs({ "LOOT_ITEM_SELF", "LOOT_ITEM_PUSHED_SELF", "CURRENCY_GAINED", "LOOT_ITEM_SELF_MULTIPLE",
+        "LOOT_ITEM_PUSHED_SELF_MULTIPLE", "LOOT_ITEM_BONUS_ROLL_SELF", "LOOT_ITEM_BONUS_ROLL_SELF_MULTIPLE" }) do
+        add(_G[key])
+    end
+    for _, key in ipairs({ "LOOT_ITEM_CREATED_SELF", "LOOT_ITEM_CREATED_SELF_MULTIPLE", "LOOT_ITEM_REFUND",
+        "LOOT_ITEM_REFUND_MULTIPLE" }) do
+        add(_G[key], true)
+    end
+    for _, head in ipairs({ "You receive loot: ", "You receive item: ", "You receive currency: ", "You loot " }) do
+        add(head .. "%s")
+    end
 end
 
 -- Locale-aware: derive money patterns from the GOLD/SILVER/COPPER_AMOUNT globals so parsing works on non-English clients.
@@ -133,11 +132,11 @@ do
 end
 
 local function IsSelfLoot(msg)
-    if not msg or type(msg) ~= "string" then return false end
+    if not msg or type(msg) ~= "string" then return false, false end
     for _, pat in ipairs(LOOT_PREFIX_PATS) do
-        if _find(msg, pat) then return true end
+        if _find(msg, pat) then return not OWN_HEADS[pat], OWN_HEADS[pat] or false end
     end
-    return false
+    return false, false
 end
 
 local ICON_MARKUP = {}
@@ -266,8 +265,7 @@ local function IsRecentCurrency(name)
     return true
 end
 
--- Final dedup on the fully-rendered line (count included) catches doubled LOOT lines the name dedup misses. A real second drop differs by count, so it still shows.
--- Lines that render no count are identical for two same-tick drops, so those callers pass the live bag count as a salt on its own ring.
+-- Comparing the drawn line, count included, catches doubled lines the name dedup misses. Lines with no count pass a bag count as a salt so two real drops still differ.
 local DISPLAY_DEDUP_WINDOW = 0.3
 local DISP_RING = 8
 local _dispStr, _dispSalt, _dispTime, _dispIdx = {}, {}, {}, 0
@@ -301,160 +299,163 @@ local function _SweepDedup()
 end
 local _dedupTicker = _NewTicker and _NewTicker(60, _SweepDedup) or nil
 
-local CLASS_QUEST = 12
-local QUEST_MARK_TTL, QUEST_MARK_SWEEP = 30, 64
-local questSeen, questSeenCount = {}, 0
-
-local function MarkQuestItem(itemID)
-    if not itemID then return end
-    local now = _GetTime()
-    if questSeenCount >= QUEST_MARK_SWEEP then
-        questSeenCount = 0
-        for k, t in pairs(questSeen) do
-            if now - t > QUEST_MARK_TTL then questSeen[k] = nil else questSeenCount = questSeenCount + 1 end
-        end
-    end
-    if not questSeen[itemID] then questSeenCount = questSeenCount + 1 end
-    questSeen[itemID] = now
-end
-
-local function IsQuestColorOn()
-    local qc = LootProConfig and LootProConfig.questColor
-    return (qc and qc.enabled) and true or false
-end
-
-local function IsQuestLoot(itemID)
-    if not itemID then return false end
-    local t = questSeen[itemID]
-    if t and _GetTime() - t <= QUEST_MARK_TTL then return true end
-    return _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID)) == CLASS_QUEST
-end
-
--- Retail numbers its format arguments (%2$d/%3$d %1$s), so the name is not always the first capture and ToPattern cannot build this.
-local function ObjectivePattern(fmt)
-    if not fmt then return nil end
-    local pat, nameIdx, idx, pos = "", nil, 0, 1
-    while true do
-        local a, b, conv = _find(fmt, "%%%d*%$?([sd])", pos)
-        if not a then break end
-        pat = pat .. EscapeLiteral(fmt:sub(pos, a - 1))
-        idx = idx + 1
-        if conv == "s" then
-            nameIdx = idx
-            pat = pat .. "(.-)"
-        else
-            pat = pat .. "(%d+)"
-        end
-        pos = b + 1
-    end
-    if not nameIdx then return nil end
-    return { pat = "^" .. pat .. EscapeLiteral(fmt:sub(pos)) .. "$", idx = nameIdx }
-end
-
-local QUEST_OBJECTIVE_PATS = {}
-do
-    local seen = {}
-    for _, fmt in ipairs({ _G.QUEST_ITEMS_NEEDED, _G.QUEST_OBJECTS_FOUND, "%s: %d/%d" }) do
-        local p = ObjectivePattern(fmt)
-        if p and not seen[p.pat] then
-            seen[p.pat] = true
-            QUEST_OBJECTIVE_PATS[#QUEST_OBJECTIVE_PATS + 1] = p
-        end
-    end
-end
-
-local questObjectiveItems, questObjectivesStale, questObjectivesAt = {}, true, 0
-local QUEST_REBUILD_INTERVAL, MAX_QUEST_LOG_SCAN = 5, 200
-local _QuestLog = C_QuestLog
-
-local function AddQuestObjectiveName(text)
-    if not text or text == "" then return end
-    for i = 1, #QUEST_OBJECTIVE_PATS do
-        local p = QUEST_OBJECTIVE_PATS[i]
-        local c1, c2, c3 = _match(text, p.pat)
-        if c1 then
-            local name = (p.idx == 1 and c1) or (p.idx == 2 and c2) or c3
-            if name and name ~= "" then
-                questObjectiveItems[name] = true
-                return
-            end
-        end
-    end
-end
-
-local function RebuildQuestObjectives()
-    questObjectivesStale = false
-    questObjectivesAt = _GetTime()
-    _wipe(questObjectiveItems)
-    if _QuestLog and _QuestLog.GetNumQuestLogEntries and _QuestLog.GetInfo and _QuestLog.GetQuestObjectives then
-        for i = 1, _QuestLog.GetNumQuestLogEntries() do
-            local info = _QuestLog.GetInfo(i)
-            if info and not info.isHeader and info.questID then
-                local objectives = _QuestLog.GetQuestObjectives(info.questID)
-                for j = 1, (objectives and #objectives or 0) do
-                    local o = objectives[j]
-                    if o and o.type == "item" then AddQuestObjectiveName(o.text) end
-                end
-            end
-        end
-    elseif _GetQuestLogTitle and _GetNumQuestLeaderBoards and _GetQuestLogLeaderBoard then
-        -- Classic's GetNumQuestLogEntries counts only the rows the log is showing, so bounding on it would drop every quest under a collapsed header.
-        for i = 1, MAX_QUEST_LOG_SCAN do
-            local title, _, _, isHeader = _GetQuestLogTitle(i)
-            if not title then break end
-            if not isHeader then
-                for j = 1, (_GetNumQuestLeaderBoards(i) or 0) do
-                    local text, objType = _GetQuestLogLeaderBoard(j, i)
-                    if objType == "item" then AddQuestObjectiveName(text) end
-                end
-            end
-        end
-    end
-end
-
--- Blizzard's loot flag only covers Quest-class items, so match the log's own item objectives by name for the ordinary items a quest asks you to collect.
-local function IsQuestObjectiveItem(name)
-    if not name then return false end
-    -- Each rebuild allocates a table per quest and objective, and looting a quest item re-arms the stale flag, so the floor stops an AoE pull rebuilding per corpse.
-    if questObjectivesStale and _GetTime() - questObjectivesAt >= QUEST_REBUILD_INTERVAL then
-        pcall(RebuildQuestObjectives)
-    end
-    return questObjectiveItems[name] or false
-end
-
-local questObjectiveWatcher
-local function EnsureQuestObjectiveWatcher()
-    if questObjectiveWatcher then return end
-    questObjectiveWatcher = CreateFrame("Frame")
-    questObjectiveWatcher:RegisterEvent("QUEST_LOG_UPDATE")
-    questObjectiveWatcher:SetScript("OnEvent", function() questObjectivesStale = true end)
-end
-
--- The chat feed only sees a message, so the loot window is scanned up front and its item IDs marked for the lines that follow.
+local IsQuestColorOn, IsQuestLoot, ScanQuestLoot
 local questScanned = 0
-local function ScanQuestLoot()
-    if not IsQuestColorOn() then return end
-    EnsureQuestObjectiveWatcher()
-    local n = (_GetNumLootItems and _GetNumLootItems()) or 0
-    -- LOOT_READY and LOOT_OPENED both land on one window, and speedy auto-loot drains it from the first.
-    if n == 0 or questScanned == n then return end
-    local incomplete = false
-    for slot = 1, n do
-        local link = _GetLootSlotLink and _GetLootSlotLink(slot)
-        local itemID = link and not (_issecret and _issecret(link)) and _tonumber(_match(link, "item:(%d+)"))
-        if itemID then
-            local ok, _, name, _, _, _, _, isQuestItem, questID = pcall(_GetLootSlotInfo, slot)
-            if not ok or not name then
-                incomplete = true
-            -- A secret value cannot be indexed, compared or even tested for truth, so screen every field before use.
-            elseif not (_issecret and (_issecret(name) or _issecret(isQuestItem) or _issecret(questID)))
-                and (isQuestItem or questID or IsQuestObjectiveItem(name)) then
-                MarkQuestItem(itemID)
+do
+    local CLASS_QUEST = 12
+    local QUEST_MARK_TTL, QUEST_MARK_SWEEP = 30, 64
+    local questSeen, questSeenCount = {}, 0
+
+    local function MarkQuestItem(itemID)
+        if not itemID then return end
+        local now = _GetTime()
+        if questSeenCount >= QUEST_MARK_SWEEP then
+            questSeenCount = 0
+            for k, t in pairs(questSeen) do
+                if now - t > QUEST_MARK_TTL then questSeen[k] = nil else questSeenCount = questSeenCount + 1 end
+            end
+        end
+        if not questSeen[itemID] then questSeenCount = questSeenCount + 1 end
+        questSeen[itemID] = now
+    end
+
+    function IsQuestColorOn()
+        local qc = LootProConfig and LootProConfig.questColor
+        return (qc and qc.enabled) and true or false
+    end
+
+    function IsQuestLoot(itemID)
+        if not itemID then return false end
+        local t = questSeen[itemID]
+        if t and _GetTime() - t <= QUEST_MARK_TTL then return true end
+        return _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID)) == CLASS_QUEST
+    end
+
+    -- Retail numbers its format arguments (%2$d/%3$d %1$s), so the name is not always the first capture and ToPattern cannot build this.
+    local function ObjectivePattern(fmt)
+        if not fmt then return nil end
+        local pat, nameIdx, idx, pos = "", nil, 0, 1
+        while true do
+            local a, b, conv = _find(fmt, "%%%d*%$?([sd])", pos)
+            if not a then break end
+            pat = pat .. EscapeLiteral(fmt:sub(pos, a - 1))
+            idx = idx + 1
+            if conv == "s" then
+                nameIdx = idx
+                pat = pat .. "(.-)"
+            else
+                pat = pat .. "(%d+)"
+            end
+            pos = b + 1
+        end
+        if not nameIdx then return nil end
+        return { pat = "^" .. pat .. EscapeLiteral(fmt:sub(pos)) .. "$", idx = nameIdx }
+    end
+
+    local QUEST_OBJECTIVE_PATS = {}
+    do
+        local seen = {}
+        for _, fmt in ipairs({ _G.QUEST_ITEMS_NEEDED, _G.QUEST_OBJECTS_FOUND, "%s: %d/%d" }) do
+            local p = ObjectivePattern(fmt)
+            if p and not seen[p.pat] then
+                seen[p.pat] = true
+                QUEST_OBJECTIVE_PATS[#QUEST_OBJECTIVE_PATS + 1] = p
             end
         end
     end
-    -- A slot the server had not filled in yet earns another pass on LOOT_OPENED.
-    questScanned = incomplete and 0 or n
+
+    local questObjectiveItems, questObjectivesStale, questObjectivesAt = {}, true, 0
+    local QUEST_REBUILD_INTERVAL, MAX_QUEST_LOG_SCAN = 5, 200
+    local _QuestLog = C_QuestLog
+
+    local function AddQuestObjectiveName(text)
+        if not text or text == "" then return end
+        for i = 1, #QUEST_OBJECTIVE_PATS do
+            local p = QUEST_OBJECTIVE_PATS[i]
+            local c1, c2, c3 = _match(text, p.pat)
+            if c1 then
+                local name = (p.idx == 1 and c1) or (p.idx == 2 and c2) or c3
+                if name and name ~= "" then
+                    questObjectiveItems[name] = true
+                    return
+                end
+            end
+        end
+    end
+
+    local function RebuildQuestObjectives()
+        questObjectivesStale = false
+        questObjectivesAt = _GetTime()
+        _wipe(questObjectiveItems)
+        if _QuestLog and _QuestLog.GetNumQuestLogEntries and _QuestLog.GetInfo and _QuestLog.GetQuestObjectives then
+            for i = 1, _QuestLog.GetNumQuestLogEntries() do
+                local info = _QuestLog.GetInfo(i)
+                if info and not info.isHeader and info.questID then
+                    local objectives = _QuestLog.GetQuestObjectives(info.questID)
+                    for j = 1, (objectives and #objectives or 0) do
+                        local o = objectives[j]
+                        if o and o.type == "item" then AddQuestObjectiveName(o.text) end
+                    end
+                end
+            end
+        elseif _GetQuestLogTitle and _GetNumQuestLeaderBoards and _GetQuestLogLeaderBoard then
+            -- Classic's GetNumQuestLogEntries counts only the rows the log is showing, so bounding on it would drop every quest under a collapsed header.
+            for i = 1, MAX_QUEST_LOG_SCAN do
+                local title, _, _, isHeader = _GetQuestLogTitle(i)
+                if not title then break end
+                if not isHeader then
+                    for j = 1, (_GetNumQuestLeaderBoards(i) or 0) do
+                        local text, objType = _GetQuestLogLeaderBoard(j, i)
+                        if objType == "item" then AddQuestObjectiveName(text) end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Blizzard's loot flag only covers Quest-class items, so match the log's own item objectives by name for the ordinary items a quest asks you to collect.
+    local function IsQuestObjectiveItem(name)
+        if not name then return false end
+        -- Each rebuild allocates a table per quest and objective, and looting a quest item re-arms the stale flag, so the floor stops an AoE pull rebuilding per corpse.
+        if questObjectivesStale and _GetTime() - questObjectivesAt >= QUEST_REBUILD_INTERVAL then
+            pcall(RebuildQuestObjectives)
+        end
+        return questObjectiveItems[name] or false
+    end
+
+    local questObjectiveWatcher
+    local function EnsureQuestObjectiveWatcher()
+        if questObjectiveWatcher then return end
+        questObjectiveWatcher = CreateFrame("Frame")
+        questObjectiveWatcher:RegisterEvent("QUEST_LOG_UPDATE")
+        questObjectiveWatcher:SetScript("OnEvent", function() questObjectivesStale = true end)
+    end
+
+    -- The chat feed only sees a message, so the loot window is scanned up front and its item IDs marked for the lines that follow.
+    function ScanQuestLoot()
+        if not IsQuestColorOn() then return end
+        EnsureQuestObjectiveWatcher()
+        local n = (_GetNumLootItems and _GetNumLootItems()) or 0
+        -- LOOT_READY and LOOT_OPENED both land on one window, and speedy auto-loot drains it from the first.
+        if n == 0 or questScanned == n then return end
+        local incomplete = false
+        for slot = 1, n do
+            local link = _GetLootSlotLink and _GetLootSlotLink(slot)
+            local itemID = link and not (_issecret and _issecret(link)) and _tonumber(_match(link, "item:(%d+)"))
+            if itemID then
+                local ok, _, name, _, _, _, _, isQuestItem, questID = pcall(_GetLootSlotInfo, slot)
+                if not ok or not name then
+                    incomplete = true
+                -- A secret value cannot be indexed, compared or even tested for truth, so screen every field before use.
+                elseif not (_issecret and (_issecret(name) or _issecret(isQuestItem) or _issecret(questID)))
+                    and (isQuestItem or questID or IsQuestObjectiveItem(name)) then
+                    MarkQuestItem(itemID)
+                end
+            end
+        end
+        -- A slot the server had not filled in yet earns another pass on LOOT_OPENED.
+        questScanned = incomplete and 0 or n
+    end
 end
 
 local white = { r = 1, g = 1, b = 1 }
@@ -486,7 +487,6 @@ local function RecolorItemLink(s, r, g, b)
     return out
 end
 
--- Optional per-feed framed-row renderer (toggled by framedLoot/framedCombat): a separate path from the text feed using a fixed, self-fading row pool.
 local ROW_GAP, ROW_FADE = 2, 1
 local _GetItemQualityColor = C_Item and C_Item.GetItemQualityColor
 
@@ -570,11 +570,16 @@ local function LayoutRows(f)
     end
 end
 
+local function ReleaseRow(row)
+    row:Hide()
+    row._free = true
+    row.itemLink, row.mergeKey, row._baseName, row._marker, row._mergeAmt = nil, nil, nil, nil, nil
+end
+
 local function RowFade_OnFinished(ag)
     local row = ag.row
     local f = row._owner
-    row:Hide()
-    row._free = true
+    ReleaseRow(row)
     row:SetScript("OnUpdate", nil)
     if f and f._moneyRow == row then f._moneyRow, f._moneyCopper = nil, nil end
     if f and f.rowActive then
@@ -626,7 +631,8 @@ local function Row_OnClick(row)
     if not link then return end
     -- HandleModifiedItemClick inserts the link only when a chat box is already open. On a declined shift-click, open one pre-filled with the link so it always works.
     if not HandleModifiedItemClick(link) and IsModifiedClick("CHATLINK") then
-        ChatFrame_OpenChat(link)
+        local openChat = (ChatFrameUtil and ChatFrameUtil.OpenChat) or ChatFrame_OpenChat
+        if openChat then openChat(link) end
     end
 end
 
@@ -688,7 +694,6 @@ local function BuildRow(f)
     qty:SetPoint("BOTTOMRIGHT", -1, 1)
     row.qty = qty
 
-    -- Masque skins the icon when installed, otherwise draw our own tintable border.
     local mg = GetMasqueGroup()
     if mg and pcall(mg.AddButton, mg, iconFrame, { Icon = icon, Count = qty }) then
         row._masque = true
@@ -741,8 +746,7 @@ local function ClearRows(f)
         local row = f.rowActive[i]
         row.fadeAG:Stop()
         row:SetScript("OnUpdate", nil)
-        row:Hide()
-        row._free = true
+        ReleaseRow(row)
         f.rowActive[i] = nil
     end
 end
@@ -817,6 +821,8 @@ local function LayoutItemRow(f, row)
     local nameWidth = math.max(20, rowWidth - nameLeft - 6)
     local side, top, below = "LEFT", "TOPLEFT", "BOTTOMLEFT"
     if right then side, top, below, nameLeft = "RIGHT", "TOPRIGHT", "BOTTOMRIGHT", -nameLeft end
+    -- Only a row with an icon keeps its name beside it under Center.
+    if s.align == "CENTER" and not row._hasIcon then side = "CENTER" end
 
     row.name:ClearAllPoints()
     row.name:SetPoint(top, row, top, nameLeft, -5)
@@ -893,7 +899,6 @@ local function MergeIntoRow(f, row, amt, count, icon, link, marker)
     if not row._noHover and row:IsMouseOver() then Row_OnEnter(row) end
 end
 
--- Border is quality-tinted, or the passed color for currency and money.
 local function RowItem(f, icon, quality, name, category, amt, count, r, g, b, link, mergeKey, marker)
     EnsureRows(f)
     -- Junk collapses many different grays into one row, so it has no single owned count, link or marker.
@@ -997,7 +1002,6 @@ local function MoneyText(copper)
     return "+ " .. addon:RecapFormatMoney(copper)
 end
 
--- Accumulate rapid money loots into one running row while it is still visible.
 local function MoneyRowEmit(f, copper, r, g, b)
     EnsureRows(f)
     local row = f._moneyRow
@@ -1012,7 +1016,6 @@ local function MoneyRowEmit(f, copper, r, g, b)
     end
 end
 
--- Re-apply font and size to a rendered row so the size slider updates framed rows live, re-measuring wrapped height for item rows.
 local function RestyleRow(f, row)
     ApplyRowMouse(row)
     local s = ApplyRowFont(f, row, not row._isText)
@@ -1033,8 +1036,7 @@ local function RestyleRows(f)
     while #f.rowActive > maxLines do
         local row = table.remove(f.rowActive)
         row.fadeAG:Stop()
-        row:Hide()
-        row._free = true
+        ReleaseRow(row)
     end
     for _, row in ipairs(f.rowActive) do RestyleRow(f, row) end
     LayoutRows(f)
@@ -1132,9 +1134,9 @@ local function ShowLoot(p, countStr)
     end
 end
 
-local function PostDeferredLoot(p)
-    -- A slot reused before its timer fires flushes itself early, so the stale timer has to find the flag down and bail.
-    if not p._pending then return end
+local function PostDeferredLoot(p, now)
+    -- A slot reused before its timer fires flushes itself early, so the old timer must not post the next occupant before its own due time.
+    if not p._pending or (now and now < p._due) then return end
     p._pending = false
     -- At +0.1s BAG_UPDATE has landed, so the live read is already post-loot. Adding amt again double-counts, and a party member's amt was never ours to add.
     local live = OwnedCount(p.itemID) or 0
@@ -1149,7 +1151,7 @@ for i = 1, POOL_SIZE do
     _lootParams[i] = {}
     local idx = i
     _curFns[i]  = function() PostCurrency(_curParams[idx]) end
-    _lootFns[i] = function() PostDeferredLoot(_lootParams[idx]) end
+    _lootFns[i] = function() PostDeferredLoot(_lootParams[idx], _GetTime()) end
 end
 
 local _lootSync = {}
@@ -1292,16 +1294,14 @@ local function CreateReadoutFrame(name, labelText, defaultY, configKey)
     hooksecurefunc(f.display, "AddMessage", function(disp)
         disp._lastAdd = _GetTime()
         local s = LootProConfig and LootProConfig[configKey]
-        local base = (s and s.fade) or 6
+        local t = (s and s.fade) or 6
         if LootProConfig and LootProConfig.fadeScale then
             local n = disp:GetNumMessages() or 1
-            local t = base + (n - 1) * FADE_SCALE_PER_LINE
+            t = t + (n - 1) * FADE_SCALE_PER_LINE
             if t > FADE_SCALE_MAX then t = FADE_SCALE_MAX end
-            disp:SetTimeVisible(t)
-            disp._timeVisible = t
-        else
-            disp._timeVisible = base
         end
+        disp:SetTimeVisible(t)
+        disp._timeVisible = t
         if LootProConfig and LootProConfig.hoverPause and not addon.isTesting then
             ScheduleSweep(f)
         end
@@ -1316,7 +1316,7 @@ local LDBIcon = LibStub("LibDBIcon-1.0")
 local MM_ACTION_LABEL = {
     settings = "Open Settings",
     recap    = "Print Recap",
-    lock     = "Toggle Window Lock",
+    lock     = "Toggle Lock",
     none     = "Nothing",
 }
 
@@ -1486,7 +1486,9 @@ function addon:UpdateAllVisuals()
         end
         f.display:SetInsertMode(s.newest == "TOP" and INSERT_TOP or INSERT_BOTTOM)
         PlaceTextBlock(f.display)
-        f.display:SetTimeVisible(s.fade or 6)
+        local fade = s.fade or 6
+        f.display:SetTimeVisible(fade)
+        f.display._timeVisible = fade
 
         if not self.isTesting then
             f.display:SetFading(true)
@@ -1532,32 +1534,40 @@ function addon:PostTestMessages()
     ClearRows(self.combatFrame)
     ClearRows(self.lootFrame)
 
-    local cc = LootProConfig.colors
+    local cfg = LootProConfig
+    local cc = cfg.colors
 
-    CombatEmit(LootProConfig.combatEnterText, cc.combatEnter.r, cc.combatEnter.g, cc.combatEnter.b)
+    CombatEmit(cfg.combatEnterText, cc.combatEnter.r, cc.combatEnter.g, cc.combatEnter.b)
     CombatEmit("+ 500 XP", cc.xp.r, cc.xp.g, cc.xp.b)
-    CombatEmit(LootProConfig.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
+    CombatEmit(cfg.combatLeaveText, cc.combatLeave.r, cc.combatLeave.g, cc.combatLeave.b)
 
-    local money = "204 |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "
-        .. "5 |TInterface\\MoneyFrame\\UI-SilverIcon:0|t "
-        .. "32 |TInterface\\MoneyFrame\\UI-CopperIcon:0|t "
-    LootTextEmit("+ " .. money, cc.money.r, cc.money.g, cc.money.b)
+    local money = (cfg.cleanMode or (cfg.framedLoot and cfg.mergeRows)) and MoneyText(2040532)
+        or "You loot 204 Gold, 5 Silver, 32 Copper"
+    LootTextEmit(money, cc.money.r, cc.money.g, cc.money.b)
 
-    if LootProConfig.framedLoot then
-        RowItem(self.lootFrame, TestTex(241308, 134414), 3, "Light's Potential", "Consumable", 10, 20, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(241308)))
-        RowItem(self.lootFrame, TestTex(259085, 134414), 4, "Void-Touched Augment Rune", "Consumable", 5, 10, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(259085)))
+    local counted = cfg.cleanMode and cfg.showLootCounts
+    local function line(icon, name, amt, total)
+        if not cfg.cleanMode then
+            return icon .. "You receive loot: [" .. name .. "]" .. (amt > 1 and ("x" .. amt) or "") .. "."
+        end
+        return "+" .. amt .. " " .. icon .. name .. (counted and (" (" .. total .. ")") or "")
+    end
+
+    if cfg.framedLoot then
+        RowItem(self.lootFrame, TestTex(241308, 134414), 3, "Light's Potential", "Consumable", 10, counted and 20 or nil, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(241308)))
+        RowItem(self.lootFrame, TestTex(259085, 134414), 4, "Void-Touched Augment Rune", "Consumable", 5, counted and 10 or nil, cc.loot.r, cc.loot.g, cc.loot.b, _select(2, _GetItemInfo(259085)))
     else
-        self.lootFrame.display:AddMessage("+10 " .. TestLootIcon(241308, 134414) .. "Light's Potential (20)", cc.loot.r, cc.loot.g, cc.loot.b)
-        self.lootFrame.display:AddMessage("+5 " .. TestLootIcon(259085, 134414) .. "Void-Touched Augment Rune (10)", cc.loot.r, cc.loot.g, cc.loot.b)
+        self.lootFrame.display:AddMessage(line(TestLootIcon(241308, 134414), "Light's Potential", 10, 20), cc.loot.r, cc.loot.g, cc.loot.b)
+        self.lootFrame.display:AddMessage(line(TestLootIcon(259085, 134414), "Void-Touched Augment Rune", 5, 10), cc.loot.r, cc.loot.g, cc.loot.b)
     end
 
     if IsQuestColorOn() then
         local qr, qg, qb = QuestRGB()
-        if LootProConfig.framedLoot then
-            RowItem(self.lootFrame, LootProConfig.showLootIcons and QUEST_TEST_ICON or nil, nil, "Quest Item", "Quest", 1, 3, qr, qg, qb, nil)
+        if cfg.framedLoot then
+            RowItem(self.lootFrame, cfg.showLootIcons and QUEST_TEST_ICON or nil, nil, "Quest Item", "Quest", 1, counted and 3 or nil, qr, qg, qb, nil)
         else
-            local icon = LootProConfig.showLootIcons and ("|T" .. QUEST_TEST_ICON .. ":0|t ") or ""
-            self.lootFrame.display:AddMessage("+1 " .. icon .. "Quest Item (3)", qr, qg, qb)
+            local icon = cfg.showLootIcons and ("|T" .. QUEST_TEST_ICON .. ":0|t ") or ""
+            self.lootFrame.display:AddMessage(line(icon, "Quest Item", 1, 3), qr, qg, qb)
         end
     end
 end
@@ -1678,95 +1688,106 @@ function addon:RunRegressionTest()
         pass, fail, #cases))
 end
 
-local LOOT_TOAST_EVENTS = { "SHOW_LOOT_TOAST", "SHOW_LOOT_TOAST_UPGRADE", "LOOT_ITEM_ROLL_WON" }
-local hiddenToasts = {}
+do
+    local LOOT_TOAST_EVENTS = { "SHOW_LOOT_TOAST", "SHOW_LOOT_TOAST_UPGRADE", "LOOT_ITEM_ROLL_WON" }
+    local hiddenToasts = {}
 
-function addon.LootToastsAvailable()
-    return (_G.AlertFrame and _G.LootAlertSystem) and true or false
-end
-
--- Only Blizzard's alert frame stops listening and nothing is re-added from addon code, so no taint reaches the alert system. Only events unregistered here are ever registered again.
-function addon.ApplyLootToasts()
-    if not addon.LootToastsAvailable() then return end
-    local alerts = _G.AlertFrame
-    if LootProConfig and LootProConfig.hideLootToasts then
+    -- Only Mainline's alert frame registers the toast events, and once hidden here they must stay offered or unticking could never bring them back.
+    function addon.LootToastsAvailable()
+        local alerts = _G.AlertFrame
+        if not (alerts and _G.LootAlertSystem and alerts.IsEventRegistered) then return false end
+        if next(hiddenToasts) then return true end
         for i = 1, #LOOT_TOAST_EVENTS do
-            local ev = LOOT_TOAST_EVENTS[i]
-            if not hiddenToasts[ev] and alerts:IsEventRegistered(ev) then
-                alerts:UnregisterEvent(ev)
-                hiddenToasts[ev] = true
-            end
+            if alerts:IsEventRegistered(LOOT_TOAST_EVENTS[i]) then return true end
         end
-    else
-        for ev in pairs(hiddenToasts) do
-            alerts:RegisterEvent(ev)
-            hiddenToasts[ev] = nil
+        return false
+    end
+
+    -- Only Blizzard's alert frame stops listening and nothing is re-added from addon code, so no taint reaches the alert system. Only events unregistered here are ever registered again.
+    function addon.ApplyLootToasts()
+        if not addon.LootToastsAvailable() then return end
+        local alerts = _G.AlertFrame
+        if LootProConfig and LootProConfig.hideLootToasts then
+            for i = 1, #LOOT_TOAST_EVENTS do
+                local ev = LOOT_TOAST_EVENTS[i]
+                if not hiddenToasts[ev] and alerts:IsEventRegistered(ev) then
+                    alerts:UnregisterEvent(ev)
+                    hiddenToasts[ev] = true
+                end
+            end
+        else
+            for ev in pairs(hiddenToasts) do
+                alerts:RegisterEvent(ev)
+                hiddenToasts[ev] = nil
+            end
         end
     end
 end
 
 -- Speedy AutoLoot: loot one slot per timer tick (~30/s), highest slot first. A tight full-loop loot can trip the server's rapid-loot disconnect on big AoE piles, and clearing low slots first would shift higher indices.
-local _LootSlot        = LootSlot
-local _LootSlotHasItem = LootSlotHasItem
-local _IsModifiedClick = IsModifiedClick
+do
+    local _LootSlot        = LootSlot
+    local _LootSlotHasItem = LootSlotHasItem
+    local _IsModifiedClick = IsModifiedClick
 
-local speedyLoot = { ticker = nil, lastCount = nil, slot = 0 }
+    local speedyLoot = { ticker = nil, lastCount = nil, slot = 0 }
 
-local function SpeedyStop()
-    if speedyLoot.ticker then
-        speedyLoot.ticker:Cancel()
-        speedyLoot.ticker = nil
-    end
-end
-
-local function SpeedyTick()
-    if speedyLoot.slot >= 1 then
-        if _LootSlotHasItem(speedyLoot.slot) then _LootSlot(speedyLoot.slot) end
-        speedyLoot.slot = speedyLoot.slot - 1
-    else
-        SpeedyStop()
-    end
-end
-
-local function SpeedyLootReady()
-    if not (LootProConfig and LootProConfig.speedyAutoLoot) then return end
-    if _IsModifiedClick and _IsModifiedClick("AUTOLOOTTOGGLE") then return end
-
-    local n = _GetNumLootItems and _GetNumLootItems() or 0
-    -- Same loot reported by both LOOT_READY and LOOT_OPENED -> process once.
-    if n == 0 or speedyLoot.lastCount == n then return end
-    speedyLoot.lastCount = n
-
-    SpeedyStop()
-    speedyLoot.slot = n
-    speedyLoot.ticker = _NewTicker and _NewTicker(0.03, SpeedyTick, n + 1)
-    if not speedyLoot.ticker then
-        for i = n, 1, -1 do
-            if _LootSlotHasItem(i) then _LootSlot(i) end
+    local function SpeedyStop()
+        if speedyLoot.ticker then
+            speedyLoot.ticker:Cancel()
+            speedyLoot.ticker = nil
         end
     end
-end
 
-local function SpeedyLootClosed()
-    speedyLoot.lastCount = nil
-    SpeedyStop()
-end
-
-local speedyLootFrame = CreateFrame("Frame")
-speedyLootFrame:RegisterEvent("LOOT_READY")
-speedyLootFrame:RegisterEvent("LOOT_OPENED")
-speedyLootFrame:RegisterEvent("LOOT_CLOSED")
-speedyLootFrame:SetScript("OnEvent", function(_, event)
-    if event == "LOOT_CLOSED" then
-        questScanned = 0
-        SpeedyLootClosed()
-    else
-        ScanQuestLoot()
-        SpeedyLootReady()
+    local function SpeedyTick()
+        if speedyLoot.slot >= 1 then
+            if _LootSlotHasItem(speedyLoot.slot) then _LootSlot(speedyLoot.slot) end
+            speedyLoot.slot = speedyLoot.slot - 1
+        else
+            SpeedyStop()
+        end
     end
-end)
 
-local evts = {
+    local function SpeedyLootReady()
+        if not (LootProConfig and LootProConfig.speedyAutoLoot) then return end
+        if _IsModifiedClick and _IsModifiedClick("AUTOLOOTTOGGLE") then return end
+
+        local n = _GetNumLootItems and _GetNumLootItems() or 0
+        -- Same loot reported by both LOOT_READY and LOOT_OPENED -> process once.
+        if n == 0 or speedyLoot.lastCount == n then return end
+        speedyLoot.lastCount = n
+
+        SpeedyStop()
+        speedyLoot.slot = n
+        speedyLoot.ticker = _NewTicker and _NewTicker(0.03, SpeedyTick, n + 1)
+        if not speedyLoot.ticker then
+            for i = n, 1, -1 do
+                if _LootSlotHasItem(i) then _LootSlot(i) end
+            end
+        end
+    end
+
+    local function SpeedyLootClosed()
+        speedyLoot.lastCount = nil
+        SpeedyStop()
+    end
+
+    local speedyLootFrame = CreateFrame("Frame")
+    speedyLootFrame:RegisterEvent("LOOT_READY")
+    speedyLootFrame:RegisterEvent("LOOT_OPENED")
+    speedyLootFrame:RegisterEvent("LOOT_CLOSED")
+    speedyLootFrame:SetScript("OnEvent", function(_, event)
+        if event == "LOOT_CLOSED" then
+            questScanned = 0
+            SpeedyLootClosed()
+        else
+            ScanQuestLoot()
+            SpeedyLootReady()
+        end
+    end)
+end
+
+for _, v in ipairs({
     "ADDON_LOADED",
     "PLAYER_LOGIN",
     "PLAYER_ENTERING_WORLD",
@@ -1781,12 +1802,341 @@ local evts = {
     "CHAT_MSG_COMBAT_FACTION_CHANGE",
     "CHAT_MSG_COMBAT_XP_GAIN",
     "CHAT_MSG_COMBAT_HONOR_GAIN"
-}
-
-for _, v in ipairs(evts) do
+}) do
     addon:RegisterEvent(v)
 end
-evts = nil
+
+local chatHandlers = {}
+
+function chatHandlers.CHAT_MSG_COMBAT_XP_GAIN(_, event, msg, c, n)
+    local name, amount2 = _match(msg, "(.+) has gained ([%d%p%s]*%d)%s+%a+")
+    if name and amount2 and not _match(msg, "^You") then
+        if not LootProConfig.showFollowerXP then return end
+        if n.xp then
+            name = _gsub(_gsub(name, "|c%x+", ""), "|r", "")
+            CombatEmit("+ " .. amount2 .. " XP (" .. name .. ")", c.xp.r, c.xp.g, c.xp.b)
+        end
+        return
+    end
+    if n.xp then
+        CombatEmit(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
+    end
+end
+
+function chatHandlers.CHAT_MSG_COMBAT_FACTION_CHANGE(_, _, msg, c, n)
+    local fac, amt = nil, nil
+    if PAT_FACTION_UP then fac, amt = _match(msg, PAT_FACTION_UP) end
+    if not amt and PAT_FACTION_UP_AW then fac, amt = _match(msg, PAT_FACTION_UP_AW) end
+    local lossFac, lossAmt = nil, nil
+    if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN) end
+    if not amt and not lossAmt and PAT_FACTION_DOWN_AW then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN_AW) end
+    if amt and n.repGain then
+        CombatEmit("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
+    elseif lossAmt and n.repLoss then
+        CombatEmit("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b)
+    end
+end
+
+function chatHandlers.CHAT_MSG_SKILL(_, event, msg, c, n)
+    if not n.skill then return end
+    CombatEmit(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
+end
+
+function chatHandlers.CHAT_MSG_COMBAT_HONOR_GAIN(_, event, msg, c, n)
+    if not n.honor then return end
+    CombatEmit(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
+end
+
+function chatHandlers.CHAT_MSG_SYSTEM(_, _, msg, c, n)
+    if not n.delver then return end
+    if _find(msg, "Companion XP") then
+        local amt = _match(msg, "gains ([%d,]+) Companion")
+        if amt then
+            local cD = c.delver or {r=1, g=0.7, b=0.2}
+            CombatEmit("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
+        end
+    end
+end
+
+function chatHandlers.CHAT_MSG_MONEY(self, _, msg, c, n)
+    local g  = PAT_GOLD   and _match(msg, PAT_GOLD)
+    local s  = PAT_SILVER and _match(msg, PAT_SILVER)
+    local co = PAT_COPPER and _match(msg, PAT_COPPER)
+
+    local copper = MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co)
+    if LootProConfig.recapEnabled and self.RecapAddMoney then
+        self:RecapAddMoney(copper)
+    end
+    if self.RecapNoteOtherMoney and not self._regressionTest then self:RecapNoteOtherMoney(copper) end
+
+    if n.money then
+        if LootProConfig.framedLoot and LootProConfig.mergeRows then
+            MoneyRowEmit(addon.lootFrame, copper, c.money.r, c.money.g, c.money.b)
+        elseif LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
+            local st = ""
+            if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
+            if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
+            if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
+
+            LootTextEmit("+ " .. st, c.money.r, c.money.g, c.money.b)
+        elseif LootProConfig.cleanMode then
+            LootTextEmit(MoneyText(copper), c.money.r, c.money.g, c.money.b)
+        else
+            LootTextEmit(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
+        end
+    end
+end
+
+function chatHandlers.CHAT_MSG_CURRENCY(self, event, msg, c, n)
+    -- Currency uses |Hcurrency: links (not item:), so GetIconString can't make an icon. Pull icon + total from C_CurrencyInfo.
+    local currencyName = ExtractItemName(msg)
+    local currencyID = _tonumber(_match(msg, "currency:(%d+)"))
+    local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
+
+    local info = currencyID and _GetCurrencyInfo and _GetCurrencyInfo(currencyID)
+    -- Checked now, not in the timer, and ahead of the recap tally it also gates. A double-fire repeats amount and post-gain total, a real second gain raises the total.
+    local dedupKey = (currencyName or msg) .. "#" .. amt .. "#" .. _tostring(info and info.quantity)
+    if IsRecentCurrency(dedupKey) then return end
+    MarkCurrencyShown(dedupKey)
+
+    local iconStr, total, iconFileID = "", nil, nil
+    local capStr = ""
+    if info then
+        iconFileID = info.iconFileID
+        if LootProConfig.showLootIcons and info.iconFileID then
+            iconStr = "|T" .. info.iconFileID .. ":0|t "
+        end
+        total = info.quantity
+        -- maxQuantity/maxWeeklyQuantity are 0 for uncapped currencies.
+        if LootProConfig.currencyCap then
+            local maxq = info.maxQuantity
+            local wk = info.maxWeeklyQuantity
+            if maxq and maxq > 0 and total and total >= maxq then
+                capStr = " |cFFFF4040(capped)|r"
+            elseif wk and wk > 0 and info.quantityEarnedThisWeek and info.quantityEarnedThisWeek >= wk then
+                capStr = " |cFFFFA000(weekly cap)|r"
+            end
+        end
+    end
+
+    if LootProConfig.recapEnabled and currencyID and self.RecapAddCurrency then
+        self:RecapAddCurrency(currencyID, amt, currencyName, iconFileID)
+    end
+
+    if n.currency then
+        _curSlot = (_curSlot % POOL_SIZE) + 1
+        local p = _curParams[_curSlot]
+        p.currencyName = currencyName
+        p.iconStr = iconStr
+        p.iconTex = LootProConfig.showLootIcons and iconFileID or nil
+        p.cName   = currencyName
+        p.amt     = amt
+        p.total   = total
+        p.capStr  = capStr
+        p.cR, p.cG, p.cB = c.currency.r, c.currency.g, c.currency.b
+        if LootProConfig.cleanMode then
+            local cleaned = CleanMessage(msg, event)
+            p.cleanMode = true
+            p.text      = cleaned
+            p.noCount   = IsNoCountItem(cleaned)
+        else
+            local nc = IsNoCountItem(msg)
+            p.cleanMode = false
+            p.text      = nc and CleanMessage(msg, event) or msg
+            p.noCount   = nc
+        end
+        if _After and not addon._regressionTest then
+            _After(DEDUP_WINDOW, _curFns[_curSlot])
+        else
+            PostCurrency(p)
+        end
+    end
+end
+
+function chatHandlers.CHAT_MSG_LOOT(self, event, msg, c, n)
+    local isSelf, isOwn = IsSelfLoot(msg)
+    if n.partyLoot == false and not (isSelf or isOwn) then return end
+    local lname = ExtractItemName(msg)
+    MarkLootSeen(lname)
+    local itemID = _tonumber(_match(msg, "item:(%d+)"))
+    local link = _match(msg, "(|c[^|]*|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
+    -- Retail can color a link with the named |cnIQ<quality>: form, which names the drop's quality outright.
+    local rawQ = _tonumber(_match(msg, "|cnIQ(%d+):"))
+    if not rawQ then
+        local rgbHex = _match(msg, "|c%x%x(%x%x%x%x%x%x)")
+        rawQ = rgbHex and QUALITY_BY_RGB[rgbHex:lower()]
+    end
+    if not rawQ and link then rawQ = _select(3, _GetItemInfo(link)) end
+    if not rawQ and itemID then
+        rawQ = (_GetItemQualityByID and _GetItemQualityByID(itemID))
+               or _select(3, _GetItemInfo(itemID))
+    end
+    local threshold = (isSelf or isOwn) and LootProConfig.minQualityOwn or LootProConfig.minQualityOther
+    local q = rawQ or threshold
+    local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
+
+    local isNewApp = false
+    local isNotable = false
+    local isUpgrade = false
+    local isValuable = false
+    local rareTriggered = false
+    local isQuest = false
+    local tertiaryTag = nil
+    if isSelf then
+        if LootProConfig.recapEnabled and self.RecapAddItem then
+            self:RecapAddItem(itemID, amt, q, link)
+        end
+        if self.WatchOnLoot then
+            self:WatchOnLoot(itemID, lname, link)
+        end
+        local ra = LootProConfig.rareAlert
+        if ra and ra.notable and self.IsNotableItem then
+            isNotable = self:IsNotableItem(itemID, link)
+        end
+        if ra and ra.value and ra.value > 0 and self.ItemValue then
+            local unit = self:ItemValue(link)
+            if unit then
+                if unit * amt >= ra.value then isValuable = true end
+            elseif itemID and _RequestItemData then
+                -- An uncached item has no sell price yet, so warm it for next time instead of reading the miss as worthless.
+                _RequestItemData(itemID)
+            end
+        end
+        if (LootProConfig.lootUpgrade or (ra and ra.upgrade)) and self.IsUpgrade then
+            isUpgrade = self:IsUpgrade(itemID, link)
+        end
+        local highIlvl = false
+        if ra and ra.ilvl and ra.ilvl > 0 and self.GearItemLevel then
+            local ilvl = self:GearItemLevel(itemID, link)
+            highIlvl = ilvl ~= nil and ilvl >= ra.ilvl
+        end
+        rareTriggered = isNotable or isValuable or highIlvl or (isUpgrade and ra and ra.upgrade) or false
+        if self.RareOnLoot then
+            self:RareOnLoot(q, rareTriggered)
+        end
+        if LootProConfig.newAppearance and self.IsNewAppearance then
+            isNewApp = self:IsNewAppearance(link)
+        end
+        if LootProConfig.tertiaryStat and self.TertiaryStatTag then
+            tertiaryTag = self:TertiaryStatTag(link)
+        end
+        if IsQuestColorOn() then
+            isQuest = IsQuestLoot(itemID)
+        end
+    end
+
+    -- Hidden items were still tallied above. Only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
+    local hidden = false
+    local lfil = LootProConfig.lootFilters
+    if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe
+        or lfil.hideGear or lfil.hideGem or lfil.hideEnhancement or lfil.hideMisc or lfil.hideGlyph) then
+        local classID = _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
+        if classID == 7 then hidden = lfil.hideTradeGoods
+        elseif classID == 0 then hidden = lfil.hideConsumable
+        elseif classID == 12 then hidden = lfil.hideQuest
+        elseif classID == 9 then hidden = lfil.hideRecipe
+        elseif classID == 2 or classID == 4 then hidden = lfil.hideGear
+        elseif classID == 3 then hidden = lfil.hideGem
+        elseif classID == 8 then hidden = lfil.hideEnhancement
+        elseif classID == 15 then hidden = lfil.hideMisc
+        elseif classID == 16 then hidden = lfil.hideGlyph end
+    end
+    if not hidden and lname and addon.BlockMatch and addon:BlockMatch(lname) then
+        hidden = true
+    end
+
+    -- Quest items are nearly always Common or Poor, so a raised threshold would hide the very drops the feature exists to highlight.
+    if n.loot and (q >= threshold or isQuest) and not hidden then
+        local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
+        local ra = LootProConfig.rareAlert
+        if ra and ra.color and (q >= ra.threshold or rareTriggered) then
+            local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
+            if qc then lr, lg, lb = qc.r, qc.g, qc.b end
+        end
+        local fQuality = q
+        if isQuest then
+            lr, lg, lb = QuestRGB()
+            fQuality = nil
+        end
+        local ilvlTag = ""
+        if LootProConfig.lootIlvl and self.LootItemLevel then
+            ilvlTag = self:LootItemLevel(itemID, link) or ""
+        end
+        local trackTag
+        if LootProConfig.upgradeTrack and (isSelf or LootProConfig.upgradeTrackGroup) and self.UpgradeTrackTag then
+            trackTag = self:UpgradeTrackTag(itemID, link)
+        end
+        local marker = ilvlTag .. (trackTag or "") .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and LootProConfig.lootUpgrade and UPGRADE_TAG or "") .. (tertiaryTag or "")
+        -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
+        local fIcon, fCat, fName, fMergeKey
+        if LootProConfig.framedLoot then
+            -- Caged pets loot as |Hbattlepet: links, so both extractors miss and GetItemInfoInstant would throw on a nil source.
+            local iconSrc = itemID or link
+            fIcon = iconSrc and LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(iconSrc)) or nil
+            fCat = LootCategory(link, itemID)
+            fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
+            if LootProConfig.mergeRows then
+                -- A gray quest item must keep its own row, or the junk pile would swallow the thing being highlighted.
+                if q == 0 and not isQuest then
+                    fMergeKey, fName, fCat = "junk", "Junk Items", nil
+                elseif itemID then
+                    -- Merging never repaints a row, so a quest drop needs its own key or it inherits an earlier unflagged drop's color.
+                    fMergeKey = isQuest and ("quest:" .. itemID) or itemID
+                end
+            end
+        end
+        if LootProConfig.cleanMode then
+            local cleaned = CleanMessage(msg, event)
+            local noCount = IsNoCountItem(cleaned)
+            if isQuest then cleaned = RecolorItemLink(cleaned, lr, lg, lb) end
+
+            if itemID and LootProConfig.showLootCounts and _GetItemNameByID then
+                -- The running total is only trustworthy once BAG_UPDATE has landed, so every counted line defers and reads it live.
+                _lootSlot = (_lootSlot % POOL_SIZE) + 1
+                local lp = _lootParams[_lootSlot]
+                if lp._pending then PostDeferredLoot(lp) end
+                lp._pending = true
+                lp._due = _GetTime() + 0.09
+                lp.iconStr = GetIconString(msg, itemID)
+                lp.cleaned = cleaned
+                lp.amt     = amt
+                lp.noCount = noCount
+                lp.itemID  = itemID
+                lp.isSelf  = isSelf or isOwn
+                lp.preCount = OwnedCount(itemID) or 0
+                lp.cR, lp.cG, lp.cB = lr, lg, lb
+                lp.marker  = marker
+                lp.fIcon = fIcon; lp.fQuality = fQuality; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
+                if _After and not addon._regressionTest then
+                    _After(0.1, _lootFns[_lootSlot])
+                else
+                    PostDeferredLoot(lp)
+                end
+            else
+                local p = _lootSync
+                p.iconStr = GetIconString(msg, itemID); p.cleaned = cleaned
+                p.amt = amt; p.noCount = noCount
+                p.cR, p.cG, p.cB = lr, lg, lb
+                p.marker = marker
+                p.fIcon = fIcon; p.fQuality = fQuality; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
+                p.itemID = itemID
+                ShowLoot(p, "")
+            end
+        else
+            local body = isQuest and RecolorItemLink(msg, lr, lg, lb) or msg
+            local line = GetIconString(msg, itemID) .. body .. marker
+            local salt = itemID and OwnedCount(itemID)
+            if not IsDuplicateDisplay(line, salt) then
+                if LootProConfig.framedLoot then
+                    local nm = fName or lname or CleanMessage(msg, event)
+                    RowItem(self.lootFrame, fIcon, fQuality, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey, marker)
+                else
+                    self.lootFrame.display:AddMessage(line, lr, lg, lb)
+                end
+            end
+        end
+    end
+end
 
 addon:SetScript("OnEvent", function(self, event, ...)
     local arg1 = ...
@@ -1839,326 +2189,10 @@ addon:SetScript("OnEvent", function(self, event, ...)
 
         if not arg1 or type(arg1) ~= "string" then return end
 
-        local msg = arg1
-
         -- 12.0 secret values: the CHAT_MSG payload is a secret string in active encounters. Any string op throws, so skip the line.
-        if _issecret and _issecret(msg) then return end
+        if _issecret and _issecret(arg1) then return end
 
-        if event == "CHAT_MSG_COMBAT_XP_GAIN" then
-            local name, amount2 = _match(msg, "(.+) has gained ([%d%p%s]*%d)%s+%a+")
-            if name and amount2 and not _match(msg, "^You") then
-                if not LootProConfig.showFollowerXP then return end
-                if n.xp then
-                    name = _gsub(_gsub(name, "|c%x+", ""), "|r", "")
-                    CombatEmit("+ " .. amount2 .. " XP (" .. name .. ")", c.xp.r, c.xp.g, c.xp.b)
-                end
-                return
-            end
-        end
-
-        if event == "CHAT_MSG_COMBAT_XP_GAIN" and n.xp then
-            CombatEmit(CleanMessage(msg, event), c.xp.r, c.xp.g, c.xp.b)
-
-        elseif event == "CHAT_MSG_COMBAT_FACTION_CHANGE" then
-            local fac, amt = nil, nil
-            if PAT_FACTION_UP then fac, amt = _match(msg, PAT_FACTION_UP) end
-            if not amt and PAT_FACTION_UP_AW then fac, amt = _match(msg, PAT_FACTION_UP_AW) end
-            local lossFac, lossAmt = nil, nil
-            if not amt and PAT_FACTION_DOWN then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN) end
-            if not amt and not lossAmt and PAT_FACTION_DOWN_AW then lossFac, lossAmt = _match(msg, PAT_FACTION_DOWN_AW) end
-            if amt and n.repGain then
-                CombatEmit("+ " .. amt .. " Rep: " .. (fac or ""), c.repGain.r, c.repGain.g, c.repGain.b)
-            elseif lossAmt and n.repLoss then
-                CombatEmit("- " .. lossAmt .. " Rep: " .. (lossFac or ""), c.repLoss.r, c.repLoss.g, c.repLoss.b)
-            end
-
-        elseif event == "CHAT_MSG_SKILL" and n.skill then
-            CombatEmit(CleanMessage(msg, event), c.skill.r, c.skill.g, c.skill.b)
-
-        elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" and n.honor then
-            CombatEmit(CleanMessage(msg, event), c.honor.r, c.honor.g, c.honor.b)
-
-        elseif event == "CHAT_MSG_SYSTEM" and n.delver then
-            if _find(msg, "Companion XP") then
-                local amt = _match(msg, "gains ([%d,]+) Companion")
-                if amt then
-                    local cD = c.delver or {r=1, g=0.7, b=0.2}
-                    CombatEmit("+ " .. amt .. " Delver XP", cD.r, cD.g, cD.b)
-                end
-            end
-
-        elseif event == "CHAT_MSG_MONEY" then
-            local g  = PAT_GOLD   and _match(msg, PAT_GOLD)
-            local s  = PAT_SILVER and _match(msg, PAT_SILVER)
-            local co = PAT_COPPER and _match(msg, PAT_COPPER)
-
-            local copper = MoneyAmount(g) * 10000 + MoneyAmount(s) * 100 + MoneyAmount(co)
-            if LootProConfig.recapEnabled and self.RecapAddMoney then
-                self:RecapAddMoney(copper)
-            end
-            if self.RecapNoteOtherMoney and not self._regressionTest then self:RecapNoteOtherMoney(copper) end
-
-            if n.money then
-                if LootProConfig.framedLoot and LootProConfig.mergeRows then
-                    MoneyRowEmit(addon.lootFrame, copper, c.money.r, c.money.g, c.money.b)
-                elseif LootProConfig.cleanMode and LootProConfig.showMoneyIcons then
-                    local st = ""
-                    if g  then st = st .. g  .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0|t "   end
-                    if s  then st = st .. s  .. " |TInterface\\MoneyFrame\\UI-SilverIcon:0|t " end
-                    if co then st = st .. co .. " |TInterface\\MoneyFrame\\UI-CopperIcon:0|t " end
-
-                    LootTextEmit("+ " .. st, c.money.r, c.money.g, c.money.b)
-                else
-                    LootTextEmit(GetIconString(msg) .. msg, c.money.r, c.money.g, c.money.b)
-                end
-            end
-
-        elseif event == "CHAT_MSG_CURRENCY" then
-            -- Currency uses |Hcurrency: links (not item:), so GetIconString can't make an icon. Pull icon + total from C_CurrencyInfo.
-            local currencyName = ExtractItemName(msg)
-            local currencyID = _tonumber(_match(msg, "currency:(%d+)"))
-            local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
-
-            -- Mark/check the dedup synchronously (before scheduling): deferring to the timer would let two same-frame events both see an empty cache and both display.
-            -- The amount is part of the key because this return also gates the recap tally. A double-fire repeats the exact amount, two real gains usually differ.
-            local dedupKey = (currencyName or msg) .. "#" .. amt
-            if IsRecentCurrency(dedupKey) then return end
-            MarkCurrencyShown(dedupKey)
-
-            local iconStr, total, iconFileID = "", nil, nil
-            local capStr = ""
-            if currencyID and _GetCurrencyInfo then
-                local info = _GetCurrencyInfo(currencyID)
-                if info then
-                    iconFileID = info.iconFileID
-                    if LootProConfig.showLootIcons and info.iconFileID then
-                        iconStr = "|T" .. info.iconFileID .. ":0|t "
-                    end
-                    total = info.quantity
-                    -- maxQuantity/maxWeeklyQuantity are 0 for uncapped currencies.
-                    if LootProConfig.currencyCap then
-                        local maxq = info.maxQuantity
-                        local wk = info.maxWeeklyQuantity
-                        if maxq and maxq > 0 and total and total >= maxq then
-                            capStr = " |cFFFF4040(capped)|r"
-                        elseif wk and wk > 0 and info.quantityEarnedThisWeek and info.quantityEarnedThisWeek >= wk then
-                            capStr = " |cFFFFA000(weekly cap)|r"
-                        end
-                    end
-                end
-            end
-
-            if LootProConfig.recapEnabled and currencyID and self.RecapAddCurrency then
-                self:RecapAddCurrency(currencyID, amt, currencyName, iconFileID)
-            end
-
-            if n.currency then
-                _curSlot = (_curSlot % POOL_SIZE) + 1
-                local p = _curParams[_curSlot]
-                p.currencyName = currencyName
-                p.iconStr = iconStr
-                p.iconTex = LootProConfig.showLootIcons and iconFileID or nil
-                p.cName   = currencyName
-                p.amt     = amt
-                p.total   = total
-                p.capStr  = capStr
-                p.cR, p.cG, p.cB = c.currency.r, c.currency.g, c.currency.b
-                if LootProConfig.cleanMode then
-                    local cleaned = CleanMessage(msg, event)
-                    p.cleanMode = true
-                    p.text      = cleaned
-                    p.noCount   = IsNoCountItem(cleaned)
-                else
-                    local nc = IsNoCountItem(msg)
-                    p.cleanMode = false
-                    p.text      = nc and CleanMessage(msg, event) or msg
-                    p.noCount   = nc
-                end
-                if _After and not addon._regressionTest then
-                    _After(DEDUP_WINDOW, _curFns[_curSlot])
-                else
-                    PostCurrency(p)
-                end
-            end
-
-        elseif event == "CHAT_MSG_LOOT" then
-            local isSelf = IsSelfLoot(msg)
-            if n.partyLoot == false and not isSelf then return end
-            local lname = ExtractItemName(msg)
-            MarkLootSeen(lname)
-            local itemID = _tonumber(_match(msg, "item:(%d+)"))
-            local link = _match(msg, "(|c%x+|Hitem:.-|h|r)") or _match(msg, "(|Hitem:.-|h%[.-%]|h)")
-            local rgbHex = _match(msg, "|c%x%x(%x%x%x%x%x%x)")
-            local rawQ = rgbHex and QUALITY_BY_RGB[rgbHex:lower()]
-            if not rawQ and link then rawQ = _select(3, _GetItemInfo(link)) end
-            if not rawQ and itemID then
-                rawQ = (_GetItemQualityByID and _GetItemQualityByID(itemID))
-                       or _select(3, _GetItemInfo(itemID))
-            end
-            local threshold = isSelf and LootProConfig.minQualityOwn or LootProConfig.minQualityOther
-            local q = rawQ or threshold
-            local amt = _tonumber(_match(msg, "x(%d+)%.?$")) or 1
-
-            local isNewApp = false
-            local isNotable = false
-            local isUpgrade = false
-            local isValuable = false
-            local rareTriggered = false
-            local isQuest = false
-            local tertiaryTag = nil
-            if isSelf then
-                if LootProConfig.recapEnabled and self.RecapAddItem then
-                    self:RecapAddItem(itemID, amt, q, link)
-                end
-                if self.WatchOnLoot then
-                    self:WatchOnLoot(itemID, lname, link)
-                end
-                local ra = LootProConfig.rareAlert
-                if ra and ra.notable and self.IsNotableItem then
-                    isNotable = self:IsNotableItem(itemID, link)
-                end
-                if ra and ra.value and ra.value > 0 and self.ItemValue then
-                    local unit = self:ItemValue(link)
-                    if unit then
-                        if unit * amt >= ra.value then isValuable = true end
-                    elseif itemID and _RequestItemData then
-                        -- An uncached item has no sell price yet, so warm it for next time instead of reading the miss as worthless.
-                        _RequestItemData(itemID)
-                    end
-                end
-                if (LootProConfig.lootUpgrade or (ra and ra.upgrade)) and self.IsUpgrade then
-                    isUpgrade = self:IsUpgrade(itemID, link)
-                end
-                local highIlvl = false
-                if ra and ra.ilvl and ra.ilvl > 0 and self.GearItemLevel then
-                    local ilvl = self:GearItemLevel(itemID, link)
-                    highIlvl = ilvl ~= nil and ilvl >= ra.ilvl
-                end
-                rareTriggered = isNotable or isValuable or highIlvl or (isUpgrade and ra and ra.upgrade) or false
-                if self.RareOnLoot then
-                    self:RareOnLoot(q, rareTriggered)
-                end
-                if LootProConfig.newAppearance and self.IsNewAppearance then
-                    isNewApp = self:IsNewAppearance(link)
-                end
-                if LootProConfig.tertiaryStat and self.TertiaryStatTag then
-                    tertiaryTag = self:TertiaryStatTag(link)
-                end
-                if IsQuestColorOn() then
-                    isQuest = IsQuestLoot(itemID)
-                end
-            end
-
-            -- Hidden items were still tallied above. Only the visible line is suppressed. classIDs: 7=trade goods, 0=consumable, 12=quest, 9=recipe, 2/4=weapon/armor, 3=gem, 8=item enhancement, 15=miscellaneous, 16=glyph.
-            local hidden = false
-            local lfil = LootProConfig.lootFilters
-            if itemID and lfil and (lfil.hideTradeGoods or lfil.hideConsumable or lfil.hideQuest or lfil.hideRecipe
-                or lfil.hideGear or lfil.hideGem or lfil.hideEnhancement or lfil.hideMisc or lfil.hideGlyph) then
-                local classID = _GetItemInfoInstant and _select(6, _GetItemInfoInstant(itemID))
-                if classID == 7 then hidden = lfil.hideTradeGoods
-                elseif classID == 0 then hidden = lfil.hideConsumable
-                elseif classID == 12 then hidden = lfil.hideQuest
-                elseif classID == 9 then hidden = lfil.hideRecipe
-                elseif classID == 2 or classID == 4 then hidden = lfil.hideGear
-                elseif classID == 3 then hidden = lfil.hideGem
-                elseif classID == 8 then hidden = lfil.hideEnhancement
-                elseif classID == 15 then hidden = lfil.hideMisc
-                elseif classID == 16 then hidden = lfil.hideGlyph end
-            end
-            if not hidden and lname and addon.BlockMatch and addon:BlockMatch(lname) then
-                hidden = true
-            end
-
-            -- Quest items are nearly always Common or Poor, so a raised threshold would hide the very drops the feature exists to highlight.
-            if n.loot and (q >= threshold or isQuest) and not hidden then
-                local lr, lg, lb = c.loot.r, c.loot.g, c.loot.b
-                local ra = LootProConfig.rareAlert
-                if ra and ra.color and (q >= ra.threshold or rareTriggered) then
-                    local qc = _G.ITEM_QUALITY_COLORS and _G.ITEM_QUALITY_COLORS[q]
-                    if qc then lr, lg, lb = qc.r, qc.g, qc.b end
-                end
-                local fQuality = q
-                if isQuest then
-                    lr, lg, lb = QuestRGB()
-                    fQuality = nil
-                end
-                local ilvlTag = ""
-                if LootProConfig.lootIlvl and self.LootItemLevel then
-                    ilvlTag = self:LootItemLevel(itemID, link) or ""
-                end
-                local trackTag
-                if LootProConfig.upgradeTrack and (isSelf or LootProConfig.upgradeTrackGroup) and self.UpgradeTrackTag then
-                    trackTag = self:UpgradeTrackTag(itemID, link)
-                end
-                local marker = ilvlTag .. (trackTag or "") .. (isNewApp and NEW_APPEARANCE_TAG or "") .. (isUpgrade and LootProConfig.lootUpgrade and UPGRADE_TAG or "") .. (tertiaryTag or "")
-                -- Framed rows use the item's own name (fName) so lines like "Your X was changed to Y" show just the item, plus the raw icon and category. Only looked up when framed loot is on.
-                local fIcon, fCat, fName, fMergeKey
-                if LootProConfig.framedLoot then
-                    -- Caged pets loot as |Hbattlepet: links, so both extractors miss and GetItemInfoInstant would throw on a nil source.
-                    local iconSrc = itemID or link
-                    fIcon = iconSrc and LootProConfig.showLootIcons and _GetItemInfoInstant and _select(5, _GetItemInfoInstant(iconSrc)) or nil
-                    fCat = LootCategory(link, itemID)
-                    fName = (itemID and _GetItemNameByID and _GetItemNameByID(itemID)) or lname
-                    if LootProConfig.mergeRows then
-                        -- A gray quest item must keep its own row, or the junk pile would swallow the thing being highlighted.
-                        if q == 0 and not isQuest then
-                            fMergeKey, fName, fCat = "junk", "Junk Items", nil
-                        elseif itemID then
-                            -- Merging never repaints a row, so a quest drop needs its own key or it inherits an earlier unflagged drop's color.
-                            fMergeKey = isQuest and ("quest:" .. itemID) or itemID
-                        end
-                    end
-                end
-                if LootProConfig.cleanMode then
-                    local cleaned = CleanMessage(msg, event)
-                    local noCount = IsNoCountItem(cleaned)
-                    if isQuest then cleaned = RecolorItemLink(cleaned, lr, lg, lb) end
-
-                    if itemID and LootProConfig.showLootCounts and _GetItemNameByID then
-                        -- The running total is only trustworthy once BAG_UPDATE has landed, so every counted line defers and reads it live.
-                        _lootSlot = (_lootSlot % POOL_SIZE) + 1
-                        local lp = _lootParams[_lootSlot]
-                        if lp._pending then PostDeferredLoot(lp) end
-                        lp._pending = true
-                        lp.iconStr = GetIconString(msg, itemID)
-                        lp.cleaned = cleaned
-                        lp.amt     = amt
-                        lp.noCount = noCount
-                        lp.itemID  = itemID
-                        lp.isSelf  = isSelf
-                        lp.preCount = OwnedCount(itemID) or 0
-                        lp.cR, lp.cG, lp.cB = lr, lg, lb
-                        lp.marker  = marker
-                        lp.fIcon = fIcon; lp.fQuality = fQuality; lp.fCategory = fCat; lp.fName = fName; lp.fLink = link; lp.fCount = nil; lp.fMergeKey = fMergeKey
-                        if _After and not addon._regressionTest then
-                            _After(0.1, _lootFns[_lootSlot])
-                        else
-                            PostDeferredLoot(lp)
-                        end
-                    else
-                        local p = _lootSync
-                        p.iconStr = GetIconString(msg, itemID); p.cleaned = cleaned
-                        p.amt = amt; p.noCount = noCount
-                        p.cR, p.cG, p.cB = lr, lg, lb
-                        p.marker = marker
-                        p.fIcon = fIcon; p.fQuality = fQuality; p.fCategory = fCat; p.fName = fName; p.fLink = link; p.fCount = nil; p.fMergeKey = fMergeKey
-                        p.itemID = itemID
-                        ShowLoot(p, "")
-                    end
-                else
-                    local body = isQuest and RecolorItemLink(msg, lr, lg, lb) or msg
-                    local line = GetIconString(msg, itemID) .. body .. marker
-                    local salt = itemID and OwnedCount(itemID)
-                    if not IsDuplicateDisplay(line, salt) then
-                        if LootProConfig.framedLoot then
-                            local nm = fName or lname or CleanMessage(msg, event)
-                            RowItem(self.lootFrame, fIcon, fQuality, nm, fCat, amt, nil, lr, lg, lb, link, fMergeKey, marker)
-                        else
-                            self.lootFrame.display:AddMessage(line, lr, lg, lb)
-                        end
-                    end
-                end
-            end
-        end
+        local onChat = chatHandlers[event]
+        if onChat then onChat(self, event, arg1, c, n) end
     end
 end)

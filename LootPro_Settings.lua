@@ -245,6 +245,8 @@ function Settings.ListCard(self, content, stack, spec)
             message = ("The list is full (%d)"):format(spec.cap)
         elseif reason == "dupe" then
             message = "Already on the list"
+        elseif reason == "currency" then
+            message = "Currencies can't be watched"
         end
         paint()
     end
@@ -296,9 +298,12 @@ function Settings.ListCard(self, content, stack, spec)
     end
     -- An ID the client reports it cannot find never resolves, so it is not asked for again
     local function onItemInfo(_, _, itemID, success)
-        if not waiting[itemID] then return end
-        if success == false then failed[itemID] = true end
-        if not (list:IsVisible() and paintEntries()) then waiter:UnregisterEvent("GET_ITEM_INFO_RECEIVED") end
+        if waiting[itemID] and success == false then failed[itemID] = true end
+        if not list:IsVisible() then
+            waiter:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+        elseif waiting[itemID] and not paintEntries() then
+            waiter:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+        end
     end
 
     paint = function()
