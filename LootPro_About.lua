@@ -37,6 +37,14 @@ ns.about = {
 
     changelog = {
         {
+            version = "3.1.2", date = "2026-11-02",
+            sections = {
+                { head = "Improvements", items = {
+                    "Added support for the upcoming retail patch 12.1.7, so Loot Pro is not flagged as out of date when it goes live.",
+                } },
+            },
+        },
+        {
             version = "3.1.1", date = "2026-10-25",
             sections = {
                 { head = "Bug Fixes", items = {
