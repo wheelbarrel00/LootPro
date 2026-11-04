@@ -63,10 +63,11 @@ end
 -- In percent, so a typed 110 means 110%. The saved uiScale stays a fraction.
 local function windowCard(self, content, stack)
     local card = stack(self:CreateGroup(content, "Options Window"))
-    local scale = self:CreateSlider(content, "Scale", 75, 125, 5,
+    local scale = self:CreateSlider(content, "Scale", 50, 125, 5,
         function() return math.floor((LootProConfig.uiScale or 1) * 100 + 0.5) end,
         function(v) LootProConfig.uiScale = v / 100 end,
-        "Resizes this settings window only. To resize the loot or combat feeds, use the Frame Scale sliders on the Layout page.",
+        "Resizes this settings window only. To resize the loot or combat feeds, use the Frame Scale sliders on the Layout page.\n\n"
+            .. "Drag the window by its title bar to move it. It can hang partly off the edge of your screen, and it opens where you left it.",
         percent).EnableTyping()
     card:Add(scale)
     -- The slider sits inside the window it scales, so applying SetScale live during a drag fights the drag and snaps to the ends. Preview the percent live and apply the scale on release.

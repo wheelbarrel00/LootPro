@@ -210,9 +210,13 @@ function WhatsNew.OnLogin()
     if m == "chat" then announce(list) else show(list) end
 end
 
--- Only the newest release counts as unseen, so the next login treats it as a fresh update
+-- Seen up to the release below the newest one with new features, since fixes-only releases alone never show
 function WhatsNew.ResetSeen()
-    local previous = changelog()[2]
+    local c, at = changelog(), 1
+    for i, release in ipairs(c) do
+        if hasFeatures({ release }) then at = i break end
+    end
+    local previous = c[at + 1]
     LootProConfig.whatsNewSeen = previous and previous.version or ""
     LootProConfig.whatsNewAnnounced = ""
 end

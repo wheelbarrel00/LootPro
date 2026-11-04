@@ -28,6 +28,14 @@ local ui = EUI:NewContext({
     setLastTab     = function(id) if LootProConfig then LootProConfig.lastSettingsPage = id end end,
     getWindowScale = function() return LootProConfig and LootProConfig.uiScale end,
     setWindowScale = function(v) if LootProConfig then LootProConfig.uiScale = v end end,
+    getWindowPosition = function()
+        local p = LootProConfig and LootProConfig.settingsPos
+        if p then return p.x, p.y end
+    end,
+    setWindowPosition = function(x, y)
+        local p = LootProConfig and LootProConfig.settingsPos
+        if p then p.x, p.y = x, y end
+    end,
 })
 Settings.ui = ui
 

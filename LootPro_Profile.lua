@@ -23,6 +23,7 @@ addon.DEFAULTS = {
     mergeRows = true,
     speedyAutoLoot = false,
     uiScale = 1.0,
+    settingsPos = {},
     lastSettingsPage = "general",
     lootFilters = { hideTradeGoods = false, hideConsumable = false, hideQuest = false, hideRecipe = false, hideGear = false, hideGem = false, hideEnhancement = false, hideMisc = false, hideGlyph = false },
     lootBlacklist = { items = {} },

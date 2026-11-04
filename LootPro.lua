@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 ns.addon = CreateFrame("Frame", addonName .. "EventFrame")
-ns.addon.VERSION = "3.1.2"
+ns.addon.VERSION = "3.2.0"
 ns.addon.isTesting = false
 -- Forever reports WOW_PROJECT_CAMELOT (18) since build 70170 but runs the retail engine.
 ns.addon.IS_RETAIL = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
@@ -51,7 +51,7 @@ SlashCmdList["LOOTPRO"] = function(msg)
     elseif msg == "whatsnew reset" then
         if LootProConfig and ns.WhatsNew then
             ns.WhatsNew.ResetSeen()
-            print("|cFF00FF00[LootPro]|r What's New reset. The newest release counts as unread at the next login.")
+            print("|cFF00FF00[LootPro]|r What's New reset. The latest notes show again at the next login.")
         end
         return
     elseif msg == "about" then

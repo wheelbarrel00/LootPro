@@ -53,6 +53,8 @@ Loot Pro never equips, trades, or destroys anything. Two features do act for you
 3. Go to the **Layout** page, tick **Unlock Windows** at the bottom left, drag the two feeds where you want them, then untick it. Closing the settings window locks them again as well.
 4. Click **Start Test Mode** at the bottom right to fill both feeds with sample lines while you pick fonts, sizes, and colors. The samples follow your current settings, so you see each change as you make it. The button turns into **Stop Test Mode** while they run, and closing the window stops it too.
 
+If the settings window is in the way, drag it aside by its title bar, or make it smaller with **Scale** on the General page.
+
 That is enough to use it. Everything below is optional.
 
 The settings window has nine pages, listed down its left side: General, Layout, Notifications, Recap, Watch, Rare Drops, Block, Vendor, and About. It opens on the page you used last. Unlock Windows and Start Test Mode sit at the bottom of both the Layout and Notifications pages, so you can drag a feed or watch your changes land without leaving the page you are tuning. A setting that does nothing while another one is off is dimmed until that one is on, and every slider takes a typed value if you click its number.
@@ -79,7 +81,9 @@ Where an option below is marked **Retail only**, the Classic versions leave it o
 
 ## Options Window
 
-**Scale** (75% to 125%, default 100%) resizes the settings window and nothing else. Your feeds, the minimap icon, and the alert banner are unaffected. To resize a feed, use Frame Scale on the Layout page. The percentage updates as you drag and the new size applies when you let go. It stops at the largest size that fits your screen.
+**Scale** (50% to 125%, default 100%) resizes the settings window and nothing else. Your feeds, the minimap icon, and the alert banner are unaffected. To resize a feed, use Frame Scale on the Layout page. The percentage updates as you drag and the new size applies when you let go. It stops at the largest size that fits your screen.
+
+To move the settings window, drag it by its title bar. It can hang partly off the left, right, or bottom edge of your screen, so it stays out of the way while you set up your feeds, and its title bar always stays on screen so you can drag it back. It opens wherever you left it, even after a `/reload`, and Reset All Settings puts it back in the middle.
 
 ## Updates
 
@@ -385,7 +389,7 @@ On the Classic versions, options that do not apply are simply left out of the se
 
 # Reset All Settings
 
-A red button at the bottom of the General page. It asks you to confirm first, because it clears more than it might sound like: every color, every toggle, every slider, your window positions and the settings window scale, **and both your watch list and your block list**. It cannot be undone.
+A red button at the bottom of the General page. It asks you to confirm first, because it clears more than it might sound like: every color, every toggle, every slider, your window positions, the settings window's position and scale, **and both your watch list and your block list**. It cannot be undone.
 
 Two things it leaves alone. Your current recap session keeps running, and Fast Loot is Blizzard's own setting, so it stays as you had it.
 
