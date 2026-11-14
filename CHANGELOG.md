@@ -5,6 +5,11 @@ All notable changes to **Loot Pro** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-11-14
+
+### Bug Fixes
+- Looting a corpse with nothing on it no longer leaves an empty loot window open until you close it. The window now closes by itself, and "No loot" shows briefly above the middle of your screen. This happened most often on WoW Forever.
+
 ## [3.2.0] - 2026-11-03
 
 ### New Features

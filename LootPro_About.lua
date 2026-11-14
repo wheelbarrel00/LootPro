@@ -37,6 +37,14 @@ ns.about = {
 
     changelog = {
         {
+            version = "3.2.1", date = "2026-11-14",
+            sections = {
+                { head = "Bug Fixes", items = {
+                    "Looting a corpse with nothing on it no longer leaves an empty loot window open until you close it. The window now closes by itself, and \"No loot\" shows briefly above the middle of your screen. This happened most often on WoW Forever.",
+                } },
+            },
+        },
+        {
             version = "3.2.0", date = "2026-11-03",
             sections = {
                 { head = "New Features", items = {

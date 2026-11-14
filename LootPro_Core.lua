@@ -1729,6 +1729,7 @@ do
     local _LootSlot        = LootSlot
     local _LootSlotHasItem = LootSlotHasItem
     local _IsModifiedClick = IsModifiedClick
+    local _CloseLoot       = CloseLoot
 
     local speedyLoot = { ticker = nil, lastCount = nil, slot = 0 }
 
@@ -1772,6 +1773,29 @@ do
         SpeedyStop()
     end
 
+    local noLootText
+    -- A Classic-rules server such as Forever's can open a loot with no slots, and Blizzard's window then sits empty until closed by hand.
+    local function CloseEmptyLoot()
+        if _GetNumLootItems() > 0 then return end
+        if _CloseLoot then _CloseLoot() end
+        if not noLootText then
+            -- UIErrorsFrame's own size, font and timing.
+            noLootText = CreateFrame("MessageFrame", nil, UIParent)
+            noLootText:SetSize(512, 60)
+            noLootText:SetFrameStrata("DIALOG")
+            noLootText:SetFontObject(ErrorFont)
+            noLootText:SetJustifyH("CENTER")
+            noLootText:SetTimeVisible(2)
+            noLootText:SetFadeDuration(0.5)
+            noLootText:SetFadePower(3)
+        end
+        -- Two-thirds of the way up the screen, anchored each time so a UI scale change follows.
+        noLootText:ClearAllPoints()
+        noLootText:SetPoint("CENTER", UIParent, "CENTER", 0, UIParent:GetHeight() / 6)
+        noLootText:Clear()
+        noLootText:AddMessage("No loot", 1, 1, 0)
+    end
+
     local speedyLootFrame = CreateFrame("Frame")
     speedyLootFrame:RegisterEvent("LOOT_READY")
     speedyLootFrame:RegisterEvent("LOOT_OPENED")
@@ -1780,6 +1804,9 @@ do
         if event == "LOOT_CLOSED" then
             questScanned = 0
             SpeedyLootClosed()
+        elseif event == "LOOT_OPENED" and _GetNumLootItems and _GetNumLootItems() == 0 then
+            -- Next frame, once every loot window has opened, so one that registered after ours (ElvUI's) still hears the close.
+            if _After then _After(0, CloseEmptyLoot) else CloseEmptyLoot() end
         else
             ScanQuestLoot()
             SpeedyLootReady()
